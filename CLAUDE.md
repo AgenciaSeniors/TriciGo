@@ -2512,7 +2512,10 @@ La agencia de marketing pidió tres cosas que el panel no dejaba (decisiones del
 - **El público del código** («Pasajeros», «Choferes», «Ambos») es solo una etiqueta: un chofer que se registra con un código de «Pasajeros» que tiene saldo para choferes cobra igual. El panel lo avisa al crear el código.
 - **Orden de despliegue: aplicar antes de mergear.** Con la guarda de la 00642, una promoción que marketing crea «Activa» se guarda apagada (el panel avisa con un toast), y guardar el saldo de un código falla con PGRST204 porque la columna no existe.
 - Cuerpos tras 00666 (md5/largo): `tg_promotions_marketing_guard` `146c9ffc9df39e5f4bbf36b59a17dcb8/3080`, `promotion_is_referenced` `c0a5cd8f27d85b631ca9dde4db26e2ef/442`, `set_referral_amounts` `cd6a37dea2a53f4674549af28e3c2e9a/1897`, `trg_signup_driver_bonus` `b2f060309058f1cd4a321a08e7acedfc/6056`, `tg_acquisition_codes_bonus_audit` `c3731384cd8f09884c1be1de4d68a2cc/909`, `tg_driver_profiles_first_approval` `ac953cb95443b406224b24f94fc7cdef/525`, `admin_signup_code_stats` `c743b9103a7d1eb5b794831072b26b09/1746`. La migración se niega a correr si la guarda de promociones, `promotion_is_referenced` o las estadísticas no tienen el cuerpo de hoy (o el suyo, si se re-aplica).
-- **Estado: no aplicada.** Falta un ensayo en prod dentro de un bloque revertido, aplicarla (tiene un `DROP FUNCTION`, así que puede esperar la aprobación en la app; si se corta dos veces, va por el SQL Editor) y el merge.
+- **Estado: aplicada en prod el 2026-10-19 desde el SQL Editor** y mergeada en #1172 el mismo día. Por MCP, el ensayo se cortó dos veces esperando la aprobación del `DROP FUNCTION`, así que el ensayo y la aplicación fueron juntos (ver § "Aplicar migraciones pesadas por MCP").
+  - **Probado con las cuentas reales en esa misma corrida**: marketing crea una promoción activa, la edita, no la puede borrar porque un código la usa, y la pausa. También cambia un monto de referidos, y el cambio queda en `admin_actions`. El chofer con el código cargado antes de su primera aprobación cobra 1000 en su primer viaje y nada en el segundo, y el chofer reaprobado no cobra.
+  - **Verificado por objeto después**: los siete md5 de arriba, sin `\r`; los cuatro triggers activos; las dos tablas-candado con RLS, sin políticas y solo para `service_role`; 167 primeras aprobaciones, una por cada perfil con `approved_at`; ningún dato de las pruebas.
+  - No figura en `schema_migrations`.
 
 ### Canales de Realtime: cuáles son privados y cómo agregar uno (00626, verificado 2026-10-07)
 
@@ -3257,6 +3260,15 @@ $fix$;
 ```
 
 Una migración aplicada desde el SQL Editor no queda en `schema_migrations`: se verifica por objeto (md5 y largo del cuerpo, ACL, políticas), como cualquier otra.
+
+**Ensayar y aplicar en una sola corrida del SQL Editor (00666, 2026-10-19).** Cuando el MCP retiene el ensayo en prod (la migración trae un `DROP`), el ensayo y la aplicación pueden ir juntos en un script:
+1. Un `DO` guarda la migración en un literal `$mig$…$mig$`, le quita los `chr(13)` y compara su md5 con el del archivo.
+2. La ejecuta con `EXECUTE`.
+3. Corre las pruebas con las cuentas reales en un subbloque que termina con `RAISE EXCEPTION USING ERRCODE = 'P0099'`. Ese error se atrapa, y así se deshacen solo las pruebas, push y correos incluidos, y las variables conservan los resultados.
+4. Compara los resultados con lo esperado y, si algo no coincide, lanza un error que deshace todo, la migración también.
+5. Un `SELECT` al final muestra los cuerpos instalados. Si se ve esa tabla, la migración quedó aplicada.
+
+Antes de pasarlo, correrlo en el andamio local con los ids del andamio, en tres casos: uno donde todo pasa, una copia CRLF y una expectativa alterada, que tiene que dejar la base sin tocar. Un control que compara dos valores NULL con `IS DISTINCT FROM` pasa sin avisar: exigir `IS NOT NULL` en lo que se mide.
 
 **Medir latencia en prod justo después de un backfill engaña, y la firma para reconocerlo es "mismos buffers, 100× más lento".** Tras 00579-00581, `search_pois_smart('hotel')` daba 2,0-5,2 s por MCP contra ~45 ms del ensayo local con las mismas filas; con plan custom, genérico e inline salía igual de mal, así que no era el plan. La respuesta la dio `auto_explain` con `log_nested_statements = on`, `log_analyze = on` y `log_timing = on` en la sesión (los GUC de auto_explain se pueden setear desde el rol `postgres`; el plan de la sentencia interna de la función queda en `postgres_logs`): el plan en frío (2.463 ms) y el mismo plan 1 s después (140 ms) tienen **nodos idénticos y los mismos `shared hit`** (`idx_pois_location` 1.099 buffers en ambos), pero en frío cada nodo tarda **~100×** (ese índice 684 ms vs 7 ms; `idx_cuba_pois_active` 221 ms vs 2 ms; el index scan por pk 4,6 ms/fila vs 0,03). "Hit" con 100× de costo = páginas frías en memoria / CPU contendida de la instancia, no Postgres ni la consulta. Reglas: (1) A/B siempre dentro de UNA petición multi-sentencia, alternando, leyendo las duraciones anidadas en los logs; (2) descartar `plan_cache_mode` ANTES de tocar código (`SET plan_cache_mode = force_custom_plan` / `force_generic_plan` en la sesión — acá el genérico era 2× peor pero no explicaba nada); (3) el número que ven los usuarios es el caliente (PostgREST mantiene sus conexiones): v2 en prod = 18-27 ms exactas/alias, 96-350 ms keyword/fuzzy. La "primera llamada del día de 3-4 s" que ya tenía v1 es esta misma instancia despertando, y se arregla con cómputo, no con SQL.
 
