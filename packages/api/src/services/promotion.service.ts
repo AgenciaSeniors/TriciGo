@@ -29,14 +29,18 @@ export interface Promotion {
    * Still fully redeemable by whoever was given the code.
    */
   is_public: boolean;
-  /** 00642: true while a promotion marketing created or edited waits for an admin to turn it on. */
+  /**
+   * 00642: true while a promotion marketing created or edited waits for an admin to turn it on.
+   * Since 00666 marketing runs promotions with no approval, so no new promotion waits.
+   */
   pending_approval?: boolean;
-  /** 00642: the admin who turned it on, and when. */
+  /** 00642: who turned it on, and when (an admin, or marketing since 00666). */
   approved_by?: string | null;
   approved_at?: string | null;
   /**
-   * 00642: counts changes to what the promotion offers; only the database writes it. An admin
-   * approves the revision they saw (`approve`), so an edit made meanwhile is not switched on.
+   * 00642: counts changes to what the promotion offers; only the database writes it. Whoever
+   * activates it approves the revision they saw (`approve`), so an edit made meanwhile is not
+   * switched on.
    */
   revision?: number;
   created_by: string | null;
@@ -46,8 +50,8 @@ export interface Promotion {
 // current_uses / created_at are server/DB-owned. `created_by` IS accepted on
 // create — the service stamps it from the session (it used to be left NULL,
 // so no admin-created promo had an author on record).
-// `is_active` is optional: marketing never sends it, because the database
-// keeps every promotion marketing creates off until an admin approves it (00642).
+// `is_active` is optional. Before 00666 the database kept every promotion marketing
+// created off until an admin approved it (00642); since 00666 what is sent stands.
 export type CreatePromotionInput = Omit<
   Promotion,
   | 'id'
@@ -174,9 +178,9 @@ export const promotionService = {
   },
 
   /**
-   * Marketing's pause (00642): turns the promotion off only while it is on right now, so it acts
-   * on the promotion as it is, not as a list loaded earlier shows it (an admin may have switched it
-   * on since). Returns false when it was already off and nothing changed.
+   * Turns the promotion off only while it is on right now, so it acts on the promotion as it is,
+   * not as a list loaded earlier shows it (someone may have switched it on since). Returns false
+   * when it was already off and nothing changed. The panel used it for marketing until 00666.
    */
   async pause(id: string): Promise<boolean> {
     const supabase = getSupabaseClient();
@@ -191,7 +195,7 @@ export const promotionService = {
   },
 
   /**
-   * An admin turns on the promotion they reviewed (00642). It only matches the revision they saw
+   * Turns on the promotion the caller reviewed (00642; marketing too since 00666). It only matches the revision they saw
    * and only while it is still off, so an edit made in the meantime (a new revision) or someone
    * else's activation updates nothing, and this throws `PROMOTION_CHANGED` (409, not 401/403:
    * `getErrorMessage` reads those as an expired session). Until 00642 adds the column it falls
@@ -230,8 +234,8 @@ export const promotionService = {
   },
 
   /**
-   * How many promotions marketing left waiting for an admin (00642). 0 when the column does
-   * not exist yet or the query fails: it only drives a menu dot and a notice.
+   * How many promotions marketing left waiting for an admin (00642; none are created since 00666).
+   * 0 when the column does not exist yet or the query fails: it only drives a menu dot and a notice.
    */
   async countPendingApproval(): Promise<number> {
     try {

@@ -94,7 +94,10 @@ export default function PromotionsAdminPage() {
   const [deleteModalId, setDeleteModalId] = useState<string | null>(null);
   const [notifyTarget, setNotifyTarget] = useState<Promotion | null>(null);
   const [notifying, setNotifying] = useState(false);
-  // 00642: marketing writes drafts; an admin activates them (the server enforces it too).
+  // 00666: marketing runs promotions like an admin (create active, activate, pause, edit live,
+  // notify). The server still refuses deleting a used one (promo_delete_blocked), and its Spanish
+  // message reaches the toast through getErrorMessage. The pending-approval count stays admin-only:
+  // only drafts saved before 00666 can be pending.
   const { role } = usePanelRole();
   const isMarketing = menuRole(role) === 'marketing';
   const [pendingCount, setPendingCount] = useState(0);
@@ -246,36 +249,37 @@ export default function PromotionsAdminPage() {
         first_ride_only: form.first_ride_only,
         is_public: form.is_public,
       };
-      // Marketing never sends is_active (00642): the database keeps its drafts off anyway, and a
-      // form opened before an admin approved the promotion must not switch it back off on save.
-      const payload = isMarketing ? base : { ...base, is_active: form.is_active };
+      // 00666: marketing sends is_active like an admin; the server no longer keeps its saves off.
+      const payload = { ...base, is_active: form.is_active };
       // The column-missing retry for `first_ride_only` (00482) / `is_public`
       // (00519) lives in promotionService — it strips those columns and
       // retries so the promo still saves before the migration lands.
       if (editingId) {
+        // No silent case here: before 00666 the server refuses marketing's activation or live edit
+        // with an error (promo_activation_requires_admin / promo_active_locked), shown below.
         await promotionService.update(editingId, payload);
-        showToast('success', isMarketing
-          ? t('promotions.toast_sent_for_approval', { defaultValue: 'Guardada. Un administrador la revisa y la activa.' })
-          : t('promotions.toast_updated', { defaultValue: 'Promoción actualizada' }));
-        // Marketing's saves are drafts: the publish push goes out when an admin approves one, and
-        // `prev` may be a copy older than that approval.
-        if (!isMarketing) {
-          const prev = items.find((i) => i.id === editingId);
-          await maybeNotifyOnPublish({
-            ...(prev as Promotion),
-            ...payload,
-            id: editingId,
-            notified_at: prev?.notified_at ?? null,
-          });
-        }
+        showToast('success', t('promotions.toast_updated', { defaultValue: 'Promoción actualizada' }));
+        const prev = items.find((i) => i.id === editingId);
+        await maybeNotifyOnPublish({
+          ...(prev as Promotion),
+          ...payload,
+          id: editingId,
+          notified_at: prev?.notified_at ?? null,
+        });
       } else {
         const created = await promotionService.create({ ...payload, notified_at: null });
-        showToast('success', isMarketing
-          ? t('promotions.toast_sent_for_approval', { defaultValue: 'Guardada. Un administrador la revisa y la activa.' })
-          : t('promotions.toast_created', { defaultValue: 'Promoción creada' }));
-        await maybeNotifyOnPublish(created);
+        if (payload.is_active && !created.is_active) {
+          // A server still on 00642 saves marketing's promotions switched off, without an error.
+          // Say so, and send no publish push: maybeNotifyOnPublish skips an inactive promotion.
+          showToast('warning', t('promotions.toast_saved_inactive', {
+            defaultValue: 'Promoción guardada, pero quedó apagada. Un administrador tiene que activarla.',
+          }), 8000);
+        } else {
+          showToast('success', t('promotions.toast_created', { defaultValue: 'Promoción creada' }));
+          await maybeNotifyOnPublish(created);
+        }
       }
-      // A draft marketing saved now waits for an admin; an admin's save can end a wait.
+      // A save can switch on a draft left pending before 00666: the Sidebar recounts its dot.
       announcePromotionsChanged();
       resetForm();
       await loadItems();
@@ -299,10 +303,6 @@ export default function PromotionsAdminPage() {
   };
 
   const handleEdit = (p: Promotion) => {
-    if (isMarketing && p.is_active) {
-      showToast('error', t('promotions.marketing_edit_active', { defaultValue: 'Pausa la promoción para editarla.' }));
-      return;
-    }
     setForm({
       code: p.code,
       type: p.type,
@@ -392,22 +392,24 @@ export default function PromotionsAdminPage() {
     }
   };
 
-  // Only admins reach this (marketing gets handlePause). Turning a promotion on is an approval of
-  // the version this list shows: approve() refuses one that changed since (00642).
+  // Admins and marketing (00666). Turning a promotion on switches on the version this list shows:
+  // approve() refuses one that changed since (00642), and the server stamps who turned it on.
   const handleToggleActive = useCallback(async (p: Promotion) => {
     try {
       if (p.is_active) {
-        await promotionService.setActive(p.id, false);
+        // pause() turns it off only if it is on right now. False: someone already turned it off
+        // after this list loaded, so there is nothing to announce; just show the current list.
+        const paused = await promotionService.pause(p.id);
+        if (paused) {
+          showToast('success', t('promotions.toast_deactivated', { defaultValue: 'Promoción desactivada' }));
+        }
       } else {
         await promotionService.approve(p.id, p.revision ?? 0);
         announcePromotionsChanged();
+        showToast('success', t('promotions.toast_activated', { defaultValue: 'Promoción activada' }));
+        // Activating (was inactive) is a "publish" event → maybe auto-notify.
+        await maybeNotifyOnPublish({ ...p, is_active: true });
       }
-      showToast('success', p.is_active
-        ? t('promotions.toast_deactivated', { defaultValue: 'Promoción desactivada' })
-        : t('promotions.toast_activated', { defaultValue: 'Promoción activada' }),
-      );
-      // Activating (was inactive) is a "publish" event → maybe auto-notify.
-      if (!p.is_active) await maybeNotifyOnPublish({ ...p, is_active: true });
       await loadItems();
     } catch (err) {
       if (promotionChanged(err)) {
@@ -420,22 +422,6 @@ export default function PromotionsAdminPage() {
       showToast('error', getErrorMessage(err));
     }
   }, [showToast, t, maybeNotifyOnPublish, loadItems]);
-
-  // Marketing's only switch: it can turn a live promotion off, never on (00642). It asks the
-  // server, not this list: an admin may have switched the promotion on since the list loaded.
-  const handlePause = async (p: Promotion) => {
-    try {
-      const paused = await promotionService.pause(p.id);
-      if (paused) {
-        showToast('success', t('promotions.toast_deactivated', { defaultValue: 'Promoción desactivada' }));
-      } else {
-        showToast('error', t('promotions.already_paused', { defaultValue: 'Esta promoción ya está pausada.' }));
-      }
-      await loadItems();
-    } catch (err) {
-      showToast('error', getErrorMessage(err));
-    }
-  };
 
   const sortedItems = useMemo(() => {
     if (!sort) return items;
@@ -494,18 +480,16 @@ export default function PromotionsAdminPage() {
               <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:text-amber-400">
                 {t('promotions.status_pending', { defaultValue: 'Pendiente de aprobación' })}
               </span>
-              {!isMarketing && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void handleToggleActive(p);
-                  }}
-                  className="rounded-full bg-ink px-2.5 py-0.5 text-[10.5px] font-medium text-surface transition-opacity hover:opacity-90"
-                >
-                  {t('promotions.action_approve', { defaultValue: 'Aprobar y activar' })}
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void handleToggleActive(p);
+                }}
+                className="rounded-full bg-ink px-2.5 py-0.5 text-[10.5px] font-medium text-surface transition-opacity hover:opacity-90"
+              >
+                {t('promotions.action_approve', { defaultValue: 'Aprobar y activar' })}
+              </button>
             </span>
           ) : (
             <span className="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-medium text-ink-muted">
@@ -547,7 +531,7 @@ export default function PromotionsAdminPage() {
         width: '170px',
       },
     ],
-    [t, typeLabel, discountLabel, isMarketing, handleToggleActive],
+    [t, typeLabel, discountLabel, handleToggleActive],
   );
 
   return (
@@ -702,25 +686,17 @@ export default function PromotionsAdminPage() {
                 className={inputCls}
               />
             </Field>
-            {isMarketing ? (
-              <Field label={t('promotions.field_active', { defaultValue: 'Activa' })}>
-                <p className="text-[13px] text-ink-muted">
-                  {t('promotions.marketing_review_note', { defaultValue: 'Se guarda apagada. Un administrador la revisa y la activa.' })}
-                </p>
-              </Field>
-            ) : (
-              <Field label={t('promotions.field_active', { defaultValue: 'Activa' })}>
-                <label className="inline-flex items-center gap-2 text-[13px] text-ink">
-                  <input
-                    type="checkbox"
-                    checked={form.is_active}
-                    onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
-                    className="h-4 w-4 rounded border-line"
-                  />
-                  {t('promotions.active_help', { defaultValue: 'El código se puede canjear' })}
-                </label>
-              </Field>
-            )}
+            <Field label={t('promotions.field_active', { defaultValue: 'Activa' })}>
+              <label className="inline-flex items-center gap-2 text-[13px] text-ink">
+                <input
+                  type="checkbox"
+                  checked={form.is_active}
+                  onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
+                  className="h-4 w-4 rounded border-line"
+                />
+                {t('promotions.active_help', { defaultValue: 'El código se puede canjear' })}
+              </label>
+            </Field>
             <Field label={t('promotions.field_first_ride_only', { defaultValue: 'Solo primer viaje' })}>
               <label className="inline-flex items-center gap-2 text-[13px] text-ink">
                 <input
@@ -813,43 +789,22 @@ export default function PromotionsAdminPage() {
         onSortChange={setSort}
         pagination={{ page, pageSize: PAGE_SIZE, hasMore: items.length === PAGE_SIZE }}
         onPaginationChange={(next) => setPage(next.page)}
-        rowActions={
-          isMarketing
-            ? [
-                { label: t('promotions.action_edit', { defaultValue: 'Editar' }), onClick: (p) => handleEdit(p) },
-                { label: t('promotions.action_pause', { defaultValue: 'Pausar' }), onClick: (p) => void handlePause(p) },
-                {
-                  label: t('promotions.action_notify', { defaultValue: 'Notificar ahora' }),
-                  onClick: (p) =>
-                    p.is_active
-                      ? setNotifyTarget(p)
-                      : showToast('error', t('promotions.marketing_notify_inactive', {
-                          defaultValue: 'Solo se puede avisar de una promoción activa.',
-                        })),
-                },
-                {
-                  label: t('promotions.action_delete', { defaultValue: 'Eliminar' }),
-                  tone: 'danger',
-                  onClick: (p) => setDeleteModalId(p.id),
-                },
-              ]
-            : [
-                { label: t('promotions.action_edit', { defaultValue: 'Editar' }), onClick: (p) => handleEdit(p) },
-                {
-                  label: t('promotions.action_toggle', { defaultValue: 'Activar/Desactivar' }),
-                  onClick: (p) => void handleToggleActive(p),
-                },
-                {
-                  label: t('promotions.action_notify', { defaultValue: 'Notificar ahora' }),
-                  onClick: (p) => setNotifyTarget(p),
-                },
-                {
-                  label: t('promotions.action_delete', { defaultValue: 'Eliminar' }),
-                  tone: 'danger',
-                  onClick: (p) => setDeleteModalId(p.id),
-                },
-              ]
-        }
+        rowActions={[
+          { label: t('promotions.action_edit', { defaultValue: 'Editar' }), onClick: (p) => handleEdit(p) },
+          {
+            label: t('promotions.action_toggle', { defaultValue: 'Activar/Desactivar' }),
+            onClick: (p) => void handleToggleActive(p),
+          },
+          {
+            label: t('promotions.action_notify', { defaultValue: 'Notificar ahora' }),
+            onClick: (p) => setNotifyTarget(p),
+          },
+          {
+            label: t('promotions.action_delete', { defaultValue: 'Eliminar' }),
+            tone: 'danger',
+            onClick: (p) => setDeleteModalId(p.id),
+          },
+        ]}
       />
 
       <AdminConfirmModal
