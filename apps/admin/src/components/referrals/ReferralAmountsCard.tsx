@@ -7,7 +7,7 @@
 // read the amounts when they pay, so a change applies to the next payments.
 // ============================================================
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from '@tricigo/i18n';
 import {
   referralService,
@@ -15,7 +15,7 @@ import {
   type ReferralAmountKey,
   type ReferralAmounts,
 } from '@tricigo/api/services/referral';
-import { getErrorMessage } from '@tricigo/utils';
+import { formatCUP, getErrorMessage } from '@tricigo/utils';
 import { useToast } from '@/components/ui/AdminToast';
 import { SectionCard } from '@/components/dashboard/SectionCard';
 
@@ -44,7 +44,7 @@ const DEFAULT_TEXT: Record<ReferralAmountKey, { label: string; help: string }> =
 };
 
 const inputCls =
-  'h-9 w-full rounded-lg border border-line bg-surface px-2.5 font-mono text-[13px] text-ink placeholder:text-ink-subtle focus:border-primary-500 focus:outline-none disabled:opacity-60';
+  'h-9 w-full rounded-lg border border-line bg-surface px-2.5 font-mono text-[13px] text-ink placeholder:text-ink-subtle focus:border-primary-500 focus:outline-none aria-[invalid=true]:border-amber-500 disabled:opacity-60';
 
 function toDraft(amounts: ReferralAmounts): Draft {
   return Object.fromEntries(REFERRAL_AMOUNT_KEYS.map((k) => [k, String(amounts[k])])) as Draft;
@@ -65,6 +65,7 @@ export function ReferralAmountsCard() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const fieldId = useId();
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -136,7 +137,7 @@ export function ReferralAmountsCard() {
       })}
     >
       {loadError ? (
-        <div className="flex flex-wrap items-center gap-3 text-[12.5px]">
+        <div role="alert" className="flex flex-wrap items-center gap-3 text-[12.5px]">
           <span className="text-red-700 dark:text-red-400">
             {t('referrals.amounts_load_error', { defaultValue: 'No pudimos cargar los montos.' })}
           </span>
@@ -151,6 +152,7 @@ export function ReferralAmountsCard() {
         </div>
       ) : (
         <form
+          noValidate
           onSubmit={(e) => {
             e.preventDefault();
             void handleSave();
@@ -160,30 +162,63 @@ export function ReferralAmountsCard() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {REFERRAL_AMOUNT_KEYS.map((k) => {
               const value = draft?.[k] ?? '';
-              const invalid = draft !== null && changedKeys.includes(k) && parseAmount(value) === null;
+              const changed = draft !== null && changedKeys.includes(k);
+              const next = changed ? parseAmount(value) : null;
+              const invalid = changed && next === null;
+              const inputId = `${fieldId}-${k}`;
+              const helpId = `${inputId}-help`;
+              const errorId = `${inputId}-error`;
+              const changeId = `${inputId}-change`;
+              // Help and error sit outside the <label> so the label stays the field's name;
+              // aria-describedby reads them, and the before/after line, with the input.
+              const describedBy = [invalid ? errorId : null, next !== null ? changeId : null, helpId]
+                .filter(Boolean)
+                .join(' ');
               return (
-                <label key={k} className="flex min-w-0 flex-col gap-1">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
+                <div key={k} className="flex min-w-0 flex-col gap-1">
+                  <label
+                    htmlFor={inputId}
+                    className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle"
+                  >
                     {t(`referrals.amount_${k}`, { defaultValue: DEFAULT_TEXT[k].label })}
-                  </span>
+                  </label>
                   <input
-                    type="number"
-                    min={0}
-                    step={1}
+                    id={inputId}
+                    type="text"
                     inputMode="numeric"
+                    pattern="[0-9]*"
+                    autoComplete="off"
                     value={value}
                     placeholder={draft ? undefined : '…'}
                     disabled={!draft || saving}
                     aria-invalid={invalid || undefined}
+                    aria-describedby={describedBy}
                     onChange={(e) => setDraft((d) => (d ? { ...d, [k]: e.target.value } : d))}
                     className={inputCls}
                   />
-                  <span className={`text-[11px] leading-snug ${invalid ? 'text-amber-800 dark:text-amber-400' : 'text-ink-muted'}`}>
-                    {invalid
-                      ? t('referrals.amount_invalid_hint', { defaultValue: 'Un número entero, 0 o más.' })
-                      : t(`referrals.amount_${k}_help`, { defaultValue: DEFAULT_TEXT[k].help })}
-                  </span>
-                </label>
+                  {invalid && (
+                    <p id={errorId} className="text-[11px] leading-snug text-amber-800 dark:text-amber-400">
+                      {t('referrals.amount_invalid_hint', { defaultValue: 'Un número entero, 0 o más.' })}
+                    </p>
+                  )}
+                  {saved && next !== null && (
+                    <p id={changeId} className="font-mono text-[11px] leading-snug text-ink">
+                      <span aria-hidden="true">
+                        {formatCUP(saved[k])} → {formatCUP(next)}
+                      </span>
+                      <span className="sr-only">
+                        {t('referrals.amount_change', {
+                          from: formatCUP(saved[k]),
+                          to: formatCUP(next),
+                          defaultValue: 'Cambia de {{from}} a {{to}}',
+                        })}
+                      </span>
+                    </p>
+                  )}
+                  <p id={helpId} className="text-[11px] leading-snug text-ink-muted">
+                    {t(`referrals.amount_${k}_help`, { defaultValue: DEFAULT_TEXT[k].help })}
+                  </p>
+                </div>
               );
             })}
           </div>

@@ -255,6 +255,8 @@ export default function PromotionsAdminPage() {
       // (00519) lives in promotionService — it strips those columns and
       // retries so the promo still saves before the migration lands.
       if (editingId) {
+        // No silent case here: before 00666 the server refuses marketing's activation or live edit
+        // with an error (promo_activation_requires_admin / promo_active_locked), shown below.
         await promotionService.update(editingId, payload);
         showToast('success', t('promotions.toast_updated', { defaultValue: 'Promoción actualizada' }));
         const prev = items.find((i) => i.id === editingId);
@@ -266,8 +268,16 @@ export default function PromotionsAdminPage() {
         });
       } else {
         const created = await promotionService.create({ ...payload, notified_at: null });
-        showToast('success', t('promotions.toast_created', { defaultValue: 'Promoción creada' }));
-        await maybeNotifyOnPublish(created);
+        if (payload.is_active && !created.is_active) {
+          // A server still on 00642 saves marketing's promotions switched off, without an error.
+          // Say so, and send no publish push: maybeNotifyOnPublish skips an inactive promotion.
+          showToast('warning', t('promotions.toast_saved_inactive', {
+            defaultValue: 'Promoción guardada, pero quedó apagada. Un administrador tiene que activarla.',
+          }), 8000);
+        } else {
+          showToast('success', t('promotions.toast_created', { defaultValue: 'Promoción creada' }));
+          await maybeNotifyOnPublish(created);
+        }
       }
       // A save can switch on a draft left pending before 00666: the Sidebar recounts its dot.
       announcePromotionsChanged();
@@ -387,17 +397,19 @@ export default function PromotionsAdminPage() {
   const handleToggleActive = useCallback(async (p: Promotion) => {
     try {
       if (p.is_active) {
-        await promotionService.setActive(p.id, false);
+        // pause() turns it off only if it is on right now. False: someone already turned it off
+        // after this list loaded, so there is nothing to announce; just show the current list.
+        const paused = await promotionService.pause(p.id);
+        if (paused) {
+          showToast('success', t('promotions.toast_deactivated', { defaultValue: 'Promoción desactivada' }));
+        }
       } else {
         await promotionService.approve(p.id, p.revision ?? 0);
         announcePromotionsChanged();
+        showToast('success', t('promotions.toast_activated', { defaultValue: 'Promoción activada' }));
+        // Activating (was inactive) is a "publish" event → maybe auto-notify.
+        await maybeNotifyOnPublish({ ...p, is_active: true });
       }
-      showToast('success', p.is_active
-        ? t('promotions.toast_deactivated', { defaultValue: 'Promoción desactivada' })
-        : t('promotions.toast_activated', { defaultValue: 'Promoción activada' }),
-      );
-      // Activating (was inactive) is a "publish" event → maybe auto-notify.
-      if (!p.is_active) await maybeNotifyOnPublish({ ...p, is_active: true });
       await loadItems();
     } catch (err) {
       if (promotionChanged(err)) {

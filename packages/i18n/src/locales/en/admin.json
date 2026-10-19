@@ -159,7 +159,26 @@
     "invalidate_title": "Invalidate referral",
     "invalidate_error": "Could not invalidate referral.",
     "action_reward": "Reward",
-    "action_invalidate": "Invalidate"
+    "action_invalidate": "Invalidate",
+    "amounts_title": "Referral amounts (CUP)",
+    "amounts_help": "Paid into the wallet when the invited person completes their first ride, once per phone number. A change applies to the next payments.",
+    "amounts_load_error": "We couldn't load the amounts.",
+    "amounts_retry": "Retry",
+    "amounts_invalid": "Amounts must be whole numbers, 0 or more.",
+    "amounts_saved": "Amounts saved. They apply to the next referrals that get paid.",
+    "amounts_discard": "Discard changes",
+    "amounts_saving": "Saving…",
+    "amounts_save": "Save amounts",
+    "amount_invalid_hint": "A whole number, 0 or more.",
+    "amount_change": "Changes from {{from}} to {{to}}",
+    "amount_referral_bonus_cup": "For bringing a rider",
+    "amount_referral_bonus_cup_help": "Goes to whoever invited, when the invited rider completes their first ride.",
+    "amount_referral_bonus_driver_cup": "For bringing a driver",
+    "amount_referral_bonus_driver_cup_help": "Goes to whoever invited, when the invited driver completes their first ride. 0 uses the rider amount.",
+    "amount_referral_welcome_bonus_cup": "Welcome bonus for the invited rider",
+    "amount_referral_welcome_bonus_cup_help": "Goes to the invited rider on their first ride. 0 = off.",
+    "amount_referral_welcome_bonus_driver_cup": "Welcome bonus for the invited driver",
+    "amount_referral_welcome_bonus_driver_cup_help": "Goes to the invited driver on their first ride. 0 uses the rider welcome bonus."
   },
   "dashboard": {
     "title": "Dashboard",
@@ -946,7 +965,8 @@
     "action_approve": "Approve and activate",
     "pending_strip": "Promotions awaiting approval: {{count}}",
     "pending_dot": "Some promotions are awaiting approval",
-    "changed_since_loaded": "The promotion changed while you were reviewing it. Check the new version before activating it."
+    "changed_since_loaded": "The promotion changed while you were reviewing it. Check the new version before activating it.",
+    "toast_saved_inactive": "Promotion saved, but it stayed off. An administrator has to turn it on."
   },
   "service_types": {
     "title": "Service types",
@@ -2312,7 +2332,7 @@
     "audience_choferes": "Drivers",
     "audience_ambos": "Both",
     "form_title": "New code",
-    "form_help": "These codes pay no bonus to whoever shares them: they record where each person came from. People type them in “Invite code” when they sign up. If you choose a promotion, whoever signs up with the code gets it on their next ride without typing anything, while the promotion is active. If you set a driver balance, each driver who signs up with the code gets it in their wallet when they complete their first ride. Use one code per influencer, batch of bags, screen or group.",
+    "form_help": "These codes pay no bonus to whoever shares them: they record where each person came from. People type them in “Invite code” when they sign up. If you choose a promotion, whoever signs up with the code gets it on their next ride without typing anything, while the promotion is active. If you set a driver balance, the driver who signs up with the code gets it in their wallet when they complete their first ride for a rider. Use one code per influencer, batch of bags, screen or group.",
     "field_code": "Code",
     "field_label": "Name",
     "field_channel": "Channel",
@@ -2335,7 +2355,19 @@
     "acquisition_error_missing": "The database doesn't have source codes yet. The other tabs still work.",
     "acquisition_error_generic": "The rest of this page is not affected. Try again in a moment.",
     "retry": "Retry",
-    "export_csv": "Export CSV"
+    "export_csv": "Export CSV",
+    "field_driver_bonus": "Driver balance (CUP)",
+    "driver_bonus_help": "The driver who signs up with this code gets it in their wallet when they complete their first ride for a rider. Once per phone number. If you change the amount, it applies to drivers who haven't made that ride yet. To stop paying it, set it to 0: turning the code off only stops more people from signing up with it.",
+    "driver_bonus_invalid": "The driver balance must be a whole number, 0 or more.",
+    "driver_bonus_preview": "{{amount}} per driver",
+    "driver_bonus_audience_hint": "The audience is “Riders”, but this balance is for drivers: a driver who signs up with the code still gets it.",
+    "driver_bonus_change": "Changes from {{from}} to {{to}}",
+    "toast_driver_bonus_saved": "Driver balance for {{code}} saved.",
+    "col_driver_bonus": "Driver balance",
+    "col_drivers_bonus_paid": "Driver bonuses",
+    "csv_driver_bonus_cup": "Driver balance (CUP)",
+    "csv_drivers_bonus_paid": "Drivers paid the bonus",
+    "csv_driver_bonus_paid_cup": "Bonuses paid (CUP)"
   },
   "launch_pulse": {
     "seg_no_offer": "No offer",

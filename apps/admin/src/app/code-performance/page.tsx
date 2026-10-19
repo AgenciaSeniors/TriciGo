@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Ticket, Gift, Megaphone, AlertTriangle, Download, Plus } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
 import {
@@ -155,6 +155,115 @@ function ActiveSwitch({
         {active ? onLabel : offLabel}
       </span>
     </button>
+  );
+}
+
+/**
+ * The driver bonus of one code row (00666). A component of its own so each copy
+ * DataTable renders (table and cards) gets its own ids from useId: the input
+ * points at its error and before/after line with aria-describedby.
+ */
+function DriverBonusEditor({
+  row,
+  draft,
+  saving,
+  invalidText,
+  onDraftChange,
+  onSave,
+}: {
+  row: AcquisitionRow;
+  /** Typed but not saved yet; undefined when the field shows the saved amount. */
+  draft: string | undefined;
+  saving: boolean;
+  invalidText: string;
+  onDraftChange: (code: string, draft: string | null) => void;
+  onSave: (row: AcquisitionRow, raw: string) => void;
+}) {
+  const { t } = useTranslation('admin');
+  const baseId = useId();
+  const errorId = `${baseId}-error`;
+  const changeId = `${baseId}-change`;
+  const next = draft === undefined ? null : parseDriverBonus(draft);
+  const invalid = draft !== undefined && next === null;
+  const describedBy = invalid ? errorId : next !== null ? changeId : undefined;
+  return (
+    <span data-bonus-cell className="flex w-full min-w-0 flex-col gap-1">
+      <span className="flex items-center gap-1.5">
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          autoComplete="off"
+          // The input only edits the draft; the Guardar button writes it.
+          value={draft ?? String(row.driver_bonus_cup)}
+          onChange={(e) => {
+            const value = e.target.value;
+            onDraftChange(row.code, value.trim() === String(row.driver_bonus_cup) ? null : value);
+          }}
+          disabled={saving}
+          aria-invalid={invalid || undefined}
+          aria-describedby={describedBy}
+          aria-label={t('code_performance.driver_bonus_aria', {
+            code: row.code,
+            defaultValue: 'Saldo para choferes de {{code}}, en CUP',
+          })}
+          className="h-8 w-24 rounded-lg border border-line bg-surface px-2 font-mono text-[12px] text-ink focus:border-primary-500 focus:outline-none aria-[invalid=true]:border-amber-500 disabled:cursor-wait disabled:opacity-60"
+        />
+        <span className="text-[11px] text-ink-muted">CUP</span>
+      </span>
+      {next !== null && (
+        <span id={changeId} className="whitespace-nowrap font-mono text-[11px] text-ink">
+          <span aria-hidden="true">
+            {formatCUP(row.driver_bonus_cup)} → {formatCUP(next)}
+          </span>
+          <span className="sr-only">
+            {t('code_performance.driver_bonus_change', {
+              from: formatCUP(row.driver_bonus_cup),
+              to: formatCUP(next),
+              defaultValue: 'Cambia de {{from}} a {{to}}',
+            })}
+          </span>
+        </span>
+      )}
+      {invalid && (
+        <span id={errorId} className="text-[11px] text-amber-800 dark:text-amber-400">
+          {invalidText}
+        </span>
+      )}
+      {draft !== undefined && (
+        <span className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onSave(row, draft)}
+            disabled={saving || invalid}
+            aria-label={t('code_performance.driver_bonus_save_aria', {
+              code: row.code,
+              defaultValue: 'Guardar el saldo para choferes de {{code}}',
+            })}
+            className="inline-flex h-7 items-center rounded-full bg-ink px-3 text-[11px] font-medium text-surface transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {t('code_performance.promo_save', { defaultValue: 'Guardar' })}
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              // Keep the keyboard where it was: back on this row's input.
+              const input = e.currentTarget.closest('[data-bonus-cell]')?.querySelector('input');
+              onDraftChange(row.code, null);
+              input?.focus();
+            }}
+            disabled={saving}
+            aria-label={t('code_performance.driver_bonus_cancel_aria', {
+              code: row.code,
+              defaultValue: 'Cancelar el cambio de saldo para choferes de {{code}}',
+            })}
+            className="inline-flex h-7 items-center rounded-lg border border-line bg-surface px-3 text-[11px] font-medium text-ink transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {t('code_performance.promo_cancel', { defaultValue: 'Cancelar' })}
+          </button>
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -527,8 +636,13 @@ export default function CodePerformancePage() {
 
   const canonicalCode = normalizeAcquisitionCode(form.code);
   const codeValid = ACQUISITION_CODE_PATTERN.test(canonicalCode);
-  const driverBonusInvalid = parseDriverBonus(form.driverBonusCup) === null;
-  const canCreate = codeValid && form.label.trim().length > 0 && !creating;
+  const formBonus = parseDriverBonus(form.driverBonusCup);
+  const driverBonusInvalid = formBonus === null;
+  // The audience is a label for the panel: nothing stops a driver from signing up with a
+  // "pasajeros" code, and the bonus would be paid. A hint, not a blocker.
+  const bonusAudienceHint = form.audience === 'pasajeros' && formBonus !== null && formBonus > 0;
+  const bonusFieldId = useId();
+  const canCreate = codeValid && form.label.trim().length > 0 && !driverBonusInvalid && !creating;
 
   const updateForm = useCallback(<K extends keyof AcquisitionForm>(key: K, value: AcquisitionForm[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -969,71 +1083,16 @@ export default function CodePerformancePage() {
       {
         id: 'driver_bonus_cup',
         header: t('code_performance.col_driver_bonus', { defaultValue: 'Saldo para choferes' }),
-        cell: (c) => {
-          const saving = savingBonusCodes.has(c.code);
-          // The input only edits the draft; the Guardar button writes it.
-          const draft = bonusDrafts.get(c.code);
-          const invalid = draft !== undefined && parseDriverBonus(draft) === null;
-          return (
-            <span data-bonus-cell className="flex w-full min-w-0 flex-col gap-1">
-              <span className="flex items-center gap-1.5">
-                <input
-                  type="number"
-                  min={0}
-                  step={1}
-                  inputMode="numeric"
-                  value={draft ?? String(c.driver_bonus_cup)}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setBonusDraft(c.code, next.trim() === String(c.driver_bonus_cup) ? null : next);
-                  }}
-                  disabled={saving}
-                  aria-invalid={invalid || undefined}
-                  aria-label={t('code_performance.driver_bonus_aria', {
-                    code: c.code,
-                    defaultValue: 'Saldo para choferes de {{code}}, en CUP',
-                  })}
-                  className="h-8 w-24 rounded-lg border border-line bg-surface px-2 font-mono text-[12px] text-ink focus:border-primary-500 focus:outline-none disabled:cursor-wait disabled:opacity-60"
-                />
-                <span className="text-[11px] text-ink-muted">CUP</span>
-              </span>
-              {draft !== undefined && (
-                <span className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void handleSetDriverBonus(c, draft)}
-                    disabled={saving || invalid}
-                    aria-label={t('code_performance.driver_bonus_save_aria', {
-                      code: c.code,
-                      defaultValue: 'Guardar el saldo para choferes de {{code}}',
-                    })}
-                    className="inline-flex h-7 items-center rounded-full bg-ink px-3 text-[11px] font-medium text-surface transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {t('code_performance.promo_save', { defaultValue: 'Guardar' })}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      // Keep the keyboard where it was: back on this row's input.
-                      const input = e.currentTarget.closest('[data-bonus-cell]')?.querySelector('input');
-                      setBonusDraft(c.code, null);
-                      input?.focus();
-                    }}
-                    disabled={saving}
-                    aria-label={t('code_performance.driver_bonus_cancel_aria', {
-                      code: c.code,
-                      defaultValue: 'Cancelar el cambio de saldo para choferes de {{code}}',
-                    })}
-                    className="inline-flex h-7 items-center rounded-lg border border-line bg-surface px-3 text-[11px] font-medium text-ink transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {t('code_performance.promo_cancel', { defaultValue: 'Cancelar' })}
-                  </button>
-                </span>
-              )}
-              {invalid && <span className="text-[11px] text-amber-800 dark:text-amber-400">{driverBonusInvalidText}</span>}
-            </span>
-          );
-        },
+        cell: (c) => (
+          <DriverBonusEditor
+            row={c}
+            draft={bonusDrafts.get(c.code)}
+            saving={savingBonusCodes.has(c.code)}
+            invalidText={driverBonusInvalidText}
+            onDraftChange={setBonusDraft}
+            onSave={(row, raw) => void handleSetDriverBonus(row, raw)}
+          />
+        ),
         sortKey: 'driver_bonus_cup',
         hideBelow: 'lg',
       },
@@ -1183,11 +1242,12 @@ export default function CodePerformancePage() {
               <p className="mt-1 max-w-[80ch] text-[12px] text-ink-muted">
                 {t('code_performance.form_help', {
                   defaultValue:
-                    'Estos códigos no pagan bono a quien los comparte: registran de dónde viene cada persona. La gente los escribe en «Código de invitación» al registrarse. Si eliges una promoción, quien se registre con el código la recibe en su próximo viaje sin escribir nada, mientras la promoción esté activa. Si pones un saldo para choferes, cada chofer que se registre con el código lo recibe en su billetera al completar su primer viaje. Usa un código por influencer, lote de bolsas, pantalla o grupo.',
+                    'Estos códigos no pagan bono a quien los comparte: registran de dónde viene cada persona. La gente los escribe en «Código de invitación» al registrarse. Si eliges una promoción, quien se registre con el código la recibe en su próximo viaje sin escribir nada, mientras la promoción esté activa. Si pones un saldo para choferes, el chofer que se registre con el código lo recibe en su billetera al completar su primer viaje para un pasajero. Usa un código por influencer, lote de bolsas, pantalla o grupo.',
                 })}
               </p>
 
               <form
+                noValidate
                 onSubmit={(e) => void handleCreate(e)}
                 className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,0.9fr)_minmax(0,0.9fr)]"
               >
@@ -1284,33 +1344,70 @@ export default function CodePerformancePage() {
                     </span>
                   )}
                 </Field>
-                <Field
-                  label={t('code_performance.field_driver_bonus', { defaultValue: 'Saldo para choferes (CUP)' })}
-                  className="sm:col-span-2 lg:col-span-1"
-                >
+                {/* Not a <Field>: its <label> would swallow the help, preview and error. They are
+                    linked to the input with aria-describedby instead. */}
+                <div className="flex min-w-0 flex-col gap-1 sm:col-span-2 lg:col-span-1">
+                  <label
+                    htmlFor={`${bonusFieldId}-input`}
+                    className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle"
+                  >
+                    {t('code_performance.field_driver_bonus', { defaultValue: 'Saldo para choferes (CUP)' })}
+                  </label>
                   <input
-                    type="number"
-                    min={0}
-                    step={1}
+                    id={`${bonusFieldId}-input`}
+                    type="text"
                     inputMode="numeric"
+                    pattern="[0-9]*"
+                    autoComplete="off"
                     value={form.driverBonusCup}
                     onChange={(e) => updateForm('driverBonusCup', e.target.value)}
                     aria-invalid={driverBonusInvalid || undefined}
-                    className={`${inputCls} font-mono`}
+                    aria-describedby={[
+                      driverBonusInvalid ? `${bonusFieldId}-error` : null,
+                      formBonus !== null && formBonus > 0 ? `${bonusFieldId}-amount` : null,
+                      bonusAudienceHint ? `${bonusFieldId}-audience` : null,
+                      `${bonusFieldId}-help`,
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                    className={`${inputCls} font-mono aria-[invalid=true]:border-amber-500`}
                   />
-                  <span
-                    className={`text-[11px] leading-snug ${
-                      driverBonusInvalid ? 'text-amber-800 dark:text-amber-400' : 'text-ink-muted'
-                    }`}
-                  >
-                    {driverBonusInvalid
-                      ? driverBonusInvalidText
-                      : t('code_performance.driver_bonus_help', {
-                          defaultValue:
-                            'Lo recibe un chofer que se registre con este código, al completar su primer viaje. 0 = apagado.',
+                  {driverBonusInvalid ? (
+                    <p
+                      id={`${bonusFieldId}-error`}
+                      className="text-[11px] leading-snug text-amber-800 dark:text-amber-400"
+                    >
+                      {driverBonusInvalidText}
+                    </p>
+                  ) : (
+                    formBonus !== null &&
+                    formBonus > 0 && (
+                      <p id={`${bonusFieldId}-amount`} className="font-mono text-[11px] leading-snug text-ink">
+                        {t('code_performance.driver_bonus_preview', {
+                          amount: formatCUP(formBonus),
+                          defaultValue: '{{amount}} por chofer',
                         })}
-                  </span>
-                </Field>
+                      </p>
+                    )
+                  )}
+                  {bonusAudienceHint && (
+                    <p
+                      id={`${bonusFieldId}-audience`}
+                      className="text-[11px] leading-snug text-amber-800 dark:text-amber-400"
+                    >
+                      {t('code_performance.driver_bonus_audience_hint', {
+                        defaultValue:
+                          'El público es «Pasajeros», pero este saldo es para choferes: un chofer que se registre con el código lo cobra igual.',
+                      })}
+                    </p>
+                  )}
+                  <p id={`${bonusFieldId}-help`} className="text-[11px] leading-snug text-ink-muted">
+                    {t('code_performance.driver_bonus_help', {
+                      defaultValue:
+                        'Lo recibe en su billetera el chofer que se registre con este código, al completar su primer viaje para un pasajero. Una vez por teléfono. Si cambias el monto, vale para los choferes que todavía no hicieron ese viaje. Para dejar de pagarlo, pon 0: desactivar el código solo impide que se registre más gente con él.',
+                    })}
+                  </p>
+                </div>
                 <Field
                   label={t('code_performance.field_notes', { defaultValue: 'Notas (opcional)' })}
                   className="sm:col-span-2 lg:col-span-2"
