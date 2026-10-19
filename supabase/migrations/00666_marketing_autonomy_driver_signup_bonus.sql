@@ -12,13 +12,14 @@
 --    amounts in platform_config (integers >= 0). tg_platform_config_audit logs
 --    each change with the caller's id.
 -- C. acquisition_codes.driver_bonus_cup: a driver registered with the code (applied
---    before the approval) gets that many CUP in the tricicoin wallet on the first
---    completed ride for another person, once per confirmed phone (claim
+--    at or before his first approval) gets that many CUP in the tricicoin wallet on
+--    the first completed ride for another person, once per confirmed phone (claim
 --    'signup_driver_bonus'). Paid from platform_promotions by trg_signup_driver_bonus,
 --    in a block that never rolls back the ride; a failed payment is logged in
 --    rpc_attempt_log. signup_driver_bonuses keeps one row per paid bonus;
 --    admin_signup_code_stats() reports them. Every change of a code's amount is
---    audited in admin_actions with who made it.
+--    audited in admin_actions with who made it. The first approval is recorded in
+--    driver_first_approvals (approved_at is rewritten on every approval).
 
 SET lock_timeout = '5s';
 
@@ -211,7 +212,7 @@ GRANT EXECUTE ON FUNCTION public.set_referral_amounts(jsonb) TO authenticated, s
 ALTER TABLE public.acquisition_codes
   ADD COLUMN IF NOT EXISTS driver_bonus_cup integer NOT NULL DEFAULT 0 CHECK (driver_bonus_cup >= 0);
 COMMENT ON COLUMN public.acquisition_codes.driver_bonus_cup IS
-  '00666: CUP credited to the tricicoin wallet of a driver registered with this code (applied before the approval), on the first completed ride for another person, once per confirmed phone. 0 = off.';
+  '00666: CUP credited to the tricicoin wallet of a driver registered with this code (applied at or before his first approval), on the first completed ride for another person, once per confirmed phone. 0 = off.';
 
 -- Every change of a code's amount is money policy: audited with who made it, like platform_config.
 CREATE OR REPLACE FUNCTION public.tg_acquisition_codes_bonus_audit()
@@ -274,6 +275,7 @@ DECLARE
   v_amount integer;
   v_code_at timestamptz;
   v_approved_at timestamptz;
+  v_first_approved_at timestamptz;
   v_qualifying integer;
   v_driver_account uuid;
   v_platform_account uuid;
@@ -286,11 +288,12 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  SELECT dp.user_id, u.signup_code, ac.driver_bonus_cup, u.signup_code_at, dp.approved_at
-    INTO v_driver_user, v_code, v_amount, v_code_at, v_approved_at
+  SELECT dp.user_id, u.signup_code, ac.driver_bonus_cup, u.signup_code_at, dp.approved_at, fa.first_approved_at
+    INTO v_driver_user, v_code, v_amount, v_code_at, v_approved_at, v_first_approved_at
   FROM public.driver_profiles dp
   JOIN public.users u ON u.id = dp.user_id
   JOIN public.acquisition_codes ac ON ac.code = u.signup_code
+  LEFT JOIN public.driver_first_approvals fa ON fa.driver_profile_id = dp.id
   WHERE dp.id = NEW.driver_id;
 
   -- No code, a code that pays nothing, or a ride the driver requested himself.
@@ -298,9 +301,12 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  -- For drivers who registered with the code: it was applied before the approval. An approved driver
-  -- who adds a code later (apply_signup_code takes one at any time) gets nothing.
-  IF v_code_at IS NULL OR v_approved_at IS NULL OR v_code_at > v_approved_at THEN
+  -- For drivers who registered with the code: it was applied at or before the first approval. An
+  -- approved driver who adds a code later (apply_signup_code takes one at any time) gets nothing,
+  -- also after a re-approval: approved_at is rewritten on every approval, so the first one comes
+  -- from driver_first_approvals (LEAST skips it when the row is missing).
+  IF v_code_at IS NULL OR v_approved_at IS NULL
+     OR v_code_at > LEAST(v_first_approved_at, v_approved_at) THEN
     RETURN NEW;
   END IF;
 
@@ -390,6 +396,57 @@ CREATE OR REPLACE TRIGGER trg_signup_driver_bonus
   WHEN (NEW.status = 'completed' AND OLD.status IS DISTINCT FROM 'completed')
   EXECUTE FUNCTION public.trg_signup_driver_bonus();
 
+-- The driver's first approval, kept apart from driver_profiles.approved_at: the panel rewrites
+-- approved_at on every approval (approveDriver), so a driver back from review (after a vehicle
+-- change, 00650) would look approved today, after a code he added later. trg_signup_driver_bonus
+-- compares the code's date with the earlier of the two. A lock table: no policies; only SECURITY
+-- DEFINER functions read or write it.
+CREATE TABLE IF NOT EXISTS public.driver_first_approvals (
+  driver_profile_id uuid PRIMARY KEY REFERENCES public.driver_profiles(id) ON DELETE CASCADE,
+  first_approved_at timestamptz NOT NULL
+);
+ALTER TABLE public.driver_first_approvals ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.driver_first_approvals FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.driver_first_approvals TO service_role;
+COMMENT ON TABLE public.driver_first_approvals IS
+  '00666: when each driver profile was first approved (approved_at is rewritten on every approval). Written by trg_driver_profiles_first_approval, read by trg_signup_driver_bonus.';
+
+CREATE OR REPLACE FUNCTION public.tg_driver_profiles_first_approval()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+BEGIN
+  -- The first approval only: a later one finds the row and leaves it. Recording it never blocks
+  -- the approval; with no row, the bonus falls back to approved_at.
+  BEGIN
+    INSERT INTO public.driver_first_approvals (driver_profile_id, first_approved_at)
+    VALUES (NEW.id, COALESCE(NEW.approved_at, now()))
+    ON CONFLICT (driver_profile_id) DO NOTHING;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'first approval of driver profile % not recorded: % %', NEW.id, SQLSTATE, SQLERRM;
+  END;
+  RETURN NULL;
+END;
+$function$;
+REVOKE ALL ON FUNCTION public.tg_driver_profiles_first_approval() FROM PUBLIC, anon, authenticated;
+
+-- Created under the lock_timeout set at the top: an approval in flight makes it wait 5 s at most.
+CREATE OR REPLACE TRIGGER trg_driver_profiles_first_approval
+  AFTER INSERT OR UPDATE OF status ON public.driver_profiles
+  FOR EACH ROW
+  WHEN (NEW.status = 'approved')
+  EXECUTE FUNCTION public.tg_driver_profiles_first_approval();
+
+-- Profiles approved before this migration: their approval date is the only record there is.
+-- A second run keeps the rows it finds.
+INSERT INTO public.driver_first_approvals (driver_profile_id, first_approved_at)
+SELECT dp.id, dp.approved_at
+  FROM public.driver_profiles dp
+  WHERE dp.approved_at IS NOT NULL
+ON CONFLICT (driver_profile_id) DO NOTHING;
+
 -- Stats: the code's amount, how many drivers were paid and how much. Adding columns changes the
 -- return type, so DROP + CREATE with the same grants.
 DROP FUNCTION IF EXISTS public.admin_signup_code_stats();
@@ -453,7 +510,8 @@ BEGIN
     SELECT p.oid FROM pg_proc p
     WHERE p.pronamespace = 'public'::regnamespace
       AND p.proname IN ('tg_promotions_marketing_guard', 'set_referral_amounts', 'trg_signup_driver_bonus',
-                        'admin_signup_code_stats', 'promotion_is_referenced', 'tg_acquisition_codes_bonus_audit')
+                        'admin_signup_code_stats', 'promotion_is_referenced', 'tg_acquisition_codes_bonus_audit',
+                        'tg_driver_profiles_first_approval')
       AND position(chr(13) IN p.prosrc) > 0
   LOOP
     EXECUTE replace(pg_get_functiondef(r.oid), chr(13), '');
@@ -472,7 +530,7 @@ BEGIN
     RAISE EXCEPTION '00666 check: tg_promotions_marketing_guard has an unexpected body';
   END IF;
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.trg_signup_driver_bonus()'::regprocedure)
-     IS DISTINCT FROM '86c7c891b7227fafa5e69ca7f377b8b6' THEN
+     IS DISTINCT FROM '629fcc1b6e7057f83b0f2f2ae95b48c8' THEN
     RAISE EXCEPTION '00666 check: trg_signup_driver_bonus has an unexpected body';
   END IF;
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.promotion_is_referenced(uuid)'::regprocedure)
@@ -482,6 +540,10 @@ BEGIN
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.tg_acquisition_codes_bonus_audit()'::regprocedure)
      IS DISTINCT FROM 'c3731384cd8f09884c1be1de4d68a2cc' THEN
     RAISE EXCEPTION '00666 check: tg_acquisition_codes_bonus_audit has an unexpected body';
+  END IF;
+  IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.tg_driver_profiles_first_approval()'::regprocedure)
+     IS DISTINCT FROM 'ac953cb95443b406224b24f94fc7cdef' THEN
+    RAISE EXCEPTION '00666 check: tg_driver_profiles_first_approval has an unexpected body';
   END IF;
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.set_referral_amounts(jsonb)'::regprocedure)
      IS DISTINCT FROM 'cd6a37dea2a53f4674549af28e3c2e9a' THEN
@@ -501,11 +563,12 @@ BEGIN
     RAISE EXCEPTION '00666 check: the promotions guard is not an enabled SECURITY INVOKER trigger';
   END IF;
 
-  -- The four functions that need the owner's rights are SECURITY DEFINER with a fixed path.
+  -- The five functions that need the owner's rights are SECURITY DEFINER with a fixed path.
   FOR r IN
     SELECT p.oid::regprocedure AS fn, p.prosecdef, p.proconfig FROM pg_proc p
     WHERE p.oid IN ('public.set_referral_amounts(jsonb)'::regprocedure, 'public.trg_signup_driver_bonus()'::regprocedure,
-                    'public.admin_signup_code_stats()'::regprocedure, 'public.tg_acquisition_codes_bonus_audit()'::regprocedure)
+                    'public.admin_signup_code_stats()'::regprocedure, 'public.tg_acquisition_codes_bonus_audit()'::regprocedure,
+                    'public.tg_driver_profiles_first_approval()'::regprocedure)
   LOOP
     IF NOT (r.prosecdef AND COALESCE(r.proconfig && ARRAY['search_path=public, pg_catalog'], false)) THEN
       RAISE EXCEPTION '00666 check: % is not SECURITY DEFINER with a fixed search_path', r.fn;
@@ -525,12 +588,14 @@ BEGIN
      OR has_function_privilege('authenticated', 'public.trg_signup_driver_bonus()', 'EXECUTE')
      OR has_function_privilege('anon', 'public.tg_acquisition_codes_bonus_audit()', 'EXECUTE')
      OR has_function_privilege('authenticated', 'public.tg_acquisition_codes_bonus_audit()', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.tg_driver_profiles_first_approval()', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.tg_driver_profiles_first_approval()', 'EXECUTE')
      OR has_function_privilege('anon', 'public.promotion_is_referenced(uuid)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.promotion_is_referenced(uuid)', 'EXECUTE') THEN
     RAISE EXCEPTION '00666 check: wrong EXECUTE grants on the new functions';
   END IF;
 
-  -- The two triggers as written above, enabled. pg_get_triggerdef qualifies names by search_path: pin it.
+  -- The three triggers as written above, enabled. pg_get_triggerdef qualifies names by search_path: pin it.
   PERFORM set_config('search_path', '', true);
   IF (SELECT pg_get_triggerdef(t.oid) FROM pg_trigger t
        WHERE t.tgrelid = 'public.rides'::regclass AND t.tgname = 'trg_signup_driver_bonus' AND t.tgenabled = 'O')
@@ -542,6 +607,11 @@ BEGIN
      IS DISTINCT FROM 'CREATE TRIGGER trg_acquisition_codes_bonus_audit AFTER INSERT OR UPDATE OF driver_bonus_cup ON public.acquisition_codes FOR EACH ROW EXECUTE FUNCTION public.tg_acquisition_codes_bonus_audit()' THEN
     RAISE EXCEPTION '00666 check: trg_acquisition_codes_bonus_audit is not the expected trigger on acquisition_codes';
   END IF;
+  IF (SELECT pg_get_triggerdef(t.oid) FROM pg_trigger t
+       WHERE t.tgrelid = 'public.driver_profiles'::regclass AND t.tgname = 'trg_driver_profiles_first_approval' AND t.tgenabled = 'O')
+     IS DISTINCT FROM 'CREATE TRIGGER trg_driver_profiles_first_approval AFTER INSERT OR UPDATE OF status ON public.driver_profiles FOR EACH ROW WHEN ((new.status = ''approved''::public.driver_status)) EXECUTE FUNCTION public.tg_driver_profiles_first_approval()' THEN
+    RAISE EXCEPTION '00666 check: trg_driver_profiles_first_approval is not the expected trigger on driver_profiles';
+  END IF;
   PERFORM set_config('search_path', v_path, true);
 
   IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.signup_driver_bonuses'::regclass)
@@ -550,6 +620,19 @@ BEGIN
      OR has_table_privilege('authenticated', 'public.signup_driver_bonuses', 'SELECT')
      OR NOT has_table_privilege('service_role', 'public.signup_driver_bonuses', 'INSERT') THEN
     RAISE EXCEPTION '00666 check: signup_driver_bonuses is not a service-role-only lock table';
+  END IF;
+  IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.driver_first_approvals'::regclass)
+     OR EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.driver_first_approvals'::regclass)
+     OR has_table_privilege('anon', 'public.driver_first_approvals', 'SELECT')
+     OR has_table_privilege('authenticated', 'public.driver_first_approvals', 'SELECT')
+     OR has_table_privilege('authenticated', 'public.driver_first_approvals', 'INSERT')
+     OR NOT has_table_privilege('service_role', 'public.driver_first_approvals', 'INSERT') THEN
+    RAISE EXCEPTION '00666 check: driver_first_approvals is not a service-role-only lock table';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.driver_profiles dp
+              WHERE dp.approved_at IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM public.driver_first_approvals fa WHERE fa.driver_profile_id = dp.id)) THEN
+    RAISE EXCEPTION '00666 check: a driver profile with an approval date has no first-approval row';
   END IF;
 
   IF (SELECT column_default FROM information_schema.columns
@@ -562,7 +645,8 @@ BEGIN
     SELECT 1 FROM pg_proc p
     WHERE p.pronamespace = 'public'::regnamespace
       AND p.proname IN ('tg_promotions_marketing_guard', 'set_referral_amounts', 'trg_signup_driver_bonus',
-                        'admin_signup_code_stats', 'promotion_is_referenced', 'tg_acquisition_codes_bonus_audit')
+                        'admin_signup_code_stats', 'promotion_is_referenced', 'tg_acquisition_codes_bonus_audit',
+                        'tg_driver_profiles_first_approval')
       AND position(chr(13) IN p.prosrc) > 0
   ) THEN
     RAISE EXCEPTION '00666 check: a function body still has a carriage return';

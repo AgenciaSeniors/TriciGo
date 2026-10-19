@@ -45,6 +45,7 @@ CREATE TYPE public.ledger_entry_type AS ENUM ('recharge', 'ride_payment', 'ride_
   'transfer_in', 'transfer_out', 'promo_credit', 'redemption', 'adjustment', 'insurance_premium', 'refund',
   'quota_deduction', 'quota_recharge', 'fx_revaluation');
 CREATE TYPE public.ledger_transaction_status AS ENUM ('pending', 'posted', 'archived', 'reversed');
+CREATE TYPE public.driver_status AS ENUM ('pending_verification', 'under_review', 'approved', 'rejected', 'suspended');
 
 -- 00619 + 00665: acquisition codes (the promotion link's key is added once promotions exists).
 CREATE TABLE public.acquisition_codes (
@@ -124,7 +125,7 @@ CREATE TABLE public.referral_codes (code text PRIMARY KEY, user_id uuid);
 CREATE TABLE public.driver_profiles (
   id uuid PRIMARY KEY,
   user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  status text NOT NULL DEFAULT 'approved',
+  status public.driver_status NOT NULL DEFAULT 'pending_verification',
   approved_at timestamptz
 );
 
@@ -351,10 +352,15 @@ CREATE POLICY acquisition_codes_all_marketing ON public.acquisition_codes FOR AL
   USING ((SELECT is_marketing())) WITH CHECK ((SELECT is_marketing()));
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 CREATE POLICY users_select_own ON public.users FOR SELECT USING ((id = (SELECT auth.uid())) OR is_admin());
+-- The panel approves a driver with an UPDATE through these (00064, 00180).
+ALTER TABLE public.driver_profiles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY dp_select_own ON public.driver_profiles FOR SELECT TO authenticated USING ((user_id = (SELECT auth.uid())) OR is_admin());
+CREATE POLICY dp_update_own ON public.driver_profiles FOR UPDATE USING ((user_id = (SELECT auth.uid())) OR is_admin());
 
 -- Table grants.
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.promotions, public.platform_config, public.acquisition_codes TO authenticated;
 GRANT SELECT ON public.users TO authenticated;
+GRANT SELECT, UPDATE ON public.driver_profiles TO authenticated;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
 
 -- LIVE trigger definitions.
@@ -397,11 +403,11 @@ INSERT INTO public.users (id, role, full_name, phone, signup_code, signup_code_a
   ('d0000000-0000-4000-8000-000000000003', 'driver', 'Driver Three', '+5355500013', 'ZERO', now() - interval '60 days'),
   ('d0000000-0000-4000-8000-000000000004', 'driver', 'Driver Four', '+5355500014', NULL, NULL);
 
-INSERT INTO public.driver_profiles (id, user_id, approved_at) VALUES
-  ('dd000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000001', now() - interval '30 days'),
-  ('dd000000-0000-4000-8000-000000000002', 'd0000000-0000-4000-8000-000000000002', now() - interval '30 days'),
-  ('dd000000-0000-4000-8000-000000000003', 'd0000000-0000-4000-8000-000000000003', now() - interval '30 days'),
-  ('dd000000-0000-4000-8000-000000000004', 'd0000000-0000-4000-8000-000000000004', now() - interval '30 days');
+INSERT INTO public.driver_profiles (id, user_id, status, approved_at) VALUES
+  ('dd000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000001', 'approved', now() - interval '30 days'),
+  ('dd000000-0000-4000-8000-000000000002', 'd0000000-0000-4000-8000-000000000002', 'approved', now() - interval '30 days'),
+  ('dd000000-0000-4000-8000-000000000003', 'd0000000-0000-4000-8000-000000000003', 'approved', now() - interval '30 days'),
+  ('dd000000-0000-4000-8000-000000000004', 'd0000000-0000-4000-8000-000000000004', 'approved', now() - interval '30 days');
 
 -- JSON numbers, as prod stores the four amounts; one secret-looking key.
 INSERT INTO public.platform_config (key, value) VALUES

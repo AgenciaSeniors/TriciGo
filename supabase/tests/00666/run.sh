@@ -2,7 +2,8 @@
 # Rehearsal runner for migration 00666 (local Postgres 16, no PostGIS needed).
 #   supabase/tests/00666/run.sh none
 #       -> scaffold (prod's live bodies) + tests (RED: the guard still forces drafts, and
-#          set_referral_amounts, the bonus column and the bonus trigger are missing)
+#          set_referral_amounts, the bonus column, the bonus trigger and the first-approval
+#          record are missing)
 #   supabase/tests/00666/run.sh supabase/migrations/00666_marketing_autonomy_driver_signup_bonus.sql
 #       -> the same + migration x2 (idempotency) + tests + CRLF copy + negative proofs (GREEN)
 # The migration is applied as tricigo_owner, the scaffold's non-superuser owner (prod: postgres).
@@ -39,9 +40,10 @@ DRV2=d0000000-0000-4000-8000-000000000002     # VIGO, phone never confirmed
 DRV3=d0000000-0000-4000-8000-000000000003     # ZERO (amount 0), phone 5355500013
 DRV4=d0000000-0000-4000-8000-000000000004     # no signup code, phone 5355500014
 DRV5=d0000000-0000-4000-8000-000000000005     # created by C6: a new account on DRV1's phone, VIGO
+DRV6=d0000000-0000-4000-8000-000000000006     # created by C15: a new driver, phone 5355500016, no code yet, not approved
 DP1=dd000000-0000-4000-8000-000000000001; DP2=dd000000-0000-4000-8000-000000000002
 DP3=dd000000-0000-4000-8000-000000000003; DP4=dd000000-0000-4000-8000-000000000004
-DP5=dd000000-0000-4000-8000-000000000005
+DP5=dd000000-0000-4000-8000-000000000005; DP6=dd000000-0000-4000-8000-000000000006
 P_LIVE=e0000000-0000-4000-8000-000000000001   # LIVE10: active, used once, approved by ADMIN on 2026-10-01 12:00 UTC
 P_PAUSED=e0000000-0000-4000-8000-000000000002 # PAUSED5: paused, unused
 P_REF=e0000000-0000-4000-8000-000000000003    # REF15: paused, unused, named by a canceled ride
@@ -51,7 +53,7 @@ APPROVED_AT="'2026-10-01 12:00:00+00'"
 tx(){ printf "BEGIN; %s ROLLBACK;" "$1"; }
 # client USER SQL: SQL from USER's app session (role authenticated), then back to the test superuser with no JWT
 client(){ printf "SET LOCAL request.jwt.claim.sub = '%s'; SET LOCAL ROLE authenticated; %s RESET ROLE; SET LOCAL request.jwt.claim.sub = '';" "$1" "$2"; }
-user_of(){ case "$1" in $DP1) echo $DRV1;; $DP2) echo $DRV2;; $DP3) echo $DRV3;; $DP4) echo $DRV4;; $DP5) echo $DRV5;; esac; }
+user_of(){ case "$1" in $DP1) echo $DRV1;; $DP2) echo $DRV2;; $DP3) echo $DRV3;; $DP4) echo $DRV4;; $DP5) echo $DRV5;; $DP6) echo $DRV6;; esac; }
 # bonus_ride ID DRIVER_PROFILE CUSTOMER: an accepted ride the driver completes. The driver's JWT is set
 # and the update runs as a non-client role, as inside complete_ride_and_pay (SECURITY DEFINER).
 bonus_ride(){ echo "SET LOCAL request.jwt.claim.sub = '$(user_of "$2")';
@@ -64,7 +66,14 @@ del(){ echo "UPDATE public.ledger_transactions SET created_by = '$ANON' WHERE cr
 # drv5: a new driver account confirms DRV1's phone and registers with VIGO, then is approved
 DRV5_NEW="INSERT INTO auth.users (id, phone, phone_confirmed_at) VALUES ('$DRV5', '5355500011', now());
   INSERT INTO public.users (id, role, full_name, phone, signup_code, signup_code_at) VALUES ('$DRV5', 'driver', 'Driver Five', '+5355500011', 'VIGO', now() - interval '2 days');
-  INSERT INTO public.driver_profiles (id, user_id, approved_at) VALUES ('$DP5', '$DRV5', now() - interval '1 day');"
+  INSERT INTO public.driver_profiles (id, user_id, status, approved_at) VALUES ('$DP5', '$DRV5', 'approved', now() - interval '1 day');"
+# drv6: a new driver registers (own phone, no code yet); his profile waits for review
+DRV6_NEW="INSERT INTO auth.users (id, phone, phone_confirmed_at) VALUES ('$DRV6', '5355500016', now());
+  INSERT INTO public.users (id, role, full_name, phone) VALUES ('$DRV6', 'driver', 'Driver Six', '+5355500016');
+  INSERT INTO public.driver_profiles (id, user_id) VALUES ('$DP6', '$DRV6');"
+# approve DP: the panel's write (approveDriver), meant to run as ADMIN through RLS
+approve(){ echo "SELECT public.t_try('UPDATE public.driver_profiles SET status = ''approved'', approved_at = now() WHERE id = ''$1''');"; }
+FIRST="SELECT (fa.first_approved_at = dp.approved_at) FROM public.driver_first_approvals fa JOIN public.driver_profiles dp ON dp.id = fa.driver_profile_id WHERE dp.id ="
 wallet(){ echo "SELECT coalesce((SELECT balance::text FROM public.wallet_accounts WHERE user_id = '$1' AND account_type = 'tricicoin'), 'none');"; }
 PLATW="SELECT balance FROM public.wallet_accounts WHERE user_id = '$PLAT' AND account_type = 'platform_promotions';"
 bonus(){ echo "UPDATE public.acquisition_codes SET driver_bonus_cup = $2 WHERE code = '$1';"; }
@@ -78,8 +87,8 @@ sra(){ echo "SELECT public.set_referral_amounts('$1');"; }
 NEWFNS="SELECT string_agg(proname || '=' || md5(prosrc), ',' ORDER BY proname COLLATE \"C\") FROM pg_proc
         WHERE pronamespace = 'public'::regnamespace
           AND proname IN ('tg_promotions_marketing_guard', 'set_referral_amounts', 'trg_signup_driver_bonus', 'admin_signup_code_stats',
-                          'promotion_is_referenced', 'tg_acquisition_codes_bonus_audit')"
-NEW_MD5="admin_signup_code_stats=c743b9103a7d1eb5b794831072b26b09,promotion_is_referenced=c0a5cd8f27d85b631ca9dde4db26e2ef,set_referral_amounts=cd6a37dea2a53f4674549af28e3c2e9a,tg_acquisition_codes_bonus_audit=c3731384cd8f09884c1be1de4d68a2cc,tg_promotions_marketing_guard=146c9ffc9df39e5f4bbf36b59a17dcb8,trg_signup_driver_bonus=86c7c891b7227fafa5e69ca7f377b8b6"
+                          'promotion_is_referenced', 'tg_acquisition_codes_bonus_audit', 'tg_driver_profiles_first_approval')"
+NEW_MD5="admin_signup_code_stats=c743b9103a7d1eb5b794831072b26b09,promotion_is_referenced=c0a5cd8f27d85b631ca9dde4db26e2ef,set_referral_amounts=cd6a37dea2a53f4674549af28e3c2e9a,tg_acquisition_codes_bonus_audit=c3731384cd8f09884c1be1de4d68a2cc,tg_driver_profiles_first_approval=ac953cb95443b406224b24f94fc7cdef,tg_promotions_marketing_guard=146c9ffc9df39e5f4bbf36b59a17dcb8,trg_signup_driver_bonus=629fcc1b6e7057f83b0f2f2ae95b48c8"
 
 # The md5 and the EXECUTE grants in each header of live-bodies.sql (get_service_role_key's body is the scaffold's stand-in).
 LIVE_NAMES="'_claim_reward','_gift_wallet_type','_platform_config_audit_value','_platform_config_is_telemetry','_reward_claim_status',
@@ -120,17 +129,20 @@ if [ "$MIG" != "none" ]; then
   echo "== apply migration (1st, one transaction, as the owner, search_path = '') =="
   "$BIN/psql" $CONN -d "$DB" -qAt -v ON_ERROR_STOP=1 -1 -c "$AS_OWNER" -f "$MIG" >/dev/null || { echo "migration failed"; exit 1; }
   set_vigo $DB || echo "-- could not set VIGO's driver bonus"   # set between the two runs: the second one must leave it alone
+  # DP3's approval date moves between the runs (C15d): the second run must keep its first approval
+  run $DB "UPDATE public.driver_profiles SET approved_at = now() - interval '10 days' WHERE id = '$DP3';" >/dev/null
   echo "== apply migration (2nd, idempotency, autocommit, as the owner, search_path = '') =="
   "$BIN/psql" $CONN -d "$DB" -qAt -v ON_ERROR_STOP=1 -c "$AS_OWNER" -f "$MIG" >/dev/null 2>&1 || { echo "migration NOT idempotent"; exit 1; }
-  val "S1 one bonus trigger, bonus column and check, guard and audit trigger after two runs; VIGO's amount (audited) survived the second" \
+  val "S1 one bonus trigger, bonus column and check, guard, audit and first-approval trigger after two runs; VIGO's amount (audited) survived the second" \
     "SELECT count(*) FROM pg_trigger WHERE tgname = 'trg_signup_driver_bonus';
      SELECT count(*) FROM information_schema.columns WHERE table_name = 'acquisition_codes' AND column_name = 'driver_bonus_cup';
      SELECT count(*) FROM pg_constraint WHERE conrelid = 'public.acquisition_codes'::regclass AND contype = 'c' AND pg_get_constraintdef(oid) LIKE '%driver_bonus_cup%';
      SELECT count(*) FROM pg_trigger WHERE tgname = 'trg_promotions_marketing_guard';
      SELECT count(*) FROM pg_trigger WHERE tgname = 'trg_acquisition_codes_bonus_audit';
+     SELECT count(*) FROM pg_trigger WHERE tgname = 'trg_driver_profiles_first_approval';
      SELECT driver_bonus_cup FROM public.acquisition_codes WHERE code = 'VIGO';
      SELECT string_agg(admin_id || ':' || target_id || ':' || (old_values->>'driver_bonus_cup') || '>' || (new_values->>'driver_bonus_cup'), ',')
-       FROM public.admin_actions WHERE action = 'update_signup_driver_bonus';" "1;1;1;1;1;1000;$ADMIN:VIGO:0>1000"
+       FROM public.admin_actions WHERE action = 'update_signup_driver_bonus';" "1;1;1;1;1;1;1000;$ADMIN:VIGO:0>1000"
 else
   set_vigo $DB || echo "-- RED: VIGO's driver bonus cannot be set (no column)"
 fi
@@ -357,6 +369,41 @@ val "C14 each change of a code's driver amount is audited with who made it; an u
          SELECT string_agg(admin_id || ':' || target_type || ':' || target_id || ':' || coalesce(old_values::text, 'NULL') || '>' || new_values::text, ',' ORDER BY target_id)
            FROM public.admin_actions WHERE action = 'update_signup_driver_bonus' AND admin_id <> '$ADMIN';")" \
   "$MARK:acquisition_code:NEWC:NULL>{\"driver_bonus_cup\": 300},$MARK:acquisition_code:VIGO:{\"driver_bonus_cup\": 1000}>{\"driver_bonus_cup\": 2500}"
+# The panel rewrites approved_at on every approval (approveDriver). The bonus compares the code's date
+# with the driver's FIRST approval, recorded once by a trigger on driver_profiles.
+val "C15a a driver re-approved today after adding the code yesterday gets nothing; his first approval keeps its date (control: DRV1 is paid)" \
+  "$(tx "$(client $DRV4 "SELECT public.apply_signup_code('vigo');") UPDATE public.users SET signup_code_at = now() - interval '1 day' WHERE id = '$DRV4';
+         $(client $ADMIN "SELECT public.t_try('UPDATE public.driver_profiles SET status = ''under_review'' WHERE id = ''$DP4''');
+         $(approve $DP4)") $(bonus_ride $R1 $DP4 $RIDER) $(wallet $DRV4)
+         SELECT (fa.first_approved_at < now() - interval '29 days') || '|' || (dp.approved_at = now())
+           FROM public.driver_first_approvals fa JOIN public.driver_profiles dp ON dp.id = fa.driver_profile_id WHERE dp.id = '$DP4';
+         $(bonus_ride $R2 $DP1 $RIDER) $(wallet $DRV1)")" \
+  "applied;ok:1;ok:1;none;true|true;1000"
+val "C15b a new driver who applied the code and is then approved for the first time is recorded and paid; a profile inserted already approved is recorded too" \
+  "$(tx "$DRV6_NEW $(client $DRV6 "SELECT public.apply_signup_code('VIGO');")
+         SELECT count(*) FROM public.driver_first_approvals WHERE driver_profile_id = '$DP6';
+         $(client $ADMIN "$(approve $DP6)") $FIRST '$DP6'; $(bonus_ride $R1 $DP6 $RIDER) $(wallet $DRV6)
+         $(del $DRV1) $DRV5_NEW $FIRST '$DP5';")" \
+  "applied;0;ok:1;t;1000;t"
+val "C15c with no first-approval row the approval date decides: an old code pays, a code added after the approval does not" \
+  "$(tx "DELETE FROM public.driver_first_approvals WHERE driver_profile_id IN ('$DP1', '$DP4');
+         $(bonus_ride $R1 $DP1 $RIDER) $(wallet $DRV1)
+         $(client $DRV4 "SELECT public.apply_signup_code('vigo');") $(bonus_ride $R2 $DP4 $RIDER) $(wallet $DRV4)")" \
+  "1000;applied;none"
+val "C15d one first approval per approved profile; DP3's approval date moved between the two runs and its row kept the first one" \
+  "SELECT count(*) FROM public.driver_first_approvals;
+   SELECT (fa.first_approved_at < now() - interval '29 days') || '|' || (dp.approved_at > now() - interval '11 days')
+     FROM public.driver_first_approvals fa JOIN public.driver_profiles dp ON dp.id = fa.driver_profile_id WHERE dp.id = '$DP3';" \
+  "4;true|true"
+# Recording the first approval fails (the table refuses every row): the approval still goes through.
+r=$(run $DB "$(tx "$DRV6_NEW ALTER TABLE public.driver_first_approvals ADD CONSTRAINT t_fail CHECK (false) NOT VALID;
+     $(client $ADMIN "$(approve $DP6)")
+     SELECT 'profile:' || status || '|' || (SELECT count(*) FROM public.driver_first_approvals WHERE driver_profile_id = '$DP6')
+       FROM public.driver_profiles WHERE id = '$DP6';")")
+if echo "$r" | grep -q "first approval of driver profile $DP6 not recorded: 23514" && echo "$r" | grep -q "ok:1" \
+   && [ "${r##*;}" = "profile:approved|0" ]; then
+  ok "C15e a failure to record the first approval never blocks the approval"
+else ko "C15e a failure to record the first approval never blocks the approval" "got [$r]"; fi
 r1=$(run $DB "$(tx "$(bonus_ride $R1 $DP1 $RIDER) $(client $MARK "SELECT code || '|' || driver_bonus_cup || '|' || drivers_bonus_paid || '|' || driver_bonus_paid_cup
        FROM public.admin_signup_code_stats() ORDER BY code COLLATE \"C\";")")")
 r2=$(run $DB "$(tx "$(client $RIDER "SELECT count(*) FROM public.admin_signup_code_stats();")")")
@@ -374,7 +421,7 @@ err "C11b a negative amount is refused" \
   "acquisition_codes_driver_bonus_cup_check"
 val "C12 the fifteen stats columns from before are unchanged, on data where none of them is 0" \
   "$(tx "UPDATE public.users SET signup_code = 'VIGO' WHERE id = '$RIDER';
-         UPDATE public.driver_profiles SET status = 'pending' WHERE id = '$DP2';
+         UPDATE public.driver_profiles SET status = 'under_review' WHERE id = '$DP2';
          UPDATE public.acquisition_codes SET promotion_id = '$P_LIVE' WHERE code = 'VIGO';
          INSERT INTO public.rides (id, customer_id, driver_id, status, promo_code_id) VALUES ('$R1', '$RIDER', '$DP1', 'accepted', '$P_LIVE');
          UPDATE public.rides SET status = 'completed' WHERE id = '$R1';
@@ -394,22 +441,30 @@ if [ "$MIG" != "none" ]; then
     "t;0;false|false|false|true"
   err "G1b ... a signed-in marketing user cannot read it" \
     "$(tx "$(client $MARK "SELECT count(*) FROM public.signup_driver_bonuses;")")" "permission denied for table signup_driver_bonuses"
-  val "G2 EXECUTE: set_referral_amounts, the stats and promotion_is_referenced for authenticated, not anon; the two trigger functions for neither" \
+  val "G1c driver_first_approvals: RLS on, no policies, only the service role reads or writes it" \
+    "SELECT relrowsecurity FROM pg_class WHERE oid = 'public.driver_first_approvals'::regclass;
+     SELECT count(*) FROM pg_policy WHERE polrelid = 'public.driver_first_approvals'::regclass;
+     SELECT has_table_privilege('anon', 'public.driver_first_approvals', 'SELECT') || '|' || has_table_privilege('authenticated', 'public.driver_first_approvals', 'SELECT')
+            || '|' || has_table_privilege('authenticated', 'public.driver_first_approvals', 'INSERT') || '|' || has_table_privilege('service_role', 'public.driver_first_approvals', 'INSERT');" \
+    "t;0;false|false|false|true"
+  val "G2 EXECUTE: set_referral_amounts, the stats and promotion_is_referenced for authenticated, not anon; the three trigger functions for neither" \
     "SELECT has_function_privilege('anon', 'public.set_referral_amounts(jsonb)', 'EXECUTE') || '|' || has_function_privilege('authenticated', 'public.set_referral_amounts(jsonb)', 'EXECUTE')
             || '|' || has_function_privilege('anon', 'public.admin_signup_code_stats()', 'EXECUTE') || '|' || has_function_privilege('authenticated', 'public.admin_signup_code_stats()', 'EXECUTE')
             || '|' || has_function_privilege('service_role', 'public.admin_signup_code_stats()', 'EXECUTE')
             || '|' || has_function_privilege('anon', 'public.trg_signup_driver_bonus()', 'EXECUTE') || '|' || has_function_privilege('authenticated', 'public.trg_signup_driver_bonus()', 'EXECUTE')
             || '|' || has_function_privilege('anon', 'public.tg_acquisition_codes_bonus_audit()', 'EXECUTE') || '|' || has_function_privilege('authenticated', 'public.tg_acquisition_codes_bonus_audit()', 'EXECUTE')
-            || '|' || has_function_privilege('anon', 'public.promotion_is_referenced(uuid)', 'EXECUTE') || '|' || has_function_privilege('authenticated', 'public.promotion_is_referenced(uuid)', 'EXECUTE');" \
-    "false|true|false|true|true|false|false|false|false|false|true"
-  val "G3 the guard is SECURITY INVOKER and the enabled trigger on promotions; the bonus and audit triggers; promotion_is_referenced keeps its definer and path" \
+            || '|' || has_function_privilege('anon', 'public.promotion_is_referenced(uuid)', 'EXECUTE') || '|' || has_function_privilege('authenticated', 'public.promotion_is_referenced(uuid)', 'EXECUTE')
+            || '|' || has_function_privilege('anon', 'public.tg_driver_profiles_first_approval()', 'EXECUTE') || '|' || has_function_privilege('authenticated', 'public.tg_driver_profiles_first_approval()', 'EXECUTE');" \
+    "false|true|false|true|true|false|false|false|false|false|true|false|false"
+  val "G3 the guard is SECURITY INVOKER and the enabled trigger on promotions; the bonus, audit and first-approval triggers; promotion_is_referenced keeps its definer and path" \
     "SELECT prosecdef FROM pg_proc WHERE oid = 'public.tg_promotions_marketing_guard()'::regprocedure;
      SELECT tgenabled FROM pg_trigger WHERE tgname = 'trg_promotions_marketing_guard';
      SELECT pg_get_triggerdef(oid) FROM pg_trigger WHERE tgname = 'trg_signup_driver_bonus';
      SELECT pg_get_triggerdef(oid) FROM pg_trigger WHERE tgname = 'trg_acquisition_codes_bonus_audit';
+     SELECT pg_get_triggerdef(oid) FROM pg_trigger WHERE tgname = 'trg_driver_profiles_first_approval';
      SELECT prosecdef || '|' || array_to_string(proconfig, ',') FROM pg_proc WHERE oid = 'public.promotion_is_referenced(uuid)'::regprocedure;" \
-    "f;O;CREATE TRIGGER trg_signup_driver_bonus AFTER UPDATE OF status ON public.rides FOR EACH ROW WHEN (((new.status = 'completed'::ride_status) AND (old.status IS DISTINCT FROM 'completed'::ride_status))) EXECUTE FUNCTION trg_signup_driver_bonus();CREATE TRIGGER trg_acquisition_codes_bonus_audit AFTER INSERT OR UPDATE OF driver_bonus_cup ON public.acquisition_codes FOR EACH ROW EXECUTE FUNCTION tg_acquisition_codes_bonus_audit();true|search_path=\"\""
-  val "G4 the six bodies after 00666" "$NEWFNS" "$NEW_MD5"
+    "f;O;CREATE TRIGGER trg_signup_driver_bonus AFTER UPDATE OF status ON public.rides FOR EACH ROW WHEN (((new.status = 'completed'::ride_status) AND (old.status IS DISTINCT FROM 'completed'::ride_status))) EXECUTE FUNCTION trg_signup_driver_bonus();CREATE TRIGGER trg_acquisition_codes_bonus_audit AFTER INSERT OR UPDATE OF driver_bonus_cup ON public.acquisition_codes FOR EACH ROW EXECUTE FUNCTION tg_acquisition_codes_bonus_audit();CREATE TRIGGER trg_driver_profiles_first_approval AFTER INSERT OR UPDATE OF status ON public.driver_profiles FOR EACH ROW WHEN ((new.status = 'approved'::driver_status)) EXECUTE FUNCTION tg_driver_profiles_first_approval();true|search_path=\"\""
+  val "G4 the seven bodies after 00666" "$NEWFNS" "$NEW_MD5"
 
   echo "== N. negative proofs: the migration refuses or catches what it must =="
   # a fresh negative-proof database (the proofs are worthless on a half-built one)
@@ -499,6 +554,21 @@ if [ "$MIG" != "none" ]; then
   neg_mutant N14 "an audit trigger function without SECURITY DEFINER aborts it" \
     '/^CREATE OR REPLACE FUNCTION public.tg_acquisition_codes_bonus_audit()$/,/^AS \$function\$$/{/^ SECURITY DEFINER$/d}' \
     "tg_acquisition_codes_bonus_audit() is not SECURITY DEFINER with a fixed search_path"
+  neg_mutant N16 "anon keeping EXECUTE on the first-approval trigger function aborts it" \
+    's/^REVOKE ALL ON FUNCTION public.tg_driver_profiles_first_approval() FROM PUBLIC, anon, authenticated;$/REVOKE ALL ON FUNCTION public.tg_driver_profiles_first_approval() FROM PUBLIC, authenticated;/' \
+    "wrong EXECUTE grants on the new functions"
+  neg_mutant N17 "a first-approval trigger that fires on every status aborts it" \
+    "/^  WHEN (NEW.status = 'approved')$/d" \
+    "trg_driver_profiles_first_approval is not the expected trigger on driver_profiles"
+  neg_mutant N18 "authenticated keeping its default privileges on the first-approval table aborts it" \
+    's/^REVOKE ALL ON public.driver_first_approvals FROM PUBLIC, anon, authenticated;$/REVOKE ALL ON public.driver_first_approvals FROM PUBLIC, anon;/' \
+    "driver_first_approvals is not a service-role-only lock table"
+  neg_mutant N19 "a first-approval trigger function without SECURITY DEFINER aborts it" \
+    '/^CREATE OR REPLACE FUNCTION public.tg_driver_profiles_first_approval()$/,/^AS \$function\$$/{/^ SECURITY DEFINER$/d}' \
+    "tg_driver_profiles_first_approval() is not SECURITY DEFINER with a fixed search_path"
+  neg_mutant N20 "a backfill that leaves an approved profile out aborts it" \
+    "s/^  WHERE dp.approved_at IS NOT NULL$/  WHERE dp.approved_at IS NOT NULL AND dp.id <> '$DP3'/" \
+    "a driver profile with an approval date has no first-approval row"
   # the trigger checks in \$verify\$ pin search_path; applied as through the dashboard or MCP, with
   # public on the path, it must still pass (and leave the session's path as it found it)
   fresh_neg
@@ -512,7 +582,7 @@ if [ "$MIG" != "none" ]; then
   "$BIN/psql" $CONN -d "$DB" -qAt -c "SELECT string_agg(proname || ' ' || md5(prosrc) || '/' || length(prosrc), E'\n' ORDER BY proname COLLATE \"C\") FROM pg_proc
            WHERE pronamespace = 'public'::regnamespace
              AND proname IN ('tg_promotions_marketing_guard', 'set_referral_amounts', 'trg_signup_driver_bonus', 'admin_signup_code_stats',
-                             'promotion_is_referenced', 'tg_acquisition_codes_bonus_audit')" | tr -d '\r'
+                             'promotion_is_referenced', 'tg_acquisition_codes_bonus_audit', 'tg_driver_profiles_first_approval')" | tr -d '\r'
 fi
 
 echo "== result: $PASS passed, $FAIL failed =="
