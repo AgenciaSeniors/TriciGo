@@ -123,7 +123,7 @@ describe('acquisitionCodeService', () => {
       expect(payload).not.toHaveProperty('driver_bonus_cup');
     });
 
-    it.each([-1, 1.5, Number.NaN])('rejects a driver bonus of %s without calling the database', async (driverBonusCup) => {
+    it.each([-1, 1.5, Number.NaN, 2147483648])('rejects a driver bonus of %s without calling the database', async (driverBonusCup) => {
       await expect(
         acquisitionCodeService.create({ code: 'VIGO', label: 'Vigo', channel: 'otro', audience: 'choferes', driverBonusCup }),
       ).rejects.toThrow('El saldo para choferes tiene que ser un número entero, 0 o más.');
@@ -159,7 +159,15 @@ describe('acquisitionCodeService', () => {
       );
     });
 
-    it.each([-1, 1.5])('rejects %s without calling the database', async (amount) => {
+    it('accepts the integer column ceiling', async () => {
+      const { update } = mockUpdateChain({ data: [{ code: 'VIGO' }], error: null });
+
+      await acquisitionCodeService.setDriverBonus('VIGO', 2147483647);
+
+      expect(update).toHaveBeenCalledWith({ driver_bonus_cup: 2147483647 });
+    });
+
+    it.each([-1, 1.5, 2147483648])('rejects %s without calling the database', async (amount) => {
       await expect(acquisitionCodeService.setDriverBonus('VIGO', amount)).rejects.toThrow(
         'El saldo para choferes tiene que ser un número entero, 0 o más.',
       );

@@ -78,9 +78,12 @@ const PROMOTION_GONE = 'La promoción ya no existe. Recarga la página y elige o
 
 const DRIVER_BONUS_INVALID = 'El saldo para choferes tiene que ser un número entero, 0 o más.';
 
+/** The column and the payment trigger use Postgres integer (int4). */
+const INT4_MAX = 2147483647;
+
 function checkDriverBonus(amount: number | undefined): void {
   if (amount === undefined) return;
-  if (!Number.isInteger(amount) || amount < 0) throw new Error(DRIVER_BONUS_INVALID);
+  if (!Number.isInteger(amount) || amount < 0 || amount > INT4_MAX) throw new Error(DRIVER_BONUS_INVALID);
 }
 
 export const acquisitionCodeService = {

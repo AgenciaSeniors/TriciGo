@@ -40,7 +40,10 @@ export type InviteCodeResult =
   | { kind: 'source'; code: string; alreadySet: boolean }
   | { kind: 'referral'; referral: Referral };
 
-/** 00666: the four referral amounts in platform_config, in CUP. */
+/**
+ * 00666: the four referral amounts in platform_config, in CUP. 0 on the two
+ * driver keys means "use the rider amount"; 0 on referral_welcome_bonus_cup means off.
+ */
 export const REFERRAL_AMOUNT_KEYS = [
   'referral_bonus_cup',
   'referral_bonus_driver_cup',
@@ -49,6 +52,21 @@ export const REFERRAL_AMOUNT_KEYS = [
 ] as const;
 export type ReferralAmountKey = (typeof REFERRAL_AMOUNT_KEYS)[number];
 export type ReferralAmounts = Record<ReferralAmountKey, number>;
+
+/**
+ * What the payout triggers use when a key is missing or unreadable
+ * (get_platform_config_numeric's fallback): 500 for referral_bonus_cup, 0 for
+ * the rest.
+ */
+const REFERRAL_AMOUNT_DEFAULTS: ReferralAmounts = {
+  referral_bonus_cup: 500,
+  referral_bonus_driver_cup: 0,
+  referral_welcome_bonus_cup: 0,
+  referral_welcome_bonus_driver_cup: 0,
+};
+
+/** A decimal number as Postgres' numeric input accepts it (no hex, no empty string). */
+const NUMERIC_TEXT = /^\s*[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?\s*$/;
 
 /** The `{error}` codes set_referral_amounts returns (00666), in Spanish. */
 const REFERRAL_AMOUNT_ERRORS: Record<string, string> = {
@@ -62,13 +80,25 @@ function isReferralAmountKey(key: string): key is ReferralAmountKey {
   return (REFERRAL_AMOUNT_KEYS as readonly string[]).includes(key);
 }
 
-/** Builds the four amounts from key/value rows: a missing or non-numeric value is 0. */
+/** A finite JSON number, or a string that parses to one; anything else is null. */
+function readAmount(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string' && NUMERIC_TEXT.test(value)) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+/**
+ * Builds the four amounts from key/value rows. A missing or unreadable value
+ * takes the server's fallback, so the panel shows what a payout would use.
+ */
 function toAmounts(rows: { key: string; value: unknown }[]): ReferralAmounts {
-  const out = Object.fromEntries(REFERRAL_AMOUNT_KEYS.map((k) => [k, 0])) as ReferralAmounts;
+  const out: ReferralAmounts = { ...REFERRAL_AMOUNT_DEFAULTS };
   for (const row of rows) {
     if (isReferralAmountKey(row.key)) {
-      const n = Number(row.value);
-      out[row.key] = Number.isFinite(n) ? n : 0;
+      out[row.key] = readAmount(row.value) ?? REFERRAL_AMOUNT_DEFAULTS[row.key];
     }
   }
   return out;
@@ -223,21 +253,36 @@ export const referralService = {
     const { data, error } = await supabase.rpc('set_referral_amounts', { p_amounts: changes });
     if (error) {
       if (isMissingFunctionError(error)) {
-        throw new AppError('Esta función todavía no está disponible.', 'REFERRAL_AMOUNTS_UNAVAILABLE', 400);
+        // Same text as the panel's other RPCs (adminRpcError in admin.service).
+        throw new AppError(
+          'La base de datos todavía no tiene esta función. Avisa al equipo técnico.',
+          'REFERRAL_AMOUNTS_UNAVAILABLE',
+          400,
+        );
       }
       throw error;
     }
-    const result = (data ?? {}) as { success?: boolean; error?: string; key?: string; amounts?: Record<string, unknown> };
+    const result = (data ?? {}) as { success?: unknown; error?: unknown; key?: unknown; amounts?: unknown };
     if (result.error || !result.success) {
-      const code = result.error ?? '';
+      // Own keys only, so 'constructor' and the like get the generic text.
+      // (Object.hasOwn is ES2022; the mobile apps compile this file with ES2021.)
+      const code = typeof result.error === 'string' && Object.prototype.hasOwnProperty.call(REFERRAL_AMOUNT_ERRORS, result.error)
+        ? result.error
+        : null;
+      const message = code ? REFERRAL_AMOUNT_ERRORS[code] : undefined;
       throw new AppError(
-        REFERRAL_AMOUNT_ERRORS[code] ?? 'No se pudieron guardar los montos.',
+        message ?? 'No se pudieron guardar los montos.',
         code ? `REFERRAL_AMOUNTS_${code.toUpperCase()}` : 'REFERRAL_AMOUNTS_FAILED',
         400,
-        result.key ? { key: result.key } : undefined,
+        typeof result.key === 'string' ? { key: result.key } : undefined,
       );
     }
-    return toAmounts(Object.entries(result.amounts ?? {}).map(([key, value]) => ({ key, value })));
+    const { amounts } = result;
+    if (!amounts || typeof amounts !== 'object' || Array.isArray(amounts)) {
+      // Saved, but the reply has no amounts to show: read them again.
+      return referralService.getReferralAmounts();
+    }
+    return toAmounts(Object.entries(amounts).map(([key, value]) => ({ key, value })));
   },
 
   /**

@@ -37,19 +37,50 @@ describe('referralService.getReferralAmounts', () => {
     });
   });
 
-  it('reads a value stored as a JSON string and turns a non-number into 0', async () => {
+  it('defaults a missing referral_bonus_cup to 500, like the payout triggers', async () => {
+    mockFrom.mockReturnValue(selectChain([]));
+    const amounts = await referralService.getReferralAmounts();
+    expect(amounts).toEqual({
+      referral_bonus_cup: 500,
+      referral_bonus_driver_cup: 0,
+      referral_welcome_bonus_cup: 0,
+      referral_welcome_bonus_driver_cup: 0,
+    });
+  });
+
+  it('reads a value stored as a JSON string, and ignores keys it does not know', async () => {
     mockFrom.mockReturnValue(selectChain([
       { key: 'referral_bonus_cup', value: '750' },
-      { key: 'referral_bonus_driver_cup', value: 'abc' },
+      { key: 'referral_bonus_driver_cup', value: ' 1200 ' },
       { key: 'some_other_key', value: 99 },
     ]));
     const amounts = await referralService.getReferralAmounts();
     expect(amounts).toEqual({
       referral_bonus_cup: 750,
-      referral_bonus_driver_cup: 0,
+      referral_bonus_driver_cup: 1200,
       referral_welcome_bonus_cup: 0,
       referral_welcome_bonus_driver_cup: 0,
     });
+  });
+
+  it.each([
+    ['true', true],
+    ['an array', [5]],
+    ['an object', { amount: 5 }],
+    ['null', null],
+    ['a non-numeric string', 'abc'],
+    ['an empty string', ''],
+    ['a hex string', '0x10'],
+    ['NaN', Number.NaN],
+    ['Infinity', Number.POSITIVE_INFINITY],
+  ])('takes the default for %s, as the server does', async (_label, value) => {
+    mockFrom.mockReturnValue(selectChain([
+      { key: 'referral_bonus_cup', value },
+      { key: 'referral_welcome_bonus_cup', value },
+    ]));
+    const amounts = await referralService.getReferralAmounts();
+    expect(amounts.referral_bonus_cup).toBe(500);
+    expect(amounts.referral_welcome_bonus_cup).toBe(0);
   });
 
   it('throws the query error', async () => {
@@ -97,16 +128,56 @@ describe('referralService.setReferralAmounts', () => {
     });
   });
 
-  it('falls back to a generic message for an unknown refusal or no success flag', async () => {
-    mockRpc.mockResolvedValue({ data: { error: 'something_new' }, error: null });
-    await expect(referralService.setReferralAmounts({ referral_bonus_cup: 1 })).rejects.toThrow('No se pudieron guardar los montos.');
-    mockRpc.mockResolvedValue({ data: null, error: null });
-    await expect(referralService.setReferralAmounts({ referral_bonus_cup: 1 })).rejects.toThrow('No se pudieron guardar los montos.');
+  it.each([
+    ['an unknown refusal', { error: 'something_new' }],
+    ['an inherited property name', { error: 'constructor' }],
+    ['a non-string error', { error: 42 }],
+    ['no success flag', {}],
+    ['no data', null],
+  ])('falls back to a generic message for %s', async (_label, data) => {
+    mockRpc.mockResolvedValue({ data, error: null });
+    const err = await referralService.setReferralAmounts({ referral_bonus_cup: 1 }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AppError);
+    expect(err).toMatchObject({
+      message: 'No se pudieron guardar los montos.',
+      code: 'REFERRAL_AMOUNTS_FAILED',
+      statusCode: 400,
+    });
   });
 
-  it('says the feature is not available yet when the RPC is missing', async () => {
-    mockRpc.mockResolvedValue({ data: null, error: { code: 'PGRST202', message: 'not found' } });
-    await expect(referralService.setReferralAmounts({ referral_bonus_cup: 1 })).rejects.toThrow('Esta función todavía no está disponible.');
+  it.each([
+    ['undefined', undefined],
+    ['null', null],
+    ['an array', [500]],
+    ['a string', 'ok'],
+  ])('re-reads the amounts when the saved ones come back as %s', async (_label, amounts) => {
+    mockRpc.mockResolvedValue({ data: { success: true, amounts }, error: null });
+    mockFrom.mockReturnValue(selectChain([
+      { key: 'referral_bonus_cup', value: 700 },
+      { key: 'referral_bonus_driver_cup', value: 1000 },
+    ]));
+    const saved = await referralService.setReferralAmounts({ referral_bonus_cup: 700 });
+    expect(mockFrom).toHaveBeenCalledWith('platform_config');
+    expect(saved).toEqual({
+      referral_bonus_cup: 700,
+      referral_bonus_driver_cup: 1000,
+      referral_welcome_bonus_cup: 0,
+      referral_welcome_bonus_driver_cup: 0,
+    });
+  });
+
+  it.each([
+    ['PGRST202', { code: 'PGRST202', message: 'not found' }],
+    ['the schema-cache message', { code: 'XX000', message: 'Could not find the function public.set_referral_amounts(p_amounts) in the schema cache' }],
+  ])('says the database does not have the function yet (%s)', async (_label, dbError) => {
+    mockRpc.mockResolvedValue({ data: null, error: dbError });
+    const err = await referralService.setReferralAmounts({ referral_bonus_cup: 1 }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AppError);
+    expect(err).toMatchObject({
+      message: 'La base de datos todavía no tiene esta función. Avisa al equipo técnico.',
+      code: 'REFERRAL_AMOUNTS_UNAVAILABLE',
+      statusCode: 400,
+    });
   });
 
   it('rethrows any other database error as it came', async () => {
