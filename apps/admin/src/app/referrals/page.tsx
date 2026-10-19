@@ -13,6 +13,7 @@ import { DataTable, type DataColumn, type SortState } from '@/components/data/Da
 import { FilterBar, type StatusTab } from '@/components/data/FilterBar';
 import { StatusBadge } from '@/components/data/StatusBadge';
 import { KpiCard } from '@/components/dashboard/KpiCard';
+import { ReferralAmountsCard } from '@/components/referrals/ReferralAmountsCard';
 import { formatAdminDate } from '@/lib/formatDate';
 import { usePanelRole } from '@/lib/panelRole';
 
@@ -23,6 +24,7 @@ type Filter = 'all' | ReferralStatus;
 export default function ReferralsPage() {
   const { t } = useTranslation('admin');
   // 00642: marketing reads referrals; rewarding or invalidating one moves money, so it stays with admins.
+  // 00666: admins and marketing both edit the four referral amounts (the "Montos" card).
   const { role } = usePanelRole();
   const isMarketing = menuRole(role) === 'marketing';
 
@@ -198,6 +200,8 @@ export default function ReferralsPage() {
           <span className="font-semibold text-ink">{conversionRate}%</span>.
         </p>
       </div>
+
+      <ReferralAmountsCard />
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <KpiCard label={t('referrals.kpi_total', { defaultValue: 'Total' })} value={String(stats.total)} loading={loading} />
