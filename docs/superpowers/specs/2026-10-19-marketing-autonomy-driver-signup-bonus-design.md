@@ -1,6 +1,6 @@
 # Marketing runs promotions and referral amounts, and a signup code can pay new drivers
 
-Date: 2026-10-19. Status: approved by the owner; migration 00666 not written yet.
+Date: 2026-10-19. Status: approved by the owner; migration 00666 written and rehearsed, not applied. The review round 1 changes are folded in below.
 
 ## Problem
 
@@ -12,7 +12,7 @@ The marketing agency creates signup codes for influencers (VIGO) and asked three
 
 ## Decisions (owner, 2026-10-19)
 
-- **Promotions:** marketing does everything an admin does, with no approval: create a promotion already active, activate, pause, edit while active, send "Notificar ahora". A promotion that was used (rides, uses, campaigns or codes point at it, or `current_uses > 0`) can only be paused, never deleted, so the history of which discount each ride had stays. Admins are not changed.
+- **Promotions:** marketing does everything an admin does, with no approval: create a promotion already active, activate, pause, edit while active, send "Notificar ahora". A promotion that was used (rides, uses, campaigns or codes point at it, or `current_uses > 0`) can only be paused, never deleted (00666 adds signup codes to `promotion_is_referenced`, which only looked at rides, uses and campaigns), so the history of which discount each ride had stays. Admins are not changed.
 - **Referral amounts:** marketing edits the four amounts from the Referidos page. Every change is audited with who made it. Regular admins can also edit them there.
 - **Driver balance:** each signup code gets an amount in CUP, 0 = off. A driver registered with the code gets that amount in their wallet when they complete their first ride.
 - **No cap** on any amount (owner: "sin tope"). Amounts are integers ≥ 0.
@@ -63,7 +63,7 @@ New table `signup_driver_bonuses` (one row per paid bonus): `user_id uuid PRIMAR
 
 **Payment.** New trigger function `trg_signup_driver_bonus()` (SECURITY DEFINER, `search_path = public, pg_catalog`), trigger `trg_signup_driver_bonus` AFTER UPDATE OF status ON `rides`, `WHEN (NEW.status = 'completed' AND OLD.status IS DISTINCT FROM 'completed')`. It does nothing unless all of these hold:
 
-1. `NEW.driver_id` is set; the driver's user has a `signup_code` whose `driver_bonus_cup > 0`.
+1. `NEW.driver_id` is set; the driver's user has a `signup_code` whose `driver_bonus_cup > 0`, and the code was applied **before the driver's approval** (`users.signup_code_at <= driver_profiles.approved_at`). Review round 1: `apply_signup_code` lets anyone without a code set one at any time, and on 2026-10-19 157 of the 167 approved drivers had never driven for anyone, so without this rule any of them could type an influencer's code and be paid for a signup the influencer did not bring.
 2. `NEW.customer_id` is set and is not the driver's own user.
 3. This is the driver's first qualifying ride: count of completed rides with that `driver_id`, a customer, and customer ≠ the driver's user, equals 1 (this one included; the trigger runs after the update). Same rule as the driver referral path.
 4. No row in `signup_driver_bonuses` for that user (and the idempotency key below is free).
@@ -73,11 +73,15 @@ Then, inside a block that never rolls back the ride (`EXCEPTION WHEN OTHERS THEN
 
 - Credit `driver_bonus_cup` (read now, at payment time) from `platform_promotions` (user `…0001`) to the driver's `tricicoin` wallet: `ledger_transactions` type `promo_credit`, idempotency key `signup_driver_bonus:<user_id>`, `reference_type 'signup_driver_bonus'` and `reference_id` the ride, description `Bono de bienvenida - código <CODE>`, two `ledger_entries`, two balance updates. Same shape as the driver referral credit.
 - Insert the `signup_driver_bonuses` row.
-- Push to the driver through `cron_http_post('signup-driver-bonus', …send-push…)`, category `system`, title "Recibiste un bono de bienvenida", body "Te acreditamos <N> CUP en tu billetera por tu primer viaje.", data `{event: 'signup_driver_bonus'}`. A failed push is logged and does not undo the credit (its own inner block).
+- Push to the driver through `cron_http_post('signup-driver-bonus', …send-push…)`, category `system`, title "Recibiste un bono de bienvenida", body "Te acreditamos <N> CUP en tu billetera por tu primer viaje.", data `{event: 'signup_driver_bonus', amount_cup}` (no `ride_id`: the driver inbox opens `/trip/<ride_id>` when the data has one). A failed push is logged and does not undo the credit (its own inner block).
+
+A failed payment leaves a WARNING and an `rpc_attempt_log` row (`rpc_name = 'trg_signup_driver_bonus'`, `outcome = 'payment_failed'`, with SQLSTATE, error, code and amount). It is not retried: the next ride is no longer the first.
+
+Every change of `driver_bonus_cup` (and a new code born with an amount) writes an `admin_actions` row `update_signup_driver_bonus` with the old and new amount and who made it (`tg_acquisition_codes_bonus_audit`).
 
 It does not depend on `referral_program_enabled`: the code's amount is the switch. A driver can get both this bonus and a referral welcome bonus (different claims).
 
-**Stats.** `admin_signup_code_stats()` gains `driver_bonus_cup integer`, `drivers_bonus_paid bigint` and `driver_bonus_paid_cup bigint` (count and sum from `signup_driver_bonuses` for the code). Adding columns changes the return type, so DROP + CREATE with the same grants (EXECUTE for `authenticated` and `service_role`, the body refuses non admin/marketing). Refuse to run unless the live body has md5 `22b65e28…`.
+**Stats.** `admin_signup_code_stats()` gains `driver_bonus_cup integer`, `drivers_bonus_paid bigint` and `driver_bonus_paid_cup bigint` (count and sum from `signup_driver_bonuses` for the code). Adding columns changes the return type, so DROP + CREATE with the same grants (EXECUTE for `authenticated` and `service_role`, the body refuses non admin/marketing). Refuse to run unless the live body has md5 `22b65e28…` or this migration's own (a re-run).
 
 **Panel** (`/code-performance`, "Códigos de origen"): the create form gets "Saldo para choferes (CUP)" (integer, default 0). Each row shows the amount with an input and "Guardar" (same save-with-a-button pattern as the promotion selector), plus "Bonos pagados: N · X CUP". CSV export gets the three columns. Service: `acquisitionCodeService.create` accepts `driver_bonus_cup`; new `setDriverBonus(code, amount)` that throws if RLS changed 0 rows; stats type gets the three fields.
 
