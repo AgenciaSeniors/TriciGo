@@ -944,14 +944,8 @@
     "error_deleting": "Error deleting",
     "status_pending": "Awaiting approval",
     "action_approve": "Approve and activate",
-    "action_pause": "Pause",
     "pending_strip": "Promotions awaiting approval: {{count}}",
     "pending_dot": "Some promotions are awaiting approval",
-    "marketing_review_note": "It is saved switched off. An administrator reviews and activates it.",
-    "toast_sent_for_approval": "Saved. An administrator reviews and activates it.",
-    "marketing_edit_active": "Pause the promotion to edit it.",
-    "already_paused": "This promotion is already paused.",
-    "marketing_notify_inactive": "You can only announce an active promotion.",
     "changed_since_loaded": "The promotion changed while you were reviewing it. Check the new version before activating it."
   },
   "service_types": {
