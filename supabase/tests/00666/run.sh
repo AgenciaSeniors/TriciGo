@@ -67,7 +67,7 @@ del(){ echo "UPDATE public.ledger_transactions SET created_by = '$ANON' WHERE cr
 DRV5_NEW="INSERT INTO auth.users (id, phone, phone_confirmed_at) VALUES ('$DRV5', '5355500011', now());
   INSERT INTO public.users (id, role, full_name, phone, signup_code, signup_code_at) VALUES ('$DRV5', 'driver', 'Driver Five', '+5355500011', 'VIGO', now() - interval '2 days');
   INSERT INTO public.driver_profiles (id, user_id, status, approved_at) VALUES ('$DP5', '$DRV5', 'approved', now() - interval '1 day');"
-# drv6: a new driver registers (own phone, no code yet); his profile waits for review
+# drv6: a new driver registers (own phone, no code yet); the profile waits for review
 DRV6_NEW="INSERT INTO auth.users (id, phone, phone_confirmed_at) VALUES ('$DRV6', '5355500016', now());
   INSERT INTO public.users (id, role, full_name, phone) VALUES ('$DRV6', 'driver', 'Driver Six', '+5355500016');
   INSERT INTO public.driver_profiles (id, user_id) VALUES ('$DP6', '$DRV6');"
@@ -88,7 +88,7 @@ NEWFNS="SELECT string_agg(proname || '=' || md5(prosrc), ',' ORDER BY proname CO
         WHERE pronamespace = 'public'::regnamespace
           AND proname IN ('tg_promotions_marketing_guard', 'set_referral_amounts', 'trg_signup_driver_bonus', 'admin_signup_code_stats',
                           'promotion_is_referenced', 'tg_acquisition_codes_bonus_audit', 'tg_driver_profiles_first_approval')"
-NEW_MD5="admin_signup_code_stats=c743b9103a7d1eb5b794831072b26b09,promotion_is_referenced=c0a5cd8f27d85b631ca9dde4db26e2ef,set_referral_amounts=cd6a37dea2a53f4674549af28e3c2e9a,tg_acquisition_codes_bonus_audit=c3731384cd8f09884c1be1de4d68a2cc,tg_driver_profiles_first_approval=ac953cb95443b406224b24f94fc7cdef,tg_promotions_marketing_guard=146c9ffc9df39e5f4bbf36b59a17dcb8,trg_signup_driver_bonus=629fcc1b6e7057f83b0f2f2ae95b48c8"
+NEW_MD5="admin_signup_code_stats=c743b9103a7d1eb5b794831072b26b09,promotion_is_referenced=c0a5cd8f27d85b631ca9dde4db26e2ef,set_referral_amounts=cd6a37dea2a53f4674549af28e3c2e9a,tg_acquisition_codes_bonus_audit=c3731384cd8f09884c1be1de4d68a2cc,tg_driver_profiles_first_approval=ac953cb95443b406224b24f94fc7cdef,tg_promotions_marketing_guard=146c9ffc9df39e5f4bbf36b59a17dcb8,trg_signup_driver_bonus=b2f060309058f1cd4a321a08e7acedfc"
 
 # The md5 and the EXECUTE grants in each header of live-bodies.sql (get_service_role_key's body is the scaffold's stand-in).
 LIVE_NAMES="'_claim_reward','_gift_wallet_type','_platform_config_audit_value','_platform_config_is_telemetry','_reward_claim_status',
@@ -283,13 +283,13 @@ val "C2b only the first ride counts: an amount set after it pays nothing later (
          $(bonus VIGO 1000) $(bonus_ride $R2 $DP1 $RIDER) $(wallet $DRV1)
          $(bonus ZERO 1000) $(bonus_ride $R3 $DP3 $RIDER) $(wallet $DRV3)")" \
   "none;none;1000"
-val "C3 a ride the driver requested himself does not count; his first ride for another person pays" \
+val "C3 a ride the driver requested for themselves does not count; their first ride for another person pays" \
   "$(tx "$(bonus_ride $R3 $DP1 $DRV1) $(wallet $DRV1) $(bonus_ride $R1 $DP1 $RIDER) $(wallet $DRV1)
          SELECT ride_id FROM public.signup_driver_bonuses;")" \
   "none;1000;$R1"
 # the qualifying count alone would let this one through: one earlier ride for another person (that paid
-# nothing: the code had no amount yet), and now a ride the driver requested himself
-val "C3b a ride the driver requested himself never pays, even as the second one (control: another code's driver is paid)" \
+# nothing: the code had no amount yet), and now a ride the driver requested for themselves
+val "C3b a ride the driver requested for themselves never pays, even as the second one (control: another code's driver is paid)" \
   "$(tx "$(bonus VIGO 0) $(bonus_ride $R1 $DP1 $RIDER) $(bonus VIGO 1000) $(bonus_ride $R3 $DP1 $DRV1) $(wallet $DRV1)
          $(bonus ZERO 1000) $(bonus_ride $R2 $DP3 $RIDER) $(wallet $DRV3)")" \
   "none;1000"
@@ -344,7 +344,7 @@ val "C9 completing the same ride again (disputed -> completed) does not pay agai
          UPDATE public.rides SET status = 'completed' WHERE id = '$R1'; $(wallet $DRV1)
          SELECT count(*) FROM public.ledger_transactions; SELECT count(*) FROM net.http_request_queue;")" \
   "1000;1;1"
-val "C13a a driver who applies the code after his approval gets nothing (control: DRV1, code at signup, is paid)" \
+val "C13a a driver who applies the code after their approval gets nothing (control: DRV1, code at signup, is paid)" \
   "$(tx "$(client $DRV4 "SELECT public.apply_signup_code('vigo');") $(bonus_ride $R1 $DP4 $RIDER) $(wallet $DRV4)
          $(bonus_ride $R2 $DP1 $RIDER) $(wallet $DRV1)")" \
   "applied;none;1000"
@@ -371,7 +371,7 @@ val "C14 each change of a code's driver amount is audited with who made it; an u
   "$MARK:acquisition_code:NEWC:NULL>{\"driver_bonus_cup\": 300},$MARK:acquisition_code:VIGO:{\"driver_bonus_cup\": 1000}>{\"driver_bonus_cup\": 2500}"
 # The panel rewrites approved_at on every approval (approveDriver). The bonus compares the code's date
 # with the driver's FIRST approval, recorded once by a trigger on driver_profiles.
-val "C15a a driver re-approved today after adding the code yesterday gets nothing; his first approval keeps its date (control: DRV1 is paid)" \
+val "C15a a driver re-approved today after adding the code yesterday gets nothing; their first approval keeps its date (control: DRV1 is paid)" \
   "$(tx "$(client $DRV4 "SELECT public.apply_signup_code('vigo');") UPDATE public.users SET signup_code_at = now() - interval '1 day' WHERE id = '$DRV4';
          $(client $ADMIN "SELECT public.t_try('UPDATE public.driver_profiles SET status = ''under_review'' WHERE id = ''$DP4''');
          $(approve $DP4)") $(bonus_ride $R1 $DP4 $RIDER) $(wallet $DRV4)
@@ -497,7 +497,7 @@ if [ "$MIG" != "none" ]; then
       && ok "N2 a stats body it does not know aborts it" || ko "N2 a stats body it does not know aborts it" "got [$r]"
   fi
   neg_mutant N3 "an edited bonus trigger body aborts it" \
-    's/-- No code, a code that pays nothing, or a ride the driver requested himself\./-- No code, a code that pays nothing, or a ride the driver asked for himself./' \
+    's/-- No code, a code that pays nothing, or a ride the driver requested for themselves\./-- No code, a code that pays nothing, or a ride the driver asked for themselves./' \
     "trg_signup_driver_bonus has an unexpected body"
   fresh_neg
   CRLF="$(mktemp)"; sed 's/$/\r/' "$MIG" > "$CRLF"

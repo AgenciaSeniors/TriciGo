@@ -12,7 +12,7 @@
 --    amounts in platform_config (integers >= 0). tg_platform_config_audit logs
 --    each change with the caller's id.
 -- C. acquisition_codes.driver_bonus_cup: a driver registered with the code (applied
---    at or before his first approval) gets that many CUP in the tricicoin wallet on
+--    at or before the driver's first approval) gets that many CUP in the tricicoin wallet on
 --    the first completed ride for another person, once per confirmed phone (claim
 --    'signup_driver_bonus'). Paid from platform_promotions by trg_signup_driver_bonus,
 --    in a block that never rolls back the ride; a failed payment is logged in
@@ -212,7 +212,7 @@ GRANT EXECUTE ON FUNCTION public.set_referral_amounts(jsonb) TO authenticated, s
 ALTER TABLE public.acquisition_codes
   ADD COLUMN IF NOT EXISTS driver_bonus_cup integer NOT NULL DEFAULT 0 CHECK (driver_bonus_cup >= 0);
 COMMENT ON COLUMN public.acquisition_codes.driver_bonus_cup IS
-  '00666: CUP credited to the tricicoin wallet of a driver registered with this code (applied at or before his first approval), on the first completed ride for another person, once per confirmed phone. 0 = off.';
+  '00666: CUP credited to the tricicoin wallet of a driver registered with this code (applied at or before the first approval), on the first completed ride for another person, once per confirmed phone. 0 = off.';
 
 -- Every change of a code's amount is money policy: audited with who made it, like platform_config.
 CREATE OR REPLACE FUNCTION public.tg_acquisition_codes_bonus_audit()
@@ -296,7 +296,7 @@ BEGIN
   LEFT JOIN public.driver_first_approvals fa ON fa.driver_profile_id = dp.id
   WHERE dp.id = NEW.driver_id;
 
-  -- No code, a code that pays nothing, or a ride the driver requested himself.
+  -- No code, a code that pays nothing, or a ride the driver requested for themselves.
   IF v_driver_user IS NULL OR COALESCE(v_amount, 0) <= 0 OR NEW.customer_id = v_driver_user THEN
     RETURN NEW;
   END IF;
@@ -398,7 +398,7 @@ CREATE OR REPLACE TRIGGER trg_signup_driver_bonus
 
 -- The driver's first approval, kept apart from driver_profiles.approved_at: the panel rewrites
 -- approved_at on every approval (approveDriver), so a driver back from review (after a vehicle
--- change, 00650) would look approved today, after a code he added later. trg_signup_driver_bonus
+-- change, 00650) would look approved today, after a code added later. trg_signup_driver_bonus
 -- compares the code's date with the earlier of the two. A lock table: no policies; only SECURITY
 -- DEFINER functions read or write it.
 CREATE TABLE IF NOT EXISTS public.driver_first_approvals (
@@ -530,7 +530,7 @@ BEGIN
     RAISE EXCEPTION '00666 check: tg_promotions_marketing_guard has an unexpected body';
   END IF;
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.trg_signup_driver_bonus()'::regprocedure)
-     IS DISTINCT FROM '629fcc1b6e7057f83b0f2f2ae95b48c8' THEN
+     IS DISTINCT FROM 'b2f060309058f1cd4a321a08e7acedfc' THEN
     RAISE EXCEPTION '00666 check: trg_signup_driver_bonus has an unexpected body';
   END IF;
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.promotion_is_referenced(uuid)'::regprocedure)

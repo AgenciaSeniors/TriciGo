@@ -98,7 +98,7 @@ Rehearsal `supabase/tests/00666/run.sh` (local Postgres 16, the 00665 harness st
 
 - A: marketing inserts an active promotion (stays active, stamped with marketing's id, not pending); edits a live one (allowed, revision +1); activates a paused one (stamped); cannot change `current_uses`/`created_by`/approval stamps; delete of a used one still refused, of an unused paused one allowed; admin behaviour unchanged; a rider is still refused by RLS.
 - B: marketing and admin save amounts; rider and anon refused; unknown key, negative, decimal and string refused with nothing written; one `admin_actions` row per changed key naming the caller; unchanged keys write no audit row.
-- C: driver registered with a code with 1000 → paid once on the first qualifying ride (ledger, wallet, table row, push queued); a second ride pays nothing; a ride the driver requested himself does not count; amount 0 → nothing; no confirmed phone → nothing; a phone already paid (new account) → nothing; a failing payment does not block the completion; stats show the counts.
+- C: driver registered with a code with 1000 → paid once on the first qualifying ride (ledger, wallet, table row, push queued); a second ride pays nothing; a ride the driver requested for themselves does not count; amount 0 → nothing; no confirmed phone → nothing; a phone already paid (new account) → nothing; a failing payment does not block the completion; stats show the counts.
 - Migration applied twice (idempotent), from a CRLF copy, with negative proofs of its self-checks.
 
 Services: unit tests for `setReferralAmounts`, `getReferralAmounts`, `setDriverBonus`, and the new stats fields.

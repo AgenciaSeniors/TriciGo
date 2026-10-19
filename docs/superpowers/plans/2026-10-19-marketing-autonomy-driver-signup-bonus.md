@@ -150,7 +150,7 @@
   **C — signup driver bonus** (set `UPDATE acquisition_codes SET driver_bonus_cup = 1000 WHERE code = 'VIGO'` as admin first)
   - C1 `bonus_ride R1 DP1 RIDER` → `DRV1` tricicoin balance 1000, `platform_promotions` balance −1000, one `ledger_transactions` row `signup_driver_bonus:<DRV1>` type `promo_credit` status `posted` reference `signup_driver_bonus`/R1 description `Bono de bienvenida - código VIGO`, two `ledger_entries` (−1000, +1000), one `signup_driver_bonuses` row (DRV1, VIGO, 1000, R1), one `reward_claims` row with claim `signup_driver_bonus`, one `net.http_request_queue` row whose body has `title` `Recibiste un bono de bienvenida` and `category` `system`, and one `cron_http_calls` row with jobname `signup-driver-bonus`.
   - C2 after C1, `bonus_ride R2 DP1 RIDER` → still 1000, still one ledger transaction.
-  - C3 a ride the driver requested himself first (`bonus_ride R3 DP1 DRV1`) pays nothing, and then a ride for RIDER pays 1000 (it is the first for another person).
+  - C3 a ride the driver requested for themselves first (`bonus_ride R3 DP1 DRV1`) pays nothing, and then a ride for RIDER pays 1000 (it is the first for another person).
   - C4 `DRV3` (code `ZERO`, amount 0) → nothing.
   - C5 `DRV2` (no confirmed phone) → nothing, no claim row, no table row.
   - C6 in the same transaction after C1's payment: insert `DRV5` (a new account with DRV1's phone 5355500011, code VIGO, profile DP5) and complete its first ride for RIDER → nothing paid (the phone already has the claim).
