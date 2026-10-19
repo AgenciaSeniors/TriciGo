@@ -61,10 +61,10 @@ bonus_ride(){ echo "SET LOCAL request.jwt.claim.sub = '$(user_of "$2")';
 # del USER: what deleting the account does (00657): references moved to the placeholder, then the auth
 # user deleted (its users row and driver profile go with it). The phone's claim stays (00658).
 del(){ echo "UPDATE public.ledger_transactions SET created_by = '$ANON' WHERE created_by = '$1'; DELETE FROM auth.users WHERE id = '$1';"; }
-# drv5: a new driver account confirms DRV1's phone and registers with VIGO
+# drv5: a new driver account confirms DRV1's phone and registers with VIGO, then is approved
 DRV5_NEW="INSERT INTO auth.users (id, phone, phone_confirmed_at) VALUES ('$DRV5', '5355500011', now());
-  INSERT INTO public.users (id, role, full_name, phone, signup_code, signup_code_at) VALUES ('$DRV5', 'driver', 'Driver Five', '+5355500011', 'VIGO', now());
-  INSERT INTO public.driver_profiles (id, user_id) VALUES ('$DP5', '$DRV5');"
+  INSERT INTO public.users (id, role, full_name, phone, signup_code, signup_code_at) VALUES ('$DRV5', 'driver', 'Driver Five', '+5355500011', 'VIGO', now() - interval '2 days');
+  INSERT INTO public.driver_profiles (id, user_id, approved_at) VALUES ('$DP5', '$DRV5', now() - interval '1 day');"
 wallet(){ echo "SELECT coalesce((SELECT balance::text FROM public.wallet_accounts WHERE user_id = '$1' AND account_type = 'tricicoin'), 'none');"; }
 PLATW="SELECT balance FROM public.wallet_accounts WHERE user_id = '$PLAT' AND account_type = 'platform_promotions';"
 bonus(){ echo "UPDATE public.acquisition_codes SET driver_bonus_cup = $2 WHERE code = '$1';"; }
@@ -77,18 +77,19 @@ AUDIT="SELECT count(*) FROM public.admin_actions WHERE action = 'update_platform
 sra(){ echo "SELECT public.set_referral_amounts('$1');"; }
 NEWFNS="SELECT string_agg(proname || '=' || md5(prosrc), ',' ORDER BY proname COLLATE \"C\") FROM pg_proc
         WHERE pronamespace = 'public'::regnamespace
-          AND proname IN ('tg_promotions_marketing_guard', 'set_referral_amounts', 'trg_signup_driver_bonus', 'admin_signup_code_stats')"
-NEW_MD5="admin_signup_code_stats=c743b9103a7d1eb5b794831072b26b09,set_referral_amounts=cd6a37dea2a53f4674549af28e3c2e9a,tg_promotions_marketing_guard=146c9ffc9df39e5f4bbf36b59a17dcb8,trg_signup_driver_bonus=b8cb2c4cebc62b45ee5cae55d4ce1bff"
+          AND proname IN ('tg_promotions_marketing_guard', 'set_referral_amounts', 'trg_signup_driver_bonus', 'admin_signup_code_stats',
+                          'promotion_is_referenced', 'tg_acquisition_codes_bonus_audit')"
+NEW_MD5="admin_signup_code_stats=c743b9103a7d1eb5b794831072b26b09,promotion_is_referenced=c0a5cd8f27d85b631ca9dde4db26e2ef,set_referral_amounts=cd6a37dea2a53f4674549af28e3c2e9a,tg_acquisition_codes_bonus_audit=c3731384cd8f09884c1be1de4d68a2cc,tg_promotions_marketing_guard=146c9ffc9df39e5f4bbf36b59a17dcb8,trg_signup_driver_bonus=86c7c891b7227fafa5e69ca7f377b8b6"
 
 # The md5 and the EXECUTE grants in each header of live-bodies.sql (get_service_role_key's body is the scaffold's stand-in).
 LIVE_NAMES="'_claim_reward','_gift_wallet_type','_platform_config_audit_value','_platform_config_is_telemetry','_reward_claim_status',
   '_reward_identity_hash','admin_signup_code_stats','apply_signup_code','cron_http_post','cup_to_trc_centavos','current_user_role',
   'ensure_wallet_account','get_current_exchange_rate','get_platform_config_numeric','get_service_role_key','is_admin','is_marketing',
-  'is_super_admin','platform_config_can_read_secrets','platform_config_is_secret','promotion_is_referenced','tg_acquisition_codes_guard',
+  'is_super_admin','log_rpc_attempt','platform_config_can_read_secrets','platform_config_is_secret','promotion_is_referenced','tg_acquisition_codes_guard',
   'tg_platform_config_audit','tg_promotions_marketing_guard','uid'"
 LIVE="SELECT string_agg(proname || '=' || md5(replace(prosrc, chr(13), '')), ',' ORDER BY proname COLLATE \"C\") FROM pg_proc
       WHERE pronamespace IN ('public'::regnamespace, 'auth'::regnamespace) AND proname IN ($LIVE_NAMES) AND proname <> 'get_service_role_key'"
-LIVE_MD5="_claim_reward=d9a8726c2f105908c0df7fe8c59b2982,_gift_wallet_type=fc1d4ab1b1ad238af448e32c4064c22d,_platform_config_audit_value=e221259c6ce8fa9322380013075413dd,_platform_config_is_telemetry=f9a571619f76ddd653767f4211c19912,_reward_claim_status=73d57eecb3631f0db8d1bc9d7a71fb30,_reward_identity_hash=4f1942d94b70a77d6b5007d776f5b425,admin_signup_code_stats=22b65e286149e554225824d766ba81f5,apply_signup_code=940d7a1bec4ce8530de97de271541ae5,cron_http_post=15d9ded451c60f92a0fd0a3c4e1ee0ab,cup_to_trc_centavos=f8db4dfddddeef620b300997f7b69c57,current_user_role=cb4a7c12d4e21fe2997135833f141e25,ensure_wallet_account=6f01c44a2ecd5afe0b625347b43c203f,get_current_exchange_rate=7377e83a3477419ad6c3897dca8a2835,get_platform_config_numeric=13d2587037eca74854cf2394ba42a90c,is_admin=22cb75e91980d512498034cd33e1eda2,is_marketing=1903156b6a1218a543888ae2ebfb3656,is_super_admin=5655a4615e92e8b1e323d06c7566b058,platform_config_can_read_secrets=c38ca8f2ee39238d8c37a3f0b47ac879,platform_config_is_secret=7302ae9b8e160f90a253d5f5ace0f0b5,promotion_is_referenced=d02d1233dcb808f809ff0dcf29818a02,tg_acquisition_codes_guard=383b43d28d0e0598a9233fafd1eba296,tg_platform_config_audit=23121ec16ff092678dae2aca522220ff,tg_promotions_marketing_guard=2b4dd44a23aaf0c01a47b28d6b09cae4,uid=cdef18c69c4f4cbbced2eaf81e628b49"
+LIVE_MD5="_claim_reward=d9a8726c2f105908c0df7fe8c59b2982,_gift_wallet_type=fc1d4ab1b1ad238af448e32c4064c22d,_platform_config_audit_value=e221259c6ce8fa9322380013075413dd,_platform_config_is_telemetry=f9a571619f76ddd653767f4211c19912,_reward_claim_status=73d57eecb3631f0db8d1bc9d7a71fb30,_reward_identity_hash=4f1942d94b70a77d6b5007d776f5b425,admin_signup_code_stats=22b65e286149e554225824d766ba81f5,apply_signup_code=940d7a1bec4ce8530de97de271541ae5,cron_http_post=15d9ded451c60f92a0fd0a3c4e1ee0ab,cup_to_trc_centavos=f8db4dfddddeef620b300997f7b69c57,current_user_role=cb4a7c12d4e21fe2997135833f141e25,ensure_wallet_account=6f01c44a2ecd5afe0b625347b43c203f,get_current_exchange_rate=7377e83a3477419ad6c3897dca8a2835,get_platform_config_numeric=13d2587037eca74854cf2394ba42a90c,is_admin=22cb75e91980d512498034cd33e1eda2,is_marketing=1903156b6a1218a543888ae2ebfb3656,is_super_admin=5655a4615e92e8b1e323d06c7566b058,log_rpc_attempt=0a902c34a1148dac5686403a7c941bc0,platform_config_can_read_secrets=c38ca8f2ee39238d8c37a3f0b47ac879,platform_config_is_secret=7302ae9b8e160f90a253d5f5ace0f0b5,promotion_is_referenced=d02d1233dcb808f809ff0dcf29818a02,tg_acquisition_codes_guard=383b43d28d0e0598a9233fafd1eba296,tg_platform_config_audit=23121ec16ff092678dae2aca522220ff,tg_promotions_marketing_guard=2b4dd44a23aaf0c01a47b28d6b09cae4,uid=cdef18c69c4f4cbbced2eaf81e628b49"
 GRANTEE="CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(a.grantee)::text END"
 LIVE_ACL_Q="SELECT string_agg(f.proname || '=' || f.g, ',' ORDER BY f.proname COLLATE \"C\") FROM (
       SELECT p.proname, string_agg($GRANTEE, '+' ORDER BY $GRANTEE COLLATE \"C\") AS g
@@ -96,7 +97,7 @@ LIVE_ACL_Q="SELECT string_agg(f.proname || '=' || f.g, ',' ORDER BY f.proname CO
       WHERE p.pronamespace IN ('public'::regnamespace, 'auth'::regnamespace) AND p.proname IN ($LIVE_NAMES)
         AND a.grantee <> p.proowner AND a.privilege_type = 'EXECUTE'
       GROUP BY p.proname) f"
-LIVE_ACL="_claim_reward=service_role,_gift_wallet_type=PUBLIC+service_role,_platform_config_audit_value=service_role,_platform_config_is_telemetry=service_role,_reward_claim_status=service_role,_reward_identity_hash=service_role,admin_signup_code_stats=authenticated+service_role,apply_signup_code=authenticated+service_role,cron_http_post=service_role,cup_to_trc_centavos=PUBLIC+anon+authenticated+service_role,current_user_role=authenticated+service_role,ensure_wallet_account=authenticated+service_role,get_current_exchange_rate=PUBLIC+anon+authenticated+service_role,get_platform_config_numeric=service_role,get_service_role_key=service_role,is_admin=PUBLIC+anon+authenticated+service_role,is_marketing=anon+authenticated+service_role,is_super_admin=authenticated+service_role,platform_config_can_read_secrets=PUBLIC+anon+authenticated+service_role,platform_config_is_secret=PUBLIC+service_role,promotion_is_referenced=authenticated,tg_acquisition_codes_guard=service_role,tg_platform_config_audit=service_role,tg_promotions_marketing_guard=service_role,uid=PUBLIC"
+LIVE_ACL="_claim_reward=service_role,_gift_wallet_type=PUBLIC+service_role,_platform_config_audit_value=service_role,_platform_config_is_telemetry=service_role,_reward_claim_status=service_role,_reward_identity_hash=service_role,admin_signup_code_stats=authenticated+service_role,apply_signup_code=authenticated+service_role,cron_http_post=service_role,cup_to_trc_centavos=PUBLIC+anon+authenticated+service_role,current_user_role=authenticated+service_role,ensure_wallet_account=authenticated+service_role,get_current_exchange_rate=PUBLIC+anon+authenticated+service_role,get_platform_config_numeric=service_role,get_service_role_key=service_role,is_admin=PUBLIC+anon+authenticated+service_role,is_marketing=anon+authenticated+service_role,is_super_admin=authenticated+service_role,log_rpc_attempt=service_role,platform_config_can_read_secrets=PUBLIC+anon+authenticated+service_role,platform_config_is_secret=PUBLIC+service_role,promotion_is_referenced=authenticated,tg_acquisition_codes_guard=service_role,tg_platform_config_audit=service_role,tg_promotions_marketing_guard=service_role,uid=PUBLIC"
 
 # fresh DB: a new database with the scaffold (and its seed). On a failure it prints what psql said and returns 1.
 fresh(){ : > "$FRESHLOG"
@@ -121,12 +122,15 @@ if [ "$MIG" != "none" ]; then
   set_vigo $DB || echo "-- could not set VIGO's driver bonus"   # set between the two runs: the second one must leave it alone
   echo "== apply migration (2nd, idempotency, autocommit, as the owner, search_path = '') =="
   "$BIN/psql" $CONN -d "$DB" -qAt -v ON_ERROR_STOP=1 -c "$AS_OWNER" -f "$MIG" >/dev/null 2>&1 || { echo "migration NOT idempotent"; exit 1; }
-  val "S1 one bonus trigger, one bonus column and check, one guard trigger after two runs, and VIGO's amount survived the second" \
+  val "S1 one bonus trigger, bonus column and check, guard and audit trigger after two runs; VIGO's amount (audited) survived the second" \
     "SELECT count(*) FROM pg_trigger WHERE tgname = 'trg_signup_driver_bonus';
      SELECT count(*) FROM information_schema.columns WHERE table_name = 'acquisition_codes' AND column_name = 'driver_bonus_cup';
      SELECT count(*) FROM pg_constraint WHERE conrelid = 'public.acquisition_codes'::regclass AND contype = 'c' AND pg_get_constraintdef(oid) LIKE '%driver_bonus_cup%';
      SELECT count(*) FROM pg_trigger WHERE tgname = 'trg_promotions_marketing_guard';
-     SELECT driver_bonus_cup FROM public.acquisition_codes WHERE code = 'VIGO';" "1;1;1;1;1000"
+     SELECT count(*) FROM pg_trigger WHERE tgname = 'trg_acquisition_codes_bonus_audit';
+     SELECT driver_bonus_cup FROM public.acquisition_codes WHERE code = 'VIGO';
+     SELECT string_agg(admin_id || ':' || target_id || ':' || (old_values->>'driver_bonus_cup') || '>' || (new_values->>'driver_bonus_cup'), ',')
+       FROM public.admin_actions WHERE action = 'update_signup_driver_bonus';" "1;1;1;1;1;1000;$ADMIN:VIGO:0>1000"
 else
   set_vigo $DB || echo "-- RED: VIGO's driver bonus cannot be set (no column)"
 fi
@@ -179,6 +183,18 @@ val "A10 a ride's promo claim (SECURITY DEFINER, marketing's JWT set) still move
          RESET ROLE; SET LOCAL request.jwt.claim.sub = '';
          SELECT current_uses || '|' || revision FROM public.promotions WHERE id = '$P_LIVE';")" \
   "2|0"
+
+val "A11 marketing cannot delete a paused, unused promotion a signup code links to; unlinked, it can" \
+  "$(tx "UPDATE public.acquisition_codes SET promotion_id = '$P_PAUSED' WHERE code = 'VIGO';
+         $(client $MARK "SELECT public.promotion_is_referenced('$P_PAUSED'); SELECT public.t_try('DELETE FROM public.promotions WHERE id = ''$P_PAUSED''');")
+         UPDATE public.acquisition_codes SET promotion_id = NULL WHERE code = 'VIGO';
+         $(client $MARK "SELECT public.promotion_is_referenced('$P_PAUSED'); SELECT public.t_try('DELETE FROM public.promotions WHERE id = ''$P_PAUSED''');")")" \
+  "t;err:P0001:promo_delete_blocked;f;ok:1"
+val "A11b an admin still deletes a linked one, and the link is cleared" \
+  "$(tx "UPDATE public.acquisition_codes SET promotion_id = '$P_PAUSED' WHERE code = 'VIGO';
+         $(client $ADMIN "SELECT public.t_try('DELETE FROM public.promotions WHERE id = ''$P_PAUSED''');")
+         SELECT coalesce(promotion_id::text, 'none') FROM public.acquisition_codes WHERE code = 'VIGO';")" \
+  "ok:1;none"
 
 echo "== B. referral amounts =="
 B1J='{"referral_bonus_cup": 700, "referral_welcome_bonus_driver_cup": 300}'
@@ -237,15 +253,15 @@ val "C1b ... as one posted promo_credit, one bonus row and the phone's claim" \
          SELECT count(*) || '|' || max(user_id::text) || '|' || max(ride_id::text) || '|' || bool_and(released_at IS NULL)
            FROM public.reward_claims WHERE claim = 'signup_driver_bonus';")" \
   "1|signup_driver_bonus:$DRV1|promo_credit|posted|signup_driver_bonus|$R1|true|$DRV1;$DRV1|VIGO|1000|$R1|true;1|$DRV1|$R1|true"
-val "C1c ... and one push to the driver through cron_http_post" \
+val "C1c ... and one push to the driver through cron_http_post (its data opens no trip)" \
   "$(tx "$(bonus_ride $R1 $DP1 $RIDER)
          SELECT count(*) FROM net.http_request_queue;
          SELECT (q.body->>'user_id') || '|' || (q.body->>'title') || '|' || (q.body->>'body') || '|' || (q.body->>'category')
-                || '|' || (q.body->'data'->>'event') || '|' || (q.body->'data'->>'amount_cup') || '|' || (q.body->'data'->>'ride_id')
+                || '|' || (q.body->'data')::text
                 || '|' || (q.headers->>'Authorization') || '|' || (q.url LIKE '%/functions/v1/send-push')
            FROM net.http_request_queue q;
          SELECT c.jobname || '|' || (c.request_id = q.id) FROM public.cron_http_calls c, net.http_request_queue q;")" \
-  "1;$DRV1|Recibiste un bono de bienvenida|Te acreditamos 1000 CUP en tu billetera por tu primer viaje.|system|signup_driver_bonus|1000|$R1|Bearer test-service-key|true;signup-driver-bonus|true"
+  "1;$DRV1|Recibiste un bono de bienvenida|Te acreditamos 1000 CUP en tu billetera por tu primer viaje.|system|{\"event\": \"signup_driver_bonus\", \"amount_cup\": 1000}|Bearer test-service-key|true;signup-driver-bonus|true"
 val "C2 a second ride pays nothing more" \
   "$(tx "$(bonus_ride $R1 $DP1 $RIDER) $(bonus_ride $R2 $DP1 $RIDER) $(wallet $DRV1)
          SELECT count(*) FROM public.ledger_transactions; SELECT count(*) FROM public.signup_driver_bonuses; SELECT count(*) FROM net.http_request_queue;")" \
@@ -265,7 +281,7 @@ val "C3b a ride the driver requested himself never pays, even as the second one 
   "$(tx "$(bonus VIGO 0) $(bonus_ride $R1 $DP1 $RIDER) $(bonus VIGO 1000) $(bonus_ride $R3 $DP1 $DRV1) $(wallet $DRV1)
          $(bonus ZERO 1000) $(bonus_ride $R2 $DP3 $RIDER) $(wallet $DRV3)")" \
   "none;1000"
-val "C4a code with amount 0 pays nothing (control: a VIGO driver in the same transaction is paid)" \
+val "C4 a code with amount 0 pays nothing (control: a VIGO driver in the same transaction is paid)" \
   "$(tx "$(bonus_ride $R1 $DP3 $RIDER) $(wallet $DRV3) SELECT count(*) FROM public.reward_claims;
          $(bonus_ride $R2 $DP1 $RIDER) $(wallet $DRV1)")" \
   "none;0;1000"
@@ -286,23 +302,61 @@ val "C7 a driver with no signup code gets nothing (control: DRV1 is paid)" \
          $(bonus_ride $R2 $DP1 $RIDER) $(wallet $DRV1)")" \
   "none;0;1000"
 # The payment block fails (ledger_entries refuses every row): the ride is still completed, and the claim,
-# the wallets, the ledger and the push are all undone with the block. The trigger leaves a WARNING.
-C8_WANT="completed|0|0|0|none|0|0"
+# the wallets, the ledger and the push are all undone with the block. The trigger leaves a WARNING and a
+# row in rpc_attempt_log, written after the block rolled back, so it stays.
+C8_WANT="completed|0|0|0|none|0|0|trg_signup_driver_bonus:$DRV1:$R1:payment_failed:23514:VIGO:1000:true"
 r=$(run $DB "$(tx "ALTER TABLE public.ledger_entries ADD CONSTRAINT t_fail CHECK (false) NOT VALID;
      $(bonus_ride $R1 $DP1 $RIDER)
      SELECT status || '|' || (SELECT count(*) FROM public.signup_driver_bonuses) || '|' || (SELECT count(*) FROM public.reward_claims)
             || '|' || (SELECT count(*) FROM public.ledger_transactions)
             || '|' || coalesce((SELECT balance::text FROM public.wallet_accounts WHERE user_id = '$DRV1'), 'none')
             || '|' || (SELECT balance FROM public.wallet_accounts WHERE user_id = '$PLAT') || '|' || (SELECT count(*) FROM net.http_request_queue)
+            || '|' || (SELECT string_agg(rpc_name || ':' || caller_uid || ':' || target_id || ':' || outcome || ':' || (metadata->>'sqlstate')
+                                         || ':' || (metadata->>'code') || ':' || (metadata->>'amount_cup') || ':' || (metadata->>'error' LIKE '%t_fail%'), ',')
+                         FROM public.rpc_attempt_log)
        FROM public.rides WHERE id = '$R1';")")
 if echo "$r" | grep -q "signup driver bonus failed for ride $R1: 23514" && echo "$r" | grep -q "$C8_WANT"; then
-  ok "C8 a failing payment never blocks the ride, and undoes the claim with itself"
-else ko "C8 a failing payment never blocks the ride, and undoes the claim with itself" "expected a WARNING and [$C8_WANT], got [$r]"; fi
+  ok "C8 a failing payment never blocks the ride, undoes the claim with itself and is logged"
+else ko "C8 a failing payment never blocks the ride, undoes the claim with itself and is logged" "expected a WARNING and [$C8_WANT], got [$r]"; fi
+# ... and a log that fails too (the function raising) still never blocks the ride
+r=$(run $DB "$(tx "ALTER TABLE public.ledger_entries ADD CONSTRAINT t_fail CHECK (false) NOT VALID;
+     CREATE OR REPLACE FUNCTION public.log_rpc_attempt(p_rpc_name text, p_caller_uid uuid, p_target_id uuid, p_outcome text, p_metadata jsonb DEFAULT NULL::jsonb)
+       RETURNS void LANGUAGE plpgsql AS \$f\$ BEGIN RAISE EXCEPTION 'log down'; END \$f\$;
+     $(bonus_ride $R1 $DP1 $RIDER)
+     SELECT 'ride:' || status FROM public.rides WHERE id = '$R1';")")
+if ! echo "$r" | grep -q "ERROR:" && [ "${r##*;}" = "ride:completed" ]; then
+  ok "C8b a failing log never blocks the ride either"
+else ko "C8b a failing log never blocks the ride either" "got [$r]"; fi
 val "C9 completing the same ride again (disputed -> completed) does not pay again" \
   "$(tx "$(bonus_ride $R1 $DP1 $RIDER) UPDATE public.rides SET status = 'disputed' WHERE id = '$R1';
          UPDATE public.rides SET status = 'completed' WHERE id = '$R1'; $(wallet $DRV1)
          SELECT count(*) FROM public.ledger_transactions; SELECT count(*) FROM net.http_request_queue;")" \
   "1000;1;1"
+val "C13a a driver who applies the code after his approval gets nothing (control: DRV1, code at signup, is paid)" \
+  "$(tx "$(client $DRV4 "SELECT public.apply_signup_code('vigo');") $(bonus_ride $R1 $DP4 $RIDER) $(wallet $DRV4)
+         $(bonus_ride $R2 $DP1 $RIDER) $(wallet $DRV1)")" \
+  "applied;none;1000"
+val "C13b a driver with no approval date gets nothing (control: another code's driver is paid)" \
+  "$(tx "UPDATE public.driver_profiles SET approved_at = NULL WHERE id = '$DP1'; $(bonus_ride $R1 $DP1 $RIDER) $(wallet $DRV1)
+         $(bonus ZERO 1000) $(bonus_ride $R2 $DP3 $RIDER) $(wallet $DRV3)")" \
+  "none;1000"
+val "C13c a driver whose code has no date gets nothing (control: another code's driver is paid)" \
+  "$(tx "UPDATE public.users SET signup_code_at = NULL WHERE id = '$DRV1'; $(bonus_ride $R1 $DP1 $RIDER) $(wallet $DRV1)
+         $(bonus ZERO 1000) $(bonus_ride $R2 $DP3 $RIDER) $(wallet $DRV3)")" \
+  "none;1000"
+val "C13d a code applied at the very moment of the approval counts" \
+  "$(tx "UPDATE public.users SET signup_code_at = (SELECT approved_at FROM public.driver_profiles WHERE id = '$DP1') WHERE id = '$DRV1';
+         $(bonus_ride $R1 $DP1 $RIDER) $(wallet $DRV1)")" \
+  "1000"
+val "C14 each change of a code's driver amount is audited with who made it; an unchanged value or a new code at 0 writes nothing" \
+  "$(tx "$(client $MARK "UPDATE public.acquisition_codes SET driver_bonus_cup = 2500 WHERE code = 'VIGO';
+         UPDATE public.acquisition_codes SET driver_bonus_cup = 2500 WHERE code = 'VIGO';
+         UPDATE public.acquisition_codes SET label = 'Vigo dos' WHERE code = 'VIGO';
+         INSERT INTO public.acquisition_codes (code, label, channel) VALUES ('NEWZ', 'Cero', 'otro');
+         INSERT INTO public.acquisition_codes (code, label, channel, driver_bonus_cup) VALUES ('NEWC', 'Nuevo', 'otro', 300);")
+         SELECT string_agg(admin_id || ':' || target_type || ':' || target_id || ':' || coalesce(old_values::text, 'NULL') || '>' || new_values::text, ',' ORDER BY target_id)
+           FROM public.admin_actions WHERE action = 'update_signup_driver_bonus' AND admin_id <> '$ADMIN';")" \
+  "$MARK:acquisition_code:NEWC:NULL>{\"driver_bonus_cup\": 300},$MARK:acquisition_code:VIGO:{\"driver_bonus_cup\": 1000}>{\"driver_bonus_cup\": 2500}"
 r1=$(run $DB "$(tx "$(bonus_ride $R1 $DP1 $RIDER) $(client $MARK "SELECT code || '|' || driver_bonus_cup || '|' || drivers_bonus_paid || '|' || driver_bonus_paid_cup
        FROM public.admin_signup_code_stats() ORDER BY code COLLATE \"C\";")")")
 r2=$(run $DB "$(tx "$(client $RIDER "SELECT count(*) FROM public.admin_signup_code_stats();")")")
@@ -340,17 +394,22 @@ if [ "$MIG" != "none" ]; then
     "t;0;false|false|false|true"
   err "G1b ... a signed-in marketing user cannot read it" \
     "$(tx "$(client $MARK "SELECT count(*) FROM public.signup_driver_bonuses;")")" "permission denied for table signup_driver_bonuses"
-  val "G2 EXECUTE: set_referral_amounts and the stats for authenticated, not anon; the bonus trigger function for neither" \
+  val "G2 EXECUTE: set_referral_amounts, the stats and promotion_is_referenced for authenticated, not anon; the two trigger functions for neither" \
     "SELECT has_function_privilege('anon', 'public.set_referral_amounts(jsonb)', 'EXECUTE') || '|' || has_function_privilege('authenticated', 'public.set_referral_amounts(jsonb)', 'EXECUTE')
             || '|' || has_function_privilege('anon', 'public.admin_signup_code_stats()', 'EXECUTE') || '|' || has_function_privilege('authenticated', 'public.admin_signup_code_stats()', 'EXECUTE')
-            || '|' || has_function_privilege('anon', 'public.trg_signup_driver_bonus()', 'EXECUTE') || '|' || has_function_privilege('authenticated', 'public.trg_signup_driver_bonus()', 'EXECUTE');" \
-    "false|true|false|true|false|false"
-  val "G3 the guard is SECURITY INVOKER and still the enabled trigger on promotions; the bonus fires after a status update on rides" \
+            || '|' || has_function_privilege('service_role', 'public.admin_signup_code_stats()', 'EXECUTE')
+            || '|' || has_function_privilege('anon', 'public.trg_signup_driver_bonus()', 'EXECUTE') || '|' || has_function_privilege('authenticated', 'public.trg_signup_driver_bonus()', 'EXECUTE')
+            || '|' || has_function_privilege('anon', 'public.tg_acquisition_codes_bonus_audit()', 'EXECUTE') || '|' || has_function_privilege('authenticated', 'public.tg_acquisition_codes_bonus_audit()', 'EXECUTE')
+            || '|' || has_function_privilege('anon', 'public.promotion_is_referenced(uuid)', 'EXECUTE') || '|' || has_function_privilege('authenticated', 'public.promotion_is_referenced(uuid)', 'EXECUTE');" \
+    "false|true|false|true|true|false|false|false|false|false|true"
+  val "G3 the guard is SECURITY INVOKER and the enabled trigger on promotions; the bonus and audit triggers; promotion_is_referenced keeps its definer and path" \
     "SELECT prosecdef FROM pg_proc WHERE oid = 'public.tg_promotions_marketing_guard()'::regprocedure;
      SELECT tgenabled FROM pg_trigger WHERE tgname = 'trg_promotions_marketing_guard';
-     SELECT pg_get_triggerdef(oid) FROM pg_trigger WHERE tgname = 'trg_signup_driver_bonus';" \
-    "f;O;CREATE TRIGGER trg_signup_driver_bonus AFTER UPDATE OF status ON public.rides FOR EACH ROW WHEN (((new.status = 'completed'::ride_status) AND (old.status IS DISTINCT FROM 'completed'::ride_status))) EXECUTE FUNCTION trg_signup_driver_bonus()"
-  val "G4 the four bodies after 00666" "$NEWFNS" "$NEW_MD5"
+     SELECT pg_get_triggerdef(oid) FROM pg_trigger WHERE tgname = 'trg_signup_driver_bonus';
+     SELECT pg_get_triggerdef(oid) FROM pg_trigger WHERE tgname = 'trg_acquisition_codes_bonus_audit';
+     SELECT prosecdef || '|' || array_to_string(proconfig, ',') FROM pg_proc WHERE oid = 'public.promotion_is_referenced(uuid)'::regprocedure;" \
+    "f;O;CREATE TRIGGER trg_signup_driver_bonus AFTER UPDATE OF status ON public.rides FOR EACH ROW WHEN (((new.status = 'completed'::ride_status) AND (old.status IS DISTINCT FROM 'completed'::ride_status))) EXECUTE FUNCTION trg_signup_driver_bonus();CREATE TRIGGER trg_acquisition_codes_bonus_audit AFTER INSERT OR UPDATE OF driver_bonus_cup ON public.acquisition_codes FOR EACH ROW EXECUTE FUNCTION tg_acquisition_codes_bonus_audit();true|search_path=\"\""
+  val "G4 the six bodies after 00666" "$NEWFNS" "$NEW_MD5"
 
   echo "== N. negative proofs: the migration refuses or catches what it must =="
   # a fresh negative-proof database (the proofs are worthless on a half-built one)
@@ -405,11 +464,55 @@ if [ "$MIG" != "none" ]; then
   neg_mutant N8 "a bonus trigger function without SECURITY DEFINER aborts it" \
     '/^CREATE OR REPLACE FUNCTION public.trg_signup_driver_bonus()$/,/^AS \$function\$$/{/^ SECURITY DEFINER$/d}' \
     "trg_signup_driver_bonus() is not SECURITY DEFINER with a fixed search_path"
+  # a re-run meets a stats body it does not know, with the new result type: it must not replace it
+  fresh_neg
+  r=$(apply_err $NEG "$MIG")
+  if [ "$r" != applied ]; then ko "N9 a re-run over an unknown stats body with the new columns aborts it" "the first apply failed: [$r]"
+  else
+    b=$(body_md5 $NEG admin_signup_code_stats)
+    run $NEG "DO \$x\$ BEGIN EXECUTE replace(pg_get_functiondef('public.admin_signup_code_stats()'::regprocedure),
+              'ORDER BY count(u.id) DESC', 'ORDER BY count(u.id) ASC'); END \$x\$;" >/dev/null
+    if [ "$(body_md5 $NEG admin_signup_code_stats)" = "$b" ]; then ko "N9 a re-run over an unknown stats body with the new columns aborts it" "setup did not change the body"
+    else
+      r=$(apply_err $NEG "$MIG"); echo "$r" | grep -q "admin_signup_code_stats() is not the body read from prod" \
+        && ok "N9 a re-run over an unknown stats body with the new columns aborts it" || ko "N9 a re-run over an unknown stats body with the new columns aborts it" "got [$r]"
+    fi
+  fi
+  fresh_neg
+  b=$(body_md5 $NEG promotion_is_referenced)
+  run $NEG "DO \$x\$ BEGIN EXECUTE replace(pg_get_functiondef('public.promotion_is_referenced(uuid)'::regprocedure),
+            'THEN false', 'THEN false /* local edit */'); END \$x\$;" >/dev/null
+  if [ "$(body_md5 $NEG promotion_is_referenced)" = "$b" ]; then ko "N10 a promotion_is_referenced body it does not know aborts it" "setup did not change the body"
+  else
+    r=$(apply_err $NEG "$MIG"); echo "$r" | grep -q "promotion_is_referenced(uuid) is not the body read from prod" \
+      && ok "N10 a promotion_is_referenced body it does not know aborts it" || ko "N10 a promotion_is_referenced body it does not know aborts it" "got [$r]"
+  fi
+  neg_mutant N11 "a bonus trigger that fires on any update aborts it" \
+    's/^  AFTER UPDATE OF status ON public.rides$/  AFTER UPDATE ON public.rides/' \
+    "trg_signup_driver_bonus is not the expected trigger on rides"
+  neg_mutant N12 "anon keeping EXECUTE on the bonus trigger function aborts it" \
+    's/^REVOKE ALL ON FUNCTION public.trg_signup_driver_bonus() FROM PUBLIC, anon, authenticated;$/REVOKE ALL ON FUNCTION public.trg_signup_driver_bonus() FROM PUBLIC, authenticated;/' \
+    "wrong EXECUTE grants on the new functions"
+  neg_mutant N13 "the service role losing EXECUTE on the stats aborts it" \
+    's/^REVOKE ALL ON FUNCTION public.admin_signup_code_stats() FROM PUBLIC, anon;$/REVOKE ALL ON FUNCTION public.admin_signup_code_stats() FROM PUBLIC, anon, service_role;/; s/^GRANT EXECUTE ON FUNCTION public.admin_signup_code_stats() TO authenticated, service_role;$/GRANT EXECUTE ON FUNCTION public.admin_signup_code_stats() TO authenticated;/' \
+    "wrong EXECUTE grants on the new functions"
+  neg_mutant N14 "an audit trigger function without SECURITY DEFINER aborts it" \
+    '/^CREATE OR REPLACE FUNCTION public.tg_acquisition_codes_bonus_audit()$/,/^AS \$function\$$/{/^ SECURITY DEFINER$/d}' \
+    "tg_acquisition_codes_bonus_audit() is not SECURITY DEFINER with a fixed search_path"
+  # the trigger checks in \$verify\$ pin search_path; applied as through the dashboard or MCP, with
+  # public on the path, it must still pass (and leave the session's path as it found it)
+  fresh_neg
+  r=$("$BIN/psql" $CONN -d $NEG -qAt -v ON_ERROR_STOP=1 -1 -c "SET SESSION AUTHORIZATION tricigo_owner; SET search_path = \"\$user\", public, extensions" \
+        -f "$MIG" -c "SHOW search_path" 2>&1 | tr -d '\r' | tail -1)
+  if [ "$r" = '"$user", public, extensions' ] && [ "$(run $NEG "$NEWFNS")" = "$NEW_MD5" ]; then
+    ok "N15 applied with public on the search_path, it passes its checks and restores the path"
+  else ko "N15 applied with public on the search_path, it passes its checks and restores the path" "got [$r]"; fi
   "$BIN/psql" $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS $NEG" >/dev/null 2>&1
   echo "== bodies after 00666 (copy into CLAUDE.md) =="
   "$BIN/psql" $CONN -d "$DB" -qAt -c "SELECT string_agg(proname || ' ' || md5(prosrc) || '/' || length(prosrc), E'\n' ORDER BY proname COLLATE \"C\") FROM pg_proc
            WHERE pronamespace = 'public'::regnamespace
-             AND proname IN ('tg_promotions_marketing_guard', 'set_referral_amounts', 'trg_signup_driver_bonus', 'admin_signup_code_stats')" | tr -d '\r'
+             AND proname IN ('tg_promotions_marketing_guard', 'set_referral_amounts', 'trg_signup_driver_bonus', 'admin_signup_code_stats',
+                             'promotion_is_referenced', 'tg_acquisition_codes_bonus_audit')" | tr -d '\r'
 fi
 
 echo "== result: $PASS passed, $FAIL failed =="

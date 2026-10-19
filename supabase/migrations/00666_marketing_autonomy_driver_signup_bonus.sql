@@ -5,17 +5,20 @@
 --    edits promotions (live ones too) with no admin approval. Its activation is
 --    stamped with its own id, like an admin's. It still never writes the use
 --    counter, the author or the approval stamps, and still deletes only a paused
---    promotion nothing points at (a used one keeps its history). Admins, the
+--    promotion nothing points at (a used one keeps its history). A signup code's
+--    link now counts as pointing at it (promotion_is_referenced). Admins, the
 --    service role and SQL without a JWT behave as before.
 -- B. set_referral_amounts(jsonb): admins and marketing set the four referral
 --    amounts in platform_config (integers >= 0). tg_platform_config_audit logs
 --    each change with the caller's id.
--- C. acquisition_codes.driver_bonus_cup: a driver registered with the code gets
---    that many CUP in the tricicoin wallet on the first completed ride for
---    another person, once per confirmed phone (claim 'signup_driver_bonus').
---    Paid from platform_promotions by trg_signup_driver_bonus, in a block that
---    never rolls back the ride. signup_driver_bonuses keeps one row per paid
---    bonus; admin_signup_code_stats() reports them.
+-- C. acquisition_codes.driver_bonus_cup: a driver registered with the code (applied
+--    before the approval) gets that many CUP in the tricicoin wallet on the first
+--    completed ride for another person, once per confirmed phone (claim
+--    'signup_driver_bonus'). Paid from platform_promotions by trg_signup_driver_bonus,
+--    in a block that never rolls back the ride; a failed payment is logged in
+--    rpc_attempt_log. signup_driver_bonuses keeps one row per paid bonus;
+--    admin_signup_code_stats() reports them. Every change of a code's amount is
+--    audited in admin_actions with who made it.
 
 SET lock_timeout = '5s';
 
@@ -23,7 +26,6 @@ SET lock_timeout = '5s';
 DO $guard$
 DECLARE
   v_md5 text;
-  v_result text;
 BEGIN
   SELECT md5(replace(prosrc, chr(13), '')) INTO v_md5
     FROM pg_proc WHERE oid = to_regprocedure('public.tg_promotions_marketing_guard()');
@@ -32,17 +34,26 @@ BEGIN
     RAISE EXCEPTION '00666: tg_promotions_marketing_guard() is not the body read from prod (md5 %)', v_md5;
   END IF;
 
-  SELECT md5(replace(prosrc, chr(13), '')), pg_get_function_result(oid) INTO v_md5, v_result
+  -- The body read from prod, or the one this migration leaves (a second run). Nothing else.
+  SELECT md5(replace(prosrc, chr(13), '')) INTO v_md5
     FROM pg_proc WHERE oid = to_regprocedure('public.admin_signup_code_stats()');
-  IF v_result IS NULL
-     OR (v_result NOT LIKE '%driver_bonus_paid_cup bigint%' AND v_md5 IS DISTINCT FROM '22b65e286149e554225824d766ba81f5') THEN
+  IF v_md5 IS DISTINCT FROM '22b65e286149e554225824d766ba81f5'
+     AND v_md5 IS DISTINCT FROM 'c743b9103a7d1eb5b794831072b26b09' THEN
     RAISE EXCEPTION '00666: admin_signup_code_stats() is not the body read from prod (md5 %)', v_md5;
+  END IF;
+
+  SELECT md5(replace(prosrc, chr(13), '')) INTO v_md5
+    FROM pg_proc WHERE oid = to_regprocedure('public.promotion_is_referenced(uuid)');
+  IF v_md5 IS DISTINCT FROM 'd02d1233dcb808f809ff0dcf29818a02'
+     AND v_md5 IS DISTINCT FROM 'c0a5cd8f27d85b631ca9dde4db26e2ef' THEN
+    RAISE EXCEPTION '00666: promotion_is_referenced(uuid) is not the body read from prod (md5 %)', v_md5;
   END IF;
 
   IF to_regprocedure('public._claim_reward(uuid, text, uuid, uuid)') IS NULL
      OR to_regprocedure('public.ensure_wallet_account(uuid, public.wallet_account_type)') IS NULL
-     OR to_regprocedure('public.cron_http_post(text, text, jsonb, jsonb, integer)') IS NULL THEN
-    RAISE EXCEPTION '00666: _claim_reward, ensure_wallet_account or cron_http_post is missing';
+     OR to_regprocedure('public.cron_http_post(text, text, jsonb, jsonb, integer)') IS NULL
+     OR to_regprocedure('public.log_rpc_attempt(text, uuid, uuid, text, jsonb)') IS NULL THEN
+    RAISE EXCEPTION '00666: _claim_reward, ensure_wallet_account, cron_http_post or log_rpc_attempt is missing';
   END IF;
 END
 $guard$;
@@ -124,6 +135,25 @@ BEGIN
 END;
 $function$;
 
+-- A promotion a signup code links to (00665) is pointed at too: marketing cannot delete it, so the
+-- code never loses its promotion behind an admin's back. From the live body, one condition added.
+CREATE OR REPLACE FUNCTION public.promotion_is_referenced(p_promotion_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  SELECT CASE
+    WHEN NOT (public.is_marketing() OR public.is_admin()) THEN false
+    ELSE EXISTS (SELECT 1 FROM public.rides WHERE promo_code_id = p_promotion_id)
+      OR EXISTS (SELECT 1 FROM public.promotion_uses WHERE promotion_id = p_promotion_id)
+      OR EXISTS (SELECT 1 FROM public.campaigns WHERE promo_code_id = p_promotion_id)
+      OR EXISTS (SELECT 1 FROM public.acquisition_codes WHERE promotion_id = p_promotion_id)
+  END;
+$function$;
+REVOKE ALL ON FUNCTION public.promotion_is_referenced(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.promotion_is_referenced(uuid) TO authenticated;
+
 -- B. Referral amounts, for admins and marketing.
 CREATE OR REPLACE FUNCTION public.set_referral_amounts(p_amounts jsonb)
  RETURNS jsonb
@@ -181,7 +211,37 @@ GRANT EXECUTE ON FUNCTION public.set_referral_amounts(jsonb) TO authenticated, s
 ALTER TABLE public.acquisition_codes
   ADD COLUMN IF NOT EXISTS driver_bonus_cup integer NOT NULL DEFAULT 0 CHECK (driver_bonus_cup >= 0);
 COMMENT ON COLUMN public.acquisition_codes.driver_bonus_cup IS
-  '00666: CUP credited to the tricicoin wallet of a driver registered with this code, on the first completed ride for another person, once per confirmed phone. 0 = off.';
+  '00666: CUP credited to the tricicoin wallet of a driver registered with this code (applied before the approval), on the first completed ride for another person, once per confirmed phone. 0 = off.';
+
+-- Every change of a code's amount is money policy: audited with who made it, like platform_config.
+CREATE OR REPLACE FUNCTION public.tg_acquisition_codes_bonus_audit()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.driver_bonus_cup > 0 THEN
+      INSERT INTO public.admin_actions (admin_id, action, target_type, target_id, old_values, new_values)
+      VALUES (COALESCE(auth.uid(), '00000000-0000-0000-0000-000000000001'::uuid), 'update_signup_driver_bonus',
+              'acquisition_code', NEW.code, NULL, jsonb_build_object('driver_bonus_cup', NEW.driver_bonus_cup));
+    END IF;
+  ELSIF NEW.driver_bonus_cup IS DISTINCT FROM OLD.driver_bonus_cup THEN
+    INSERT INTO public.admin_actions (admin_id, action, target_type, target_id, old_values, new_values)
+    VALUES (COALESCE(auth.uid(), '00000000-0000-0000-0000-000000000001'::uuid), 'update_signup_driver_bonus',
+            'acquisition_code', NEW.code, jsonb_build_object('driver_bonus_cup', OLD.driver_bonus_cup),
+            jsonb_build_object('driver_bonus_cup', NEW.driver_bonus_cup));
+  END IF;
+  RETURN NULL;
+END;
+$function$;
+REVOKE ALL ON FUNCTION public.tg_acquisition_codes_bonus_audit() FROM PUBLIC, anon, authenticated;
+
+CREATE OR REPLACE TRIGGER trg_acquisition_codes_bonus_audit
+  AFTER INSERT OR UPDATE OF driver_bonus_cup ON public.acquisition_codes
+  FOR EACH ROW
+  EXECUTE FUNCTION public.tg_acquisition_codes_bonus_audit();
 
 -- One row per paid bonus. No foreign keys on purpose (like reward_claims, 00658): the row is
 -- history and survives the account's deletion; the phone claim stops a second payment.
@@ -212,6 +272,8 @@ DECLARE
   v_driver_user uuid;
   v_code text;
   v_amount integer;
+  v_code_at timestamptz;
+  v_approved_at timestamptz;
   v_qualifying integer;
   v_driver_account uuid;
   v_platform_account uuid;
@@ -224,8 +286,8 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  SELECT dp.user_id, u.signup_code, ac.driver_bonus_cup
-    INTO v_driver_user, v_code, v_amount
+  SELECT dp.user_id, u.signup_code, ac.driver_bonus_cup, u.signup_code_at, dp.approved_at
+    INTO v_driver_user, v_code, v_amount, v_code_at, v_approved_at
   FROM public.driver_profiles dp
   JOIN public.users u ON u.id = dp.user_id
   JOIN public.acquisition_codes ac ON ac.code = u.signup_code
@@ -233,6 +295,12 @@ BEGIN
 
   -- No code, a code that pays nothing, or a ride the driver requested himself.
   IF v_driver_user IS NULL OR COALESCE(v_amount, 0) <= 0 OR NEW.customer_id = v_driver_user THEN
+    RETURN NEW;
+  END IF;
+
+  -- For drivers who registered with the code: it was applied before the approval. An approved driver
+  -- who adds a code later (apply_signup_code takes one at any time) gets nothing.
+  IF v_code_at IS NULL OR v_approved_at IS NULL OR v_code_at > v_approved_at THEN
     RETURN NEW;
   END IF;
 
@@ -257,7 +325,7 @@ BEGIN
   BEGIN
     -- One bonus per confirmed phone, whatever the code: no confirmed phone, or a phone already
     -- paid (also from an account deleted since), pays nothing.
-    IF public._claim_reward(v_driver_user, 'signup_driver_bonus', NEW.id, NULL) <> 'claimed' THEN
+    IF public._claim_reward(v_driver_user, 'signup_driver_bonus', NEW.id, NULL) IS DISTINCT FROM 'claimed' THEN
       RETURN NEW;
     END IF;
 
@@ -284,6 +352,14 @@ BEGIN
     VALUES (v_driver_user, v_code, v_amount, NEW.id, v_txn);
   EXCEPTION WHEN OTHERS THEN
     RAISE WARNING 'signup driver bonus failed for ride %: % %', NEW.id, SQLSTATE, SQLERRM;
+    -- Written after the block rolled back, so the record stays. Logging must never block the ride
+    -- either: log_rpc_attempt swallows its own errors, and the inner block covers it missing.
+    BEGIN
+      PERFORM public.log_rpc_attempt('trg_signup_driver_bonus', v_driver_user, NEW.id, 'payment_failed',
+        jsonb_build_object('sqlstate', SQLSTATE, 'error', SQLERRM, 'code', v_code, 'amount_cup', v_amount));
+    EXCEPTION WHEN OTHERS THEN
+      RAISE WARNING 'signup driver bonus: logging the failure of ride % failed: % %', NEW.id, SQLSTATE, SQLERRM;
+    END;
     RETURN NEW;
   END;
 
@@ -298,8 +374,8 @@ BEGIN
                                     'title', 'Recibiste un bono de bienvenida',
                                     'body', 'Te acreditamos ' || v_amount || ' CUP en tu billetera por tu primer viaje.',
                                     'category', 'system',
-                                    'data', jsonb_build_object('event', 'signup_driver_bonus', 'amount_cup', v_amount,
-                                                               'ride_id', NEW.id::text)));
+                                    -- No ride_id: with one, the driver's inbox opens that trip.
+                                    'data', jsonb_build_object('event', 'signup_driver_bonus', 'amount_cup', v_amount)));
   EXCEPTION WHEN OTHERS THEN
     RAISE WARNING 'signup driver bonus push failed for ride %: % %', NEW.id, SQLSTATE, SQLERRM;
   END;
@@ -308,8 +384,7 @@ END;
 $function$;
 REVOKE ALL ON FUNCTION public.trg_signup_driver_bonus() FROM PUBLIC, anon, authenticated;
 
-DROP TRIGGER IF EXISTS trg_signup_driver_bonus ON public.rides;
-CREATE TRIGGER trg_signup_driver_bonus
+CREATE OR REPLACE TRIGGER trg_signup_driver_bonus
   AFTER UPDATE OF status ON public.rides
   FOR EACH ROW
   WHEN (NEW.status = 'completed' AND OLD.status IS DISTINCT FROM 'completed')
@@ -378,7 +453,7 @@ BEGIN
     SELECT p.oid FROM pg_proc p
     WHERE p.pronamespace = 'public'::regnamespace
       AND p.proname IN ('tg_promotions_marketing_guard', 'set_referral_amounts', 'trg_signup_driver_bonus',
-                        'admin_signup_code_stats')
+                        'admin_signup_code_stats', 'promotion_is_referenced', 'tg_acquisition_codes_bonus_audit')
       AND position(chr(13) IN p.prosrc) > 0
   LOOP
     EXECUTE replace(pg_get_functiondef(r.oid), chr(13), '');
@@ -390,14 +465,23 @@ $crlf$;
 DO $verify$
 DECLARE
   r record;
+  v_path text := current_setting('search_path');
 BEGIN
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.tg_promotions_marketing_guard()'::regprocedure)
      IS DISTINCT FROM '146c9ffc9df39e5f4bbf36b59a17dcb8' THEN
     RAISE EXCEPTION '00666 check: tg_promotions_marketing_guard has an unexpected body';
   END IF;
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.trg_signup_driver_bonus()'::regprocedure)
-     IS DISTINCT FROM 'b8cb2c4cebc62b45ee5cae55d4ce1bff' THEN
+     IS DISTINCT FROM '86c7c891b7227fafa5e69ca7f377b8b6' THEN
     RAISE EXCEPTION '00666 check: trg_signup_driver_bonus has an unexpected body';
+  END IF;
+  IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.promotion_is_referenced(uuid)'::regprocedure)
+     IS DISTINCT FROM 'c0a5cd8f27d85b631ca9dde4db26e2ef' THEN
+    RAISE EXCEPTION '00666 check: promotion_is_referenced has an unexpected body';
+  END IF;
+  IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.tg_acquisition_codes_bonus_audit()'::regprocedure)
+     IS DISTINCT FROM 'c3731384cd8f09884c1be1de4d68a2cc' THEN
+    RAISE EXCEPTION '00666 check: tg_acquisition_codes_bonus_audit has an unexpected body';
   END IF;
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.set_referral_amounts(jsonb)'::regprocedure)
      IS DISTINCT FROM 'cd6a37dea2a53f4674549af28e3c2e9a' THEN
@@ -417,30 +501,48 @@ BEGIN
     RAISE EXCEPTION '00666 check: the promotions guard is not an enabled SECURITY INVOKER trigger';
   END IF;
 
-  -- The three functions that need the owner's rights are SECURITY DEFINER with a fixed path.
+  -- The four functions that need the owner's rights are SECURITY DEFINER with a fixed path.
   FOR r IN
     SELECT p.oid::regprocedure AS fn, p.prosecdef, p.proconfig FROM pg_proc p
     WHERE p.oid IN ('public.set_referral_amounts(jsonb)'::regprocedure, 'public.trg_signup_driver_bonus()'::regprocedure,
-                    'public.admin_signup_code_stats()'::regprocedure)
+                    'public.admin_signup_code_stats()'::regprocedure, 'public.tg_acquisition_codes_bonus_audit()'::regprocedure)
   LOOP
     IF NOT (r.prosecdef AND COALESCE(r.proconfig && ARRAY['search_path=public, pg_catalog'], false)) THEN
       RAISE EXCEPTION '00666 check: % is not SECURITY DEFINER with a fixed search_path', r.fn;
     END IF;
   END LOOP;
+  IF NOT COALESCE((SELECT prosecdef AND proconfig = ARRAY['search_path=""'] FROM pg_proc
+                    WHERE oid = 'public.promotion_is_referenced(uuid)'::regprocedure), false) THEN
+    RAISE EXCEPTION '00666 check: promotion_is_referenced lost SECURITY DEFINER or its empty search_path';
+  END IF;
 
   IF has_function_privilege('anon', 'public.set_referral_amounts(jsonb)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.set_referral_amounts(jsonb)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.admin_signup_code_stats()', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.admin_signup_code_stats()', 'EXECUTE')
-     OR has_function_privilege('authenticated', 'public.trg_signup_driver_bonus()', 'EXECUTE') THEN
+     OR NOT has_function_privilege('service_role', 'public.admin_signup_code_stats()', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.trg_signup_driver_bonus()', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.trg_signup_driver_bonus()', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.tg_acquisition_codes_bonus_audit()', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.tg_acquisition_codes_bonus_audit()', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.promotion_is_referenced(uuid)', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.promotion_is_referenced(uuid)', 'EXECUTE') THEN
     RAISE EXCEPTION '00666 check: wrong EXECUTE grants on the new functions';
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger t
-                  WHERE t.tgrelid = 'public.rides'::regclass AND t.tgname = 'trg_signup_driver_bonus'
-                    AND t.tgfoid = 'public.trg_signup_driver_bonus()'::regprocedure AND t.tgenabled = 'O') THEN
-    RAISE EXCEPTION '00666 check: trg_signup_driver_bonus is not an enabled trigger on rides';
+  -- The two triggers as written above, enabled. pg_get_triggerdef qualifies names by search_path: pin it.
+  PERFORM set_config('search_path', '', true);
+  IF (SELECT pg_get_triggerdef(t.oid) FROM pg_trigger t
+       WHERE t.tgrelid = 'public.rides'::regclass AND t.tgname = 'trg_signup_driver_bonus' AND t.tgenabled = 'O')
+     IS DISTINCT FROM 'CREATE TRIGGER trg_signup_driver_bonus AFTER UPDATE OF status ON public.rides FOR EACH ROW WHEN (((new.status = ''completed''::public.ride_status) AND (old.status IS DISTINCT FROM ''completed''::public.ride_status))) EXECUTE FUNCTION public.trg_signup_driver_bonus()' THEN
+    RAISE EXCEPTION '00666 check: trg_signup_driver_bonus is not the expected trigger on rides';
   END IF;
+  IF (SELECT pg_get_triggerdef(t.oid) FROM pg_trigger t
+       WHERE t.tgrelid = 'public.acquisition_codes'::regclass AND t.tgname = 'trg_acquisition_codes_bonus_audit' AND t.tgenabled = 'O')
+     IS DISTINCT FROM 'CREATE TRIGGER trg_acquisition_codes_bonus_audit AFTER INSERT OR UPDATE OF driver_bonus_cup ON public.acquisition_codes FOR EACH ROW EXECUTE FUNCTION public.tg_acquisition_codes_bonus_audit()' THEN
+    RAISE EXCEPTION '00666 check: trg_acquisition_codes_bonus_audit is not the expected trigger on acquisition_codes';
+  END IF;
+  PERFORM set_config('search_path', v_path, true);
 
   IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.signup_driver_bonuses'::regclass)
      OR EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.signup_driver_bonuses'::regclass)
@@ -460,7 +562,7 @@ BEGIN
     SELECT 1 FROM pg_proc p
     WHERE p.pronamespace = 'public'::regnamespace
       AND p.proname IN ('tg_promotions_marketing_guard', 'set_referral_amounts', 'trg_signup_driver_bonus',
-                        'admin_signup_code_stats')
+                        'admin_signup_code_stats', 'promotion_is_referenced', 'tg_acquisition_codes_bonus_audit')
       AND position(chr(13) IN p.prosrc) > 0
   ) THEN
     RAISE EXCEPTION '00666 check: a function body still has a carriage return';

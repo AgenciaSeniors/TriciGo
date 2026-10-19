@@ -642,3 +642,18 @@ BEGIN
 END;
 $function$;
 
+-- log_rpc_attempt(text,uuid,uuid,text,jsonb) md5=0a902c34a1148dac5686403a7c941bc0 acl={postgres=X/postgres,service_role=X/postgres}
+-- (read from prod on 2026-10-19 after the first rehearsal; table: rpc_attempt_log(id bigserial PK, rpc_name text NOT NULL, caller_uid uuid, target_id uuid, outcome text NOT NULL, metadata jsonb, created_at timestamptz NOT NULL DEFAULT now()))
+CREATE OR REPLACE FUNCTION public.log_rpc_attempt(p_rpc_name text, p_caller_uid uuid, p_target_id uuid, p_outcome text, p_metadata jsonb DEFAULT NULL::jsonb)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+BEGIN
+  INSERT INTO rpc_attempt_log (rpc_name, caller_uid, target_id, outcome, metadata)
+  VALUES (p_rpc_name, p_caller_uid, p_target_id, p_outcome, p_metadata);
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END;
+$function$;

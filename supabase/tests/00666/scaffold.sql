@@ -1,6 +1,6 @@
 -- Scaffold for the 00666 rehearsal (local Postgres 16, no PostGIS needed).
 -- The tables and columns the promotions guard, the platform_config audit, the
--- signup-code stats and the driver bonus (wallets, ledger, phone claims, push)
+-- signup-code stats and the driver bonus (wallets, ledger, phone claims, push, failure log)
 -- read, with the LIVE bodies read from prod on 2026-10-19 (live-bodies.sql) and
 -- their EXECUTE grants as read (the acl in each header comment; run.sh S0 checks
 -- every md5 and every grant). Two stand-ins: get_service_role_key() returns a
@@ -124,7 +124,8 @@ CREATE TABLE public.referral_codes (code text PRIMARY KEY, user_id uuid);
 CREATE TABLE public.driver_profiles (
   id uuid PRIMARY KEY,
   user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  status text NOT NULL DEFAULT 'approved'
+  status text NOT NULL DEFAULT 'approved',
+  approved_at timestamptz
 );
 
 CREATE TABLE public.rides (
@@ -208,6 +209,17 @@ CREATE TABLE public.cron_http_calls (
   called_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Written by the live log_rpc_attempt() (shape read from prod on 2026-10-19).
+CREATE TABLE public.rpc_attempt_log (
+  id bigserial PRIMARY KEY,
+  rpc_name text NOT NULL,
+  caller_uid uuid,
+  target_id uuid,
+  outcome text NOT NULL,
+  metadata jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
 -- Read by the live get_current_exchange_rate() (nothing in the rehearsal calls it).
 CREATE TABLE public.exchange_rates (
   usd_cup_rate numeric NOT NULL,
@@ -263,7 +275,7 @@ BEGIN
         '_platform_config_is_telemetry', '_reward_claim_status', '_reward_identity_hash', 'admin_signup_code_stats',
         'apply_signup_code', 'uid', 'cron_http_post', 'cup_to_trc_centavos', 'current_user_role',
         'ensure_wallet_account', 'get_current_exchange_rate', 'get_platform_config_numeric', 'get_service_role_key',
-        'is_admin', 'is_marketing', 'is_super_admin', 'platform_config_can_read_secrets', 'platform_config_is_secret',
+        'is_admin', 'is_marketing', 'is_super_admin', 'log_rpc_attempt', 'platform_config_can_read_secrets', 'platform_config_is_secret',
         'promotion_is_referenced', 'tg_acquisition_codes_guard', 'tg_platform_config_audit',
         'tg_promotions_marketing_guard')
   LOOP
@@ -290,6 +302,7 @@ GRANT EXECUTE ON FUNCTION public.get_service_role_key() TO service_role;
 GRANT EXECUTE ON FUNCTION public.is_admin() TO PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.is_marketing() TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.is_super_admin() TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.log_rpc_attempt(text, uuid, uuid, text, jsonb) TO service_role;
 GRANT EXECUTE ON FUNCTION public.platform_config_can_read_secrets() TO PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.platform_config_is_secret(text) TO PUBLIC, service_role;
 GRANT EXECUTE ON FUNCTION public.promotion_is_referenced(uuid) TO authenticated;
@@ -355,6 +368,7 @@ CREATE TRIGGER trg_acquisition_codes_guard BEFORE INSERT OR UPDATE OF code ON pu
 --   DRV1 d…01 VIGO 5355500011 (DP1)   DRV2 d…02 VIGO phone never confirmed (DP2)
 --   DRV3 d…03 ZERO 5355500013 (DP3)   DRV4 d…04 no code 5355500014 (DP4)
 --   DRV5 (d…05, DP5) is created by a test: a new account on DRV1's phone.
+--   Every driver was approved 30 days ago; the ones with a code applied it 60 days ago (at signup).
 INSERT INTO auth.users (id, phone, phone_confirmed_at) VALUES
   ('00000000-0000-0000-0000-000000000001', NULL, NULL),
   ('00000000-0000-0000-0000-000000000099', NULL, NULL),
@@ -378,16 +392,16 @@ INSERT INTO public.users (id, role, full_name, phone, signup_code, signup_code_a
   ('a0000000-0000-4000-8000-000000000002', 'super_admin', 'Super', NULL, NULL, NULL),
   ('a0000000-0000-4000-8000-000000000003', 'marketing', 'Mark', NULL, NULL, NULL),
   ('b0000000-0000-4000-8000-000000000006', 'customer', 'Rider', '+5355500006', NULL, NULL),
-  ('d0000000-0000-4000-8000-000000000001', 'driver', 'Driver One', '+5355500011', 'VIGO', now()),
-  ('d0000000-0000-4000-8000-000000000002', 'driver', 'Driver Two', '+5355500012', 'VIGO', now()),
-  ('d0000000-0000-4000-8000-000000000003', 'driver', 'Driver Three', '+5355500013', 'ZERO', now()),
+  ('d0000000-0000-4000-8000-000000000001', 'driver', 'Driver One', '+5355500011', 'VIGO', now() - interval '60 days'),
+  ('d0000000-0000-4000-8000-000000000002', 'driver', 'Driver Two', '+5355500012', 'VIGO', now() - interval '60 days'),
+  ('d0000000-0000-4000-8000-000000000003', 'driver', 'Driver Three', '+5355500013', 'ZERO', now() - interval '60 days'),
   ('d0000000-0000-4000-8000-000000000004', 'driver', 'Driver Four', '+5355500014', NULL, NULL);
 
-INSERT INTO public.driver_profiles (id, user_id) VALUES
-  ('dd000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000001'),
-  ('dd000000-0000-4000-8000-000000000002', 'd0000000-0000-4000-8000-000000000002'),
-  ('dd000000-0000-4000-8000-000000000003', 'd0000000-0000-4000-8000-000000000003'),
-  ('dd000000-0000-4000-8000-000000000004', 'd0000000-0000-4000-8000-000000000004');
+INSERT INTO public.driver_profiles (id, user_id, approved_at) VALUES
+  ('dd000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000001', now() - interval '30 days'),
+  ('dd000000-0000-4000-8000-000000000002', 'd0000000-0000-4000-8000-000000000002', now() - interval '30 days'),
+  ('dd000000-0000-4000-8000-000000000003', 'd0000000-0000-4000-8000-000000000003', now() - interval '30 days'),
+  ('dd000000-0000-4000-8000-000000000004', 'd0000000-0000-4000-8000-000000000004', now() - interval '30 days');
 
 -- JSON numbers, as prod stores the four amounts; one secret-looking key.
 INSERT INTO public.platform_config (key, value) VALUES
