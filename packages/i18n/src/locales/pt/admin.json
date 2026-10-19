@@ -2312,7 +2312,7 @@
     "audience_choferes": "Motoristas",
     "audience_ambos": "Ambos",
     "form_title": "Novo código",
-    "form_help": "Estes códigos não pagam bônus: só registram de onde veio cada pessoa. As pessoas os digitam em “Código de convite” ao se cadastrar. Use um código por influenciador, lote de sacolas, tela ou grupo.",
+    "form_help": "Estes códigos não pagam bônus a quem os compartilha: registram de onde veio cada pessoa. As pessoas os digitam em “Código de convite” ao se cadastrar. Se você escolher uma promoção, quem se cadastrar com o código a recebe na próxima viagem sem digitar nada, enquanto a promoção estiver ativa. Se você definir um saldo para motoristas, cada motorista que se cadastrar com o código o recebe na carteira ao concluir a primeira viagem. Use um código por influenciador, lote de sacolas, tela ou grupo.",
     "field_code": "Código",
     "field_label": "Nome",
     "field_channel": "Canal",

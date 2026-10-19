@@ -2312,7 +2312,7 @@
     "audience_choferes": "Choferes",
     "audience_ambos": "Ambos",
     "form_title": "Nuevo código",
-    "form_help": "Estos códigos no pagan bono: registran de dónde viene cada persona. La gente los escribe en «Código de invitación» al registrarse. Si eliges una promoción, quien se registre con el código la recibe en su próximo viaje sin escribir nada, mientras la promoción esté activa. Activar una promoción lo decide un administrador. Usa un código por influencer, lote de bolsas, pantalla o grupo.",
+    "form_help": "Estos códigos no pagan bono a quien los comparte: registran de dónde viene cada persona. La gente los escribe en «Código de invitación» al registrarse. Si eliges una promoción, quien se registre con el código la recibe en su próximo viaje sin escribir nada, mientras la promoción esté activa. Si pones un saldo para choferes, cada chofer que se registre con el código lo recibe en su billetera al completar su primer viaje. Usa un código por influencer, lote de bolsas, pantalla o grupo.",
     "field_code": "Código",
     "field_label": "Nombre",
     "field_channel": "Canal",

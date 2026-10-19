@@ -2312,7 +2312,7 @@
     "audience_choferes": "Drivers",
     "audience_ambos": "Both",
     "form_title": "New code",
-    "form_help": "These codes pay no bonus: they only record where each person came from. People type them in “Invite code” when they sign up. Use one code per influencer, batch of bags, screen or group.",
+    "form_help": "These codes pay no bonus to whoever shares them: they record where each person came from. People type them in “Invite code” when they sign up. If you choose a promotion, whoever signs up with the code gets it on their next ride without typing anything, while the promotion is active. If you set a driver balance, each driver who signs up with the code gets it in their wallet when they complete their first ride. Use one code per influencer, batch of bags, screen or group.",
     "field_code": "Code",
     "field_label": "Name",
     "field_channel": "Channel",
