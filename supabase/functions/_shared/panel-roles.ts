@@ -12,8 +12,10 @@
 //
 // Spec: docs/superpowers/specs/2026-10-08-marketing-role-design.md
 // Pure module: no remote imports, so packages/api's vitest runs it unmodified.
-// Keep the panel roles in sync with packages/utils/src/adminPanelAccess.ts (PANEL_ROLES), which
-// Deno cannot import.
+// The panel roles here are not a copy of PANEL_ROLES in packages/utils/src/adminPanelAccess.ts
+// (Deno cannot import it). isPanelStaffRole opens bulk e-mail and campaigns, including their
+// pushes, which the operator does not get (spec docs/superpowers/specs/2026-10-25-operator-role-design.md
+// section 6). Adding 'operator' here is a decision for a later delivery, not a sync.
 // ============================================================
 
 /** The push categories marketing's pages send. */

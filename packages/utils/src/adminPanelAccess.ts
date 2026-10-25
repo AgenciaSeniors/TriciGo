@@ -47,8 +47,8 @@ export const MARKETING_ROUTES: readonly string[] = [
 const MARKETING_DENIED: readonly RegExp[] = [/^\/rides\/[^/]+\/assist(?:\/|$)/];
 
 /**
- * The pages the operator may open (00668). Each one also covers its sub-pages, except
- * OPERATOR_DENIED. What it may do on each page is in panelCan.
+ * The pages the operator may open (00668). '/' is the dashboard only; every other route also covers
+ * its sub-pages, except OPERATOR_DENIED. What it may do on each page is in panelCan.
  */
 export const OPERATOR_ROUTES: readonly string[] = [
   '/',
@@ -95,14 +95,40 @@ export function panelHome(role: PanelRole): string {
 }
 
 function underRoute(routes: readonly string[], pathname: string): boolean {
-  return routes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+  return routes.some((route) => pathname === route || (route !== '/' && pathname.startsWith(`${route}/`)));
+}
+
+/**
+ * The path as Next.js matches it to a page: percent-decoded once, backslashes as slashes,
+ * empty and "." segments dropped, ".." resolved. Null when it cannot be decoded. Without this,
+ * "/wallet/%67ifts" or "//settings" would get past the lists below.
+ */
+function normalizePanelPath(pathname: string): string | null {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    return null;
+  }
+  const segments: string[] = [];
+  for (const segment of decoded.replace(/\\/g, '/').split('/')) {
+    if (segment === '' || segment === '.') continue;
+    if (segment === '..') {
+      segments.pop();
+      continue;
+    }
+    segments.push(segment);
+  }
+  return `/${segments.join('/')}`;
 }
 
 /**
  * Super admins open everything, admins everything but the super-admin pages, marketing and the
  * operator their allow-lists. Any other value opens nothing.
  */
-export function canOpenPanelPath(role: PanelRole, pathname: string): boolean {
+export function canOpenPanelPath(role: PanelRole, rawPathname: string): boolean {
+  const pathname = normalizePanelPath(rawPathname);
+  if (pathname === null) return false;
   if (underRoute(SUPER_ADMIN_ROUTES, pathname)) return role === 'super_admin';
   if (role === 'admin' || role === 'super_admin') return true;
   if (role === 'marketing') {
@@ -137,7 +163,7 @@ export type PanelCapability =
   | 'users.block'
   /** Delete an account that never finished signing up. */
   | 'accounts.delete_pending'
-  /** Reviews, fraud alerts and the collusion queue. */
+  /** Reviews, fraud alerts and the collusion queue (/cancellations). */
   | 'moderation.act'
   /** Places (POIs) and their submissions. */
   | 'pois.act'
@@ -145,9 +171,9 @@ export type PanelCapability =
   | 'money.act'
   /** Create, edit, pause and delete promotions. */
   | 'promotions.write'
-  /** The promotions waiting for an admin: the strip and the menu dot. */
+  /** See and act on the promotions waiting for an admin: the strip and the menu dot. */
   | 'promotions.approve'
-  /** The referral amounts card. */
+  /** Edit the referral amounts; without it the card is read-only. */
   | 'referrals.amounts'
   /** Reward or invalidate a referral: it moves money. */
   | 'referrals.rewards'

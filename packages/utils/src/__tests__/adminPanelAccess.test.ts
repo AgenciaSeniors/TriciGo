@@ -15,12 +15,14 @@ import {
   type PanelRole,
 } from '../adminPanelAccess';
 
-const ALL_CAPABILITIES: PanelCapability[] = [
-  'detail.full', 'rides.act', 'tickets.act', 'cases.act', 'drivers.review', 'fleets.review',
-  'corporate.clients', 'users.block', 'accounts.delete_pending', 'moderation.act', 'pois.act',
-  'money.act', 'promotions.write', 'promotions.approve', 'referrals.amounts', 'referrals.rewards',
-  'audit.read',
-];
+// Every capability once: tsc fails here when a new one is added to PanelCapability and not to this list.
+const CAPABILITY_SET = {
+  'detail.full': true, 'rides.act': true, 'tickets.act': true, 'cases.act': true, 'drivers.review': true,
+  'fleets.review': true, 'corporate.clients': true, 'users.block': true, 'accounts.delete_pending': true,
+  'moderation.act': true, 'pois.act': true, 'money.act': true, 'promotions.write': true,
+  'promotions.approve': true, 'referrals.amounts': true, 'referrals.rewards': true, 'audit.read': true,
+} satisfies Record<PanelCapability, true>;
+const ALL_CAPABILITIES = Object.keys(CAPABILITY_SET) as PanelCapability[];
 
 describe('isPanelRole', () => {
   it('accepts the four panel roles', () => {
@@ -81,6 +83,15 @@ describe('canOpenPanelPath', () => {
     }
   });
 
+  it('pins the operator route list: changing it takes a deliberate edit here', () => {
+    expect(OPERATOR_ROUTES).toEqual([
+      '/', '/reports', '/launch-pulse', '/live-map', '/rides', '/support', '/incidents', '/disputes',
+      '/lost-found', '/drivers', '/incomplete-drivers', '/businesses', '/users', '/reviews', '/fraud',
+      '/cancellations', '/wallet', '/promotions', '/referrals',
+    ]);
+    expect(OPERATOR_ROUTES).toHaveLength(19);
+  });
+
   it('keeps the operator out of gifts, settings, team, audit, earnings and marketing pages', () => {
     for (const path of ['/wallet/gifts', '/wallet/gifts/x', '/settings', '/settings/pricing', '/equipo',
       '/audit', '/earnings', '/notifications', '/pois', '/campaigns', '/announcements', '/blog',
@@ -94,6 +105,7 @@ describe('canOpenPanelPath', () => {
     expect(canOpenPanelPath('marketing', '/promotionsx')).toBe(false);
     expect(canOpenPanelPath('marketing', '/blog-admin')).toBe(false);
     expect(canOpenPanelPath('operator', '/ridesx')).toBe(false);
+    // Pins the end of the gifts deny pattern: only /wallet/gifts and its sub-pages are denied.
     expect(canOpenPanelPath('operator', '/wallet/giftsx')).toBe(true);
   });
 
@@ -117,6 +129,40 @@ describe('canOpenPanelPath', () => {
         expect(canOpenPanelPath(role as PanelRole, path)).toBe(false);
       }
     }
+  });
+});
+
+describe('canOpenPanelPath on encoded and odd paths', () => {
+  it('keeps the operator out of the gifts pages however the path is written', () => {
+    for (const path of ['/wallet/%67ifts', '/wallet/gift%73', '/wallet/./gifts', '/wallet/x/../gifts', '/wallet\\gifts']) {
+      expect(canOpenPanelPath('operator', path)).toBe(false);
+    }
+  });
+
+  it('does not let a leading double slash or an encoded name past the allow-list', () => {
+    for (const path of ['//settings', '//equipo', '/%73ettings', '/abc']) {
+      expect(canOpenPanelPath('operator', path)).toBe(false);
+    }
+  });
+
+  it('opens nothing when the path cannot be decoded', () => {
+    expect(canOpenPanelPath('operator', '/rides/%E0%A4%A')).toBe(false);
+  });
+
+  it('keeps marketing out of the assist page when it is percent-encoded', () => {
+    expect(canOpenPanelPath('marketing', '/rides/x/%61ssist')).toBe(false);
+  });
+
+  it('keeps the Equipo page for super admins when it is percent-encoded', () => {
+    expect(canOpenPanelPath('admin', '/%65quipo')).toBe(false);
+    expect(canOpenPanelPath('super_admin', '/%65quipo')).toBe(true);
+  });
+
+  it('still opens the ordinary pages', () => {
+    for (const path of ['/rides/abc', '/rides/abc/', '/wallet/receipts']) {
+      expect(canOpenPanelPath('operator', path)).toBe(true);
+    }
+    expect(canOpenPanelPath('admin', '/settings/pricing')).toBe(true);
   });
 });
 
