@@ -1,6 +1,6 @@
 # Operator role in the admin panel — design
 
-**Status:** approved in conversation on 2026-10-25. No implementation plan yet: the first one covers delivery 1 (Base).
+**Status:** approved in conversation on 2026-10-25. Plan for delivery 1 (Base): `docs/superpowers/plans/2026-10-25-operator-role-base.md`, whose "Notes from planning" are folded in here.
 
 ## Problem
 
@@ -53,7 +53,7 @@ Choices made in the design that the founder can still reverse:
 | Rides | `/live-map`, `/rides`, `/rides/[id]`, `/rides/[id]/assist` | Assists searching rides, unsticks active rides, cancels |
 | Support | `/support`, `/incidents`, `/disputes`, `/lost-found` | Yes, without refunds |
 | Drivers | `/drivers`, `/drivers/[id]`, `/incomplete-drivers`, `/businesses` | Yes, without wallet adjustments. On `/businesses`, only accounts that are fleets |
-| Accounts | `/users`, `/users/[id]`, `/notifications` | Block, unblock, delete a pending account, push one person. Not the level, not the wallet |
+| Accounts | `/users`, `/users/[id]`, `/notifications` (from delivery 4) | Block, unblock, delete a pending account, push one person. Not the level, not the wallet |
 | Moderation | `/reviews`, `/fraud`, `/cancellations` | Yes |
 | Read-only | `/wallet`, `/wallet/receipts`, `/promotions`, `/referrals` | No |
 
@@ -81,11 +81,12 @@ Choices made in the design that the founder can still reverse:
 - support: tickets and their messages, incidents, disputes, lost items, reviews, fraud alerts and collusion reviews;
 - corporate accounts, fleets and fleet members;
 - money, read-only: wallets, the ledger, transfers, top-up requests and receipts;
-- promotions, referrals, `notification_log` and `stuck_ride_alerts`.
+- promotions, referrals and `stuck_ride_alerts`;
+- in delivery 4, with `/notifications`, `notification_log`.
 
 **What stays closed:**
 - the audit log (`admin_actions`), earnings and `platform_config` beyond what is already public;
-- `delivery_details`, read directly. The panel reads a delivery through a function that leaves the code out.
+- `delivery_details`, read directly. The panel reads a delivery through `ops_delivery_details`, a view that leaves the code out.
 
 **Storage.** Read policies on the `driver-documents`, `driver-contracts` and `receipts` buckets. `dispute-evidence` is already public.
 
@@ -195,10 +196,11 @@ The operator never writes a table directly.
 **`adminPanelAccess.ts`:**
 - `PANEL_ROLES` adds `operator`, with `OPERATOR_ROUTES` (the pages above) and `OPERATOR_DENIED` (`/wallet/gifts`). `panelHome('operator')` is `/`.
 - **`panelCanAct` is replaced by capabilities:** `panelCan(role, cap)` and a `useCan(cap)` hook. A per-page check is not enough: `/drivers/[id]` mixes operations and money.
-  - Operator: `rides.act`, `support.act`, `drivers.review`, `fleets.review`, `users.block`, `accounts.delete_pending`, `push.individual`, `moderation.act`, `detail.full`.
-  - Admin only: `money.act`, `corporate.clients`, `users.level`, `promotions.write`, `referrals.amounts`, `referrals.rewards`, `push.broadcast`, `audit.read`.
-  - Marketing keeps what it has today: `support.act`, `promotions.write`, `referrals.amounts`.
-- **`menuRole` with no known role** shows no menu. Neither marketing nor operator is a subset of the other, so neither is a safe fallback.
+  - Operator, once all four deliveries are in: `detail.full`, `rides.act`, `tickets.act`, `cases.act`, `drivers.review`, `fleets.review`, `users.block`, `accounts.delete_pending`, `moderation.act`, plus a push capability in delivery 4. Delivery 1 gives it only `detail.full`.
+  - Admin only: `money.act`, `corporate.clients`, `pois.act`, `promotions.write`, `promotions.approve`, `referrals.amounts`, `referrals.rewards`, `audit.read`.
+  - Marketing keeps what it has today: `tickets.act`, `promotions.write`, `referrals.amounts`.
+  - `tickets.act` (support tickets) and `cases.act` (incidents, disputes, lost items) are separate because marketing answers tickets but never had the others. The level selector already checks super admin, so no capability is needed for it.
+- **`menuRole` with no known role** keeps marketing's menu, the smallest one. The middleware and the server still refuse everything else.
 
 **Shell:**
 - the operator gets the waiting-rides banner and the SOS bell;
