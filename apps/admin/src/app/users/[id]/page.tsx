@@ -10,7 +10,7 @@ import { getErrorMessage } from '@tricigo/utils';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { formatAdminDate } from '@/lib/formatDate';
 import { USER_LEVEL_LABEL, labelFor } from '@/lib/labels';
-import { useCanAct } from '@/lib/useCanAct';
+import { usePanelCan } from '@/lib/usePanelCan';
 import { UserDetailReadOnly } from '@/components/panel/UserDetailReadOnly';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
@@ -552,7 +552,7 @@ function AdminUserDetailPage() {
  */
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { canAct, ready } = useCanAct();
+  const { can, ready } = usePanelCan();
   if (!ready) return null;
-  return canAct ? <AdminUserDetailPage /> : <UserDetailReadOnly userId={id} />;
+  return can('detail.full') ? <AdminUserDetailPage /> : <UserDetailReadOnly userId={id} />;
 }

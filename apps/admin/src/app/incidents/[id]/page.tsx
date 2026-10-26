@@ -8,7 +8,7 @@ import { panelReadService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { getErrorMessage } from '@tricigo/utils';
 import { useAdminUser } from '@/lib/useAdminUser';
-import { useCanAct } from '@/lib/useCanAct';
+import { usePanelCan } from '@/lib/usePanelCan';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { StatusBadge } from '@/components/data/StatusBadge';
@@ -70,7 +70,10 @@ export default function IncidentDetailPage() {
   const { showToast } = useToast();
   const { userId: adminUserId } = useAdminUser();
   const { id } = useParams<{ id: string }>();
-  const { canAct, ready } = useCanAct();
+  const { can, ready } = usePanelCan();
+  // The operator reads the full incident but acts on none yet (00668).
+  const fullData = can('detail.full');
+  const canAct = can('cases.act');
 
   const [detail, setDetail] = useState<IncidentDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -85,7 +88,7 @@ export default function IncidentDetailPage() {
     setMissing(false);
     setLoadError(null);
     try {
-      const data = canAct
+      const data = fullData
         ? await adminService.getIncidentDetail(id)
         : await panelReadService.getIncidentDetail(id);
       if (!data) {
@@ -107,7 +110,7 @@ export default function IncidentDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [id, canAct, ready]);
+  }, [id, fullData, ready]);
 
   useEffect(() => {
     void load();

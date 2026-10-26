@@ -21,7 +21,7 @@ import type {
 import { useAdminUser } from '@/lib/useAdminUser';
 import { formatAdminDate } from '@/lib/formatDate';
 import { DOC_TYPE_LABEL, VEHICLE_TYPE_LABEL, labelFor } from '@/lib/labels';
-import { useCanAct } from '@/lib/useCanAct';
+import { usePanelCan } from '@/lib/usePanelCan';
 import { DriverDetailReadOnly } from '@/components/panel/DriverDetailReadOnly';
 import {
   ArrowLeft,
@@ -1333,7 +1333,7 @@ function Metric({ label, value, icon }: { label: string; value: string; icon?: R
  */
 export default function DriverDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { canAct, ready } = useCanAct();
+  const { can, ready } = usePanelCan();
   if (!ready) return null;
-  return canAct ? <AdminDriverDetailPage /> : <DriverDetailReadOnly driverId={id} />;
+  return can('detail.full') ? <AdminDriverDetailPage /> : <DriverDetailReadOnly driverId={id} />;
 }

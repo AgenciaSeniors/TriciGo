@@ -7,7 +7,7 @@ import { panelReadService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { getErrorMessage } from '@tricigo/utils';
 import { useAdminUser } from '@/lib/useAdminUser';
-import { useCanAct } from '@/lib/useCanAct';
+import { usePanelCan } from '@/lib/usePanelCan';
 import { useToast } from '@/components/ui/AdminToast';
 import { DataTable, type DataColumn } from '@/components/data/DataTable';
 import { StatusBadge } from '@/components/data/StatusBadge';
@@ -49,7 +49,10 @@ export default function IncidentsPage() {
   const { userId: adminUserId } = useAdminUser();
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
-  const { canAct, ready } = useCanAct();
+  const { can, ready } = usePanelCan();
+  // The operator reads the full incidents but acts on none yet (00668).
+  const fullData = can('detail.full');
+  const canAct = can('cases.act');
 
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,7 +86,7 @@ export default function IncidentsPage() {
     setError(null);
     try {
       const status = statusFilter === 'all' ? undefined : statusFilter;
-      const data = canAct
+      const data = fullData
         ? await adminService.getIncidents(status, page, PAGE_SIZE)
         : await panelReadService.getIncidents(status, page, PAGE_SIZE);
       if (!isLatest()) return;
@@ -95,7 +98,7 @@ export default function IncidentsPage() {
     } finally {
       if (isLatest()) setLoading(false);
     }
-  }, [page, statusFilter, beginRequest, canAct, ready]);
+  }, [page, statusFilter, beginRequest, fullData, ready]);
 
   useEffect(() => {
     void fetchIncidents();

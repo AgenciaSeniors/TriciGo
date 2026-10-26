@@ -13,7 +13,7 @@ import { KpiCard } from '@/components/dashboard/KpiCard';
 import { useToast } from '@/components/ui/AdminToast';
 import { exportToCsv } from '@/lib/exportCsv';
 import { formatAdminDate, formatAdminDateShort } from '@/lib/formatDate';
-import { useCanAct } from '@/lib/useCanAct';
+import { usePanelCan } from '@/lib/usePanelCan';
 
 // Drivers stuck in pending_verification (they started the signup and never
 // sent it), with what each one still has to upload, so the team can write to
@@ -253,7 +253,8 @@ function ContactDialog({
 export default function IncompleteDriversPage() {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
-  const { canAct } = useCanAct();
+  const { can } = usePanelCan();
+  const canAct = can('drivers.review');
 
   const [rows, setRows] = useState<IncompleteDriverSignup[]>([]);
   const [loading, setLoading] = useState(true);

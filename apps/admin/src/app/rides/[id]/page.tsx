@@ -13,7 +13,7 @@ import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { formatAdminDate } from '@/lib/formatDate';
 import { PAYMENT_LABEL, labelFor } from '@/lib/labels';
-import { useCanAct } from '@/lib/useCanAct';
+import { usePanelCan } from '@/lib/usePanelCan';
 import { RideDetailReadOnly } from '@/components/panel/RideDetailReadOnly';
 import { rideTypeLabel } from '@/lib/rideType';
 
@@ -598,7 +598,7 @@ function AdminRideDetailPage() {
  */
 export default function RideDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { canAct, ready } = useCanAct();
+  const { can, ready } = usePanelCan();
   if (!ready) return null;
-  return canAct ? <AdminRideDetailPage /> : <RideDetailReadOnly rideId={id} />;
+  return can('detail.full') ? <AdminRideDetailPage /> : <RideDetailReadOnly rideId={id} />;
 }

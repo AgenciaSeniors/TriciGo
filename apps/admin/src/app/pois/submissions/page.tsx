@@ -5,7 +5,7 @@ import { MapPin, Check, X, ExternalLink, Filter } from 'lucide-react';
 import { getSupabaseClient } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
-import { useCanAct } from '@/lib/useCanAct';
+import { usePanelCan } from '@/lib/usePanelCan';
 
 // ============================================================
 // POI moderation panel (PR 3 of POI parity program)
@@ -43,7 +43,8 @@ type StatusFilter = 'pending' | 'approved' | 'rejected' | 'all';
 export default function PoisSubmissionsPage() {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
-  const { canAct } = useCanAct();
+  const { can } = usePanelCan();
+  const canAct = can('pois.act');
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

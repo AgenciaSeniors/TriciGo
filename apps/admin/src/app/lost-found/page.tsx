@@ -18,7 +18,7 @@ import type { LucideIcon } from 'lucide-react';
 import { lostItemService, panelReadService, type PanelLostItem } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { useAdminUser } from '@/lib/useAdminUser';
-import { useCanAct } from '@/lib/useCanAct';
+import { usePanelCan } from '@/lib/usePanelCan';
 import { formatCUP, getErrorMessage } from '@tricigo/utils';
 import type { LostItemStatus } from '@tricigo/types';
 import { formatAdminDate } from '@/lib/formatDate';
@@ -61,7 +61,10 @@ export default function LostFoundPage() {
   const { userId: adminUserId } = useAdminUser();
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
-  const { canAct, ready } = useCanAct();
+  const { can, ready } = usePanelCan();
+  // The operator reads the full lost items but acts on none yet (00668).
+  const fullData = can('detail.full');
+  const canAct = can('cases.act');
 
   const [items, setItems] = useState<PanelLostItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,7 +91,7 @@ export default function LostFoundPage() {
     setError(null);
     try {
       const options = { status: statusFilter === 'all' ? undefined : statusFilter, limit: 100 };
-      const data = canAct
+      const data = fullData
         ? await lostItemService.getAllLostItems(options)
         : await panelReadService.getLostItems(options);
       setItems(data);
@@ -98,7 +101,7 @@ export default function LostFoundPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, t, canAct, ready]);
+  }, [statusFilter, t, fullData, ready]);
 
   useEffect(() => {
     void fetchItems();

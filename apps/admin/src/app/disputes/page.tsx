@@ -6,7 +6,7 @@ import { disputeService, panelReadService, type PanelDispute } from '@tricigo/ap
 import { useTranslation } from '@tricigo/i18n';
 import type { DisputeStatus, DisputeResolution } from '@tricigo/types';
 import { useAdminUser } from '@/lib/useAdminUser';
-import { useCanAct } from '@/lib/useCanAct';
+import { usePanelCan } from '@/lib/usePanelCan';
 import { formatTRC, getErrorMessage } from '@tricigo/utils';
 import { formatAdminDate } from '@/lib/formatDate';
 import { useToast } from '@/components/ui/AdminToast';
@@ -43,7 +43,10 @@ export default function DisputesPage() {
   const { userId: adminUserId } = useAdminUser();
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
-  const { canAct, ready } = useCanAct();
+  const { can, ready } = usePanelCan();
+  // The operator reads the full disputes (evidence, notes) but resolves none yet (00668).
+  const fullData = can('detail.full');
+  const canAct = can('cases.act');
 
   const [disputes, setDisputes] = useState<PanelDispute[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -115,7 +118,7 @@ export default function DisputesPage() {
     setError(null);
     try {
       const params = { status: statusFilter === 'all' ? undefined : statusFilter, limit: 100 };
-      const data = canAct
+      const data = fullData
         ? await disputeService.getAllDisputes(params)
         : await panelReadService.getDisputes(params);
       setDisputes(data);
@@ -125,7 +128,7 @@ export default function DisputesPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, t, canAct, ready]);
+  }, [statusFilter, t, fullData, ready]);
 
   useEffect(() => {
     void fetchDisputes();
