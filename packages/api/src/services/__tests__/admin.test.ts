@@ -919,6 +919,67 @@ describe('adminService', () => {
       expect(result.driverInfo).toBeNull();
       expect(result.customerInfo).toEqual({ name: 'Ana', phone: '555-3' });
     });
+
+    it('reads a cargo delivery through ops_delivery_details when delivery_details shows nothing (operator, 00668)', async () => {
+      const ride = { id: 'r-3', driver_id: null, customer_id: 'u-3', ride_mode: 'cargo' };
+      const opsRow = { ride_id: 'r-3', recipient_name: 'Rosa', delivery_otp_validated_at: null };
+
+      const chain1 = createMockQueryChain();
+      chain1.single.mockResolvedValue({ data: ride, error: null });
+      const chain2 = createMockQueryChain({ data: [], error: null });
+      const chain3 = createMockQueryChain();
+      chain3.maybeSingle.mockResolvedValue({ data: null, error: null });
+      const chain4 = createMockQueryChain();
+      chain4.single.mockResolvedValue({ data: { full_name: 'Carl', phone: '555-4' }, error: null });
+      const chainDd = createMockQueryChain();
+      chainDd.maybeSingle.mockResolvedValue({ data: null, error: null });
+      const chainOps = createMockQueryChain();
+      chainOps.maybeSingle.mockResolvedValue({ data: opsRow, error: null });
+      const chainMsgs = createMockQueryChain({ data: [], error: null });
+
+      mockFrom
+        .mockReturnValueOnce(chain1)    // rides
+        .mockReturnValueOnce(chain2)    // ride_transitions
+        .mockReturnValueOnce(chain3)    // ride_pricing_snapshots
+        .mockReturnValueOnce(chain4)    // users (customer)
+        .mockReturnValueOnce(chainDd)   // delivery_details: nothing for an operator
+        .mockReturnValueOnce(chainOps)  // ops_delivery_details
+        .mockReturnValueOnce(chainMsgs); // ride_messages
+
+      const result = await adminService.getRideDetail('r-3');
+
+      expect(mockFrom).toHaveBeenCalledWith('ops_delivery_details');
+      expect(result.delivery).toEqual(opsRow);
+    });
+
+    it('does not read ops_delivery_details when delivery_details returns the row (admin)', async () => {
+      const ride = { id: 'r-4', driver_id: null, customer_id: 'u-4', ride_mode: 'cargo' };
+      const ddRow = { ride_id: 'r-4', recipient_name: 'Rosa', delivery_otp: '4821' };
+
+      const chain1 = createMockQueryChain();
+      chain1.single.mockResolvedValue({ data: ride, error: null });
+      const chain2 = createMockQueryChain({ data: [], error: null });
+      const chain3 = createMockQueryChain();
+      chain3.maybeSingle.mockResolvedValue({ data: null, error: null });
+      const chain4 = createMockQueryChain();
+      chain4.single.mockResolvedValue({ data: { full_name: 'Carl', phone: '555-4' }, error: null });
+      const chainDd = createMockQueryChain();
+      chainDd.maybeSingle.mockResolvedValue({ data: ddRow, error: null });
+      const chainMsgs = createMockQueryChain({ data: [], error: null });
+
+      mockFrom
+        .mockReturnValueOnce(chain1)
+        .mockReturnValueOnce(chain2)
+        .mockReturnValueOnce(chain3)
+        .mockReturnValueOnce(chain4)
+        .mockReturnValueOnce(chainDd)
+        .mockReturnValueOnce(chainMsgs);
+
+      const result = await adminService.getRideDetail('r-4');
+
+      expect(mockFrom).not.toHaveBeenCalledWith('ops_delivery_details');
+      expect(result.delivery).toEqual(ddRow);
+    });
   });
 
   // ==================== Audit ====================

@@ -1829,7 +1829,18 @@ export const adminService = {
         .select('*')
         .eq('ride_id', rideId)
         .maybeSingle();
-      delivery = (dd as DeliveryDetails) ?? null;
+      let row: unknown = dd;
+      // An operator cannot read delivery_details (00668): it reads the same row without the
+      // delivery code through ops_delivery_details, and the page shows "—" for the code.
+      if (!row) {
+        const { data: opsRow } = await supabase
+          .from('ops_delivery_details')
+          .select('*')
+          .eq('ride_id', rideId)
+          .maybeSingle();
+        row = opsRow;
+      }
+      delivery = (row as DeliveryDetails) ?? null;
     }
 
     // The ride's chat. RLS on ride_messages (rm_select) has granted is_admin()
