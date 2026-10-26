@@ -19,7 +19,7 @@ import { isPanelRole, type PanelRole } from '@tricigo/utils/adminPanelAccess';
 import { getSupabaseClient } from '../client';
 import { AppError } from '../errors';
 
-export type TeamRole = 'super_admin' | 'admin' | 'marketing';
+export type TeamRole = 'super_admin' | 'admin' | 'marketing' | 'operator';
 
 export interface TeamMember {
   user_id: string;

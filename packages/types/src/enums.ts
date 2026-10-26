@@ -3,7 +3,7 @@
 // Central enum definitions for the entire domain model
 // ============================================================
 
-export type UserRole = 'customer' | 'driver' | 'admin' | 'super_admin' | 'marketing';
+export type UserRole = 'customer' | 'driver' | 'admin' | 'super_admin' | 'marketing' | 'operator';
 
 export type DriverStatus =
   | 'pending_verification'

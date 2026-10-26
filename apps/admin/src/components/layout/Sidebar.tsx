@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslation } from '@tricigo/i18n';
 import { promotionService } from '@tricigo/api';
-import { canOpenPanelPath, menuRole, panelHome } from '@tricigo/utils/adminPanelAccess';
+import { canOpenPanelPath, menuRole, panelCan, panelHome } from '@tricigo/utils/adminPanelAccess';
 import {
   LayoutDashboard,
   Car,
@@ -184,7 +184,7 @@ export function Sidebar() {
   // not on every page change (that was one more request per navigation, 2026-10-12).
   const [pendingPromotions, setPendingPromotions] = useState(0);
   useEffect(() => {
-    if (panelRole === 'marketing') return;
+    if (!panelCan(panelRole, 'promotions.approve')) return;
     let cancelled = false;
     let latest = 0;
     const recount = () => {

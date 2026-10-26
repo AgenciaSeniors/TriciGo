@@ -45,7 +45,8 @@
     "light_mode": "Modo claro",
     "dark_mode": "Modo oscuro",
     "role_admin": "Administrador",
-    "role_marketing": "Marketing"
+    "role_marketing": "Marketing",
+    "role_operator": "Operador"
   },
   "notifications_bell": {
     "aria": "Novedades",
@@ -624,6 +625,7 @@
     "empty_zero_title": "Sin usuarios aún",
     "empty_zero_body": "Cuando alguien se registre, va a aparecer aquí.",
     "role_marketing": "Marketing",
+    "role_operator": "Operador",
     "level_updated": "Nivel actualizado",
     "wallet_frozen": "Congelada",
     "work_wallet": "Saldo de trabajo (TC)"
@@ -2734,6 +2736,7 @@
     "role_super_admin": "Superadministrador",
     "role_admin": "Administrador",
     "role_marketing": "Marketing",
+    "role_operator": "Operador",
     "members": "Miembros",
     "no_members": "Nadie todavía.",
     "invitations": "Invitaciones pendientes",

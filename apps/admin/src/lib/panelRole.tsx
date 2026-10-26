@@ -5,7 +5,7 @@ import { isPanelRole, panelRoleFromCookies, type PanelRole } from '@tricigo/util
 import { createBrowserClient } from './supabase-server';
 
 interface PanelRoleState {
-  /** admin, super_admin or marketing; null when it could not be read. */
+  /** admin, super_admin, marketing or operator; null when it could not be read. */
   role: PanelRole | null;
   loading: boolean;
 }
