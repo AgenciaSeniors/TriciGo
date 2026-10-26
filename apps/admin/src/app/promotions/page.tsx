@@ -481,16 +481,18 @@ export default function PromotionsAdminPage() {
               <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:text-amber-400">
                 {t('promotions.status_pending', { defaultValue: 'Pendiente de aprobación' })}
               </span>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void handleToggleActive(p);
-                }}
-                className="rounded-full bg-ink px-2.5 py-0.5 text-[10.5px] font-medium text-surface transition-opacity hover:opacity-90"
-              >
-                {t('promotions.action_approve', { defaultValue: 'Aprobar y activar' })}
-              </button>
+              {canWrite && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void handleToggleActive(p);
+                  }}
+                  className="rounded-full bg-ink px-2.5 py-0.5 text-[10.5px] font-medium text-surface transition-opacity hover:opacity-90"
+                >
+                  {t('promotions.action_approve', { defaultValue: 'Aprobar y activar' })}
+                </button>
+              )}
             </span>
           ) : (
             <span className="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-medium text-ink-muted">
@@ -532,7 +534,7 @@ export default function PromotionsAdminPage() {
         width: '170px',
       },
     ],
-    [t, typeLabel, discountLabel, handleToggleActive],
+    [t, typeLabel, discountLabel, handleToggleActive, canWrite],
   );
 
   return (
