@@ -46,7 +46,12 @@ import { adminService } from '../admin.service';
 describe('adminService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Restore default chainable after clearAllMocks
+    // clearAllMocks keeps the mockReturnValueOnce queues, so a test that leaves
+    // once-values unconsumed would shift every later test. Reset the two mocks
+    // that tests queue on (not resetAllMocks: it would wipe the factory defaults).
+    mockFrom.mockReset();
+    mockRpc.mockReset();
+    // Restore default chainable after the reset
     mockFrom.mockImplementation(() => createMockQueryChain());
   });
 
@@ -949,6 +954,8 @@ describe('adminService', () => {
       const result = await adminService.getRideDetail('r-3');
 
       expect(mockFrom).toHaveBeenCalledWith('ops_delivery_details');
+      expect(chainOps.eq).toHaveBeenCalledWith('ride_id', 'r-3');
+      expect(chainOps.maybeSingle).toHaveBeenCalled();
       expect(result.delivery).toEqual(opsRow);
     });
 
@@ -979,6 +986,38 @@ describe('adminService', () => {
 
       expect(mockFrom).not.toHaveBeenCalledWith('ops_delivery_details');
       expect(result.delivery).toEqual(ddRow);
+    });
+
+    it('leaves delivery null when neither delivery_details nor ops_delivery_details has the row', async () => {
+      const ride = { id: 'r-5', driver_id: null, customer_id: 'u-5', ride_mode: 'cargo' };
+
+      const chain1 = createMockQueryChain();
+      chain1.single.mockResolvedValue({ data: ride, error: null });
+      const chain2 = createMockQueryChain({ data: [], error: null });
+      const chain3 = createMockQueryChain();
+      chain3.maybeSingle.mockResolvedValue({ data: null, error: null });
+      const chain4 = createMockQueryChain();
+      chain4.single.mockResolvedValue({ data: { full_name: 'Carl', phone: '555-5' }, error: null });
+      const chainDd = createMockQueryChain();
+      chainDd.maybeSingle.mockResolvedValue({ data: null, error: null });
+      const chainOps = createMockQueryChain();
+      chainOps.maybeSingle.mockResolvedValue({ data: null, error: null });
+      const chainMsgs = createMockQueryChain({ data: [], error: null });
+
+      mockFrom
+        .mockReturnValueOnce(chain1)    // rides
+        .mockReturnValueOnce(chain2)    // ride_transitions
+        .mockReturnValueOnce(chain3)    // ride_pricing_snapshots
+        .mockReturnValueOnce(chain4)    // users (customer)
+        .mockReturnValueOnce(chainDd)   // delivery_details: no row
+        .mockReturnValueOnce(chainOps)  // ops_delivery_details: no row either
+        .mockReturnValueOnce(chainMsgs); // ride_messages
+
+      const result = await adminService.getRideDetail('r-5');
+
+      expect(mockFrom).toHaveBeenCalledWith('delivery_details');
+      expect(mockFrom).toHaveBeenCalledWith('ops_delivery_details');
+      expect(result.delivery).toBeNull();
     });
   });
 
