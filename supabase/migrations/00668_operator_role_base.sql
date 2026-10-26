@@ -26,35 +26,15 @@
 -- Rehearsal: supabase/tests/00668/run.sh (RED without this file, GREEN with it, applied twice)
 -- ============================================================
 
--- Creating a policy locks its table. Every public table this file creates a policy on is locked
--- up front, and every app query on them waits behind this file until it commits.
--- There is no lock order that agrees with every app path: complete_ride_and_pay takes rides and
--- then driver_profiles, update_driver_position takes them the other way. So this file is meant to
--- be the one that gives up in a lock cycle: its lock_timeout (500 ms) is half of prod's
--- deadlock_timeout (1 s), the wait after which Postgres looks for a cycle and cancels one of the
--- transactions in it, possibly an app's. (An app transaction that had already waited more than
--- half a second when this file closed the cycle can still be the one cancelled.) The file then
--- rolls back whole. Apply it at a quiet hour; on 55P03 (lock_timeout) or 40P01 (deadlock) run it
--- again. The setting is reset at the end of the file; if the file aborts, the transaction takes
--- the setting with it.
+-- Creating a policy and replacing a view lock their relation in ACCESS EXCLUSIVE mode, and every
+-- app query on it waits behind this file until it commits. This file is meant to be the one that
+-- gives up in a lock cycle: its lock_timeout (500 ms) is half of prod's deadlock_timeout (1 s), the
+-- wait after which Postgres looks for a cycle and cancels one of the transactions in it, possibly
+-- an app's. (An app transaction that had already waited more than half a second when this file
+-- closed the cycle can still be the one cancelled.) The file then rolls back whole. Apply it at a
+-- quiet hour; on 55P03 (lock_timeout) or 40P01 (deadlock) run it again. The setting is reset at
+-- the end of the file; if the file aborts, the transaction takes the setting with it.
 SET lock_timeout = '500ms';
-
-LOCK TABLE public.rides, public.ride_pricing_snapshots, public.ride_transitions, public.ride_messages
-  IN ACCESS EXCLUSIVE MODE;
-LOCK TABLE public.users, public.driver_profiles, public.vehicles, public.driver_documents,
-  public.driver_score_events, public.driver_contracts, public.selfie_checks IN ACCESS EXCLUSIVE MODE;
-LOCK TABLE public.wallet_accounts, public.ledger_transactions, public.ledger_entries,
-  public.wallet_transfers, public.wallet_recharge_requests, public.wallet_receipts,
-  public.cancellation_penalties IN ACCESS EXCLUSIVE MODE;
-LOCK TABLE public.reviews, public.ticket_messages, public.support_tickets, public.ride_disputes,
-  public.incident_reports, public.lost_items, public.fraud_alerts, public.cancellation_reviews
-  IN ACCESS EXCLUSIVE MODE;
-LOCK TABLE public.corporate_accounts, public.corporate_employees, public.corporate_rides,
-  public.driver_fleets, public.fleet_members, public.promotions, public.referrals,
-  public.stuck_ride_alerts, public.team_invitations IN ACCESS EXCLUSIVE MODE;
--- storage.objects is not locked here: its owner is Supabase's storage role, and postgres may
--- create a policy on it (supautils) but not necessarily lock it. CREATE POLICY takes its own lock
--- under the same lock_timeout.
 
 DO $guard$
 BEGIN
@@ -110,6 +90,69 @@ GRANT EXECUTE ON FUNCTION public.is_operator() TO anon, authenticated, service_r
 GRANT EXECUTE ON FUNCTION public.is_ops_staff() TO anon, authenticated, service_role;
 
 -- 2. Reads -----------------------------------------------------------------------------------
+-- Storage first: the operator opens driver documents and contracts (driver detail) and recharge
+-- receipts (wallet) through signed URLs, which need SELECT on the object. These three policies
+-- name no table (bucket_id and is_operator() only), and creating them is the first lock this file
+-- takes, before any public table: an app query on storage.objects locks it and only then, through
+-- its policies' functions, public tables. storage.objects is not locked with LOCK TABLE: its owner
+-- is Supabase's storage role, and postgres may create a policy on it (supautils) but not
+-- necessarily lock it. CREATE POLICY takes the lock itself, under the same lock_timeout.
+DO $storage$
+DECLARE
+  v_bucket text;
+  v_name text;
+BEGIN
+  FOR v_bucket, v_name IN
+    SELECT * FROM (VALUES
+      ('driver-documents', 'storage_driver_documents_select_operator'),
+      ('driver-contracts', 'storage_driver_contracts_select_operator'),
+      ('receipts', 'storage_receipts_select_operator')
+    ) AS v(b, n)
+  LOOP
+    IF NOT EXISTS (SELECT 1 FROM pg_policies
+                   WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = v_name) THEN
+      EXECUTE format('CREATE POLICY %I ON storage.objects FOR SELECT TO authenticated USING (bucket_id = %L AND (SELECT public.is_operator()))',
+        v_name, v_bucket);
+    END IF;
+  END LOOP;
+END
+$storage$;
+
+-- Then every public view and table this file replaces or creates a policy on, locked up front in
+-- the order an app query takes them where one order exists:
+--   * The seven panel views before the tables: an app query on a view locks the view and then its
+--     base tables. LOCK TABLE on a view also locks, recursively and in the same mode, every
+--     relation in its definition (not the ones a function it calls reads), so each view's tables
+--     are held from that view on. panel_driver_churn_risk goes first: it reads through a function,
+--     so locking it takes nothing else. Then the four views on a single table no other view uses,
+--     and last panel_rides and panel_driver_profiles, which share driver_profiles and users.
+--   * This narrows the cycles with app queries on the views, it does not remove them: an app query
+--     that locked panel_driver_profiles while this file was locking panel_rides then waits on
+--     driver_profiles or users, which this file holds, while this file waits on the view.
+--   * Between the tables there is no order that agrees with every app path: complete_ride_and_pay
+--     takes rides and then driver_profiles, update_driver_position takes them the other way.
+-- Every lock here is ACCESS EXCLUSIVE, the strongest mode, so no later statement of this file needs
+-- a stronger lock on a relation it already holds. The relations it first locks later are
+-- delivery_details and the ones the patched SQL functions read (driver_churn_risk, ride_offers),
+-- in ACCESS SHARE mode, which waits only on an ACCESS EXCLUSIVE lock, and ops_delivery_details,
+-- which it creates. (Run again, the file replaces that view, and an app query on it can close a
+-- cycle the way a later panel view can.)
+LOCK TABLE public.panel_driver_churn_risk, public.panel_driver_documents, public.panel_incident_reports,
+  public.panel_lost_items, public.panel_ride_disputes, public.panel_rides, public.panel_driver_profiles,
+  public.rides, public.ride_pricing_snapshots, public.ride_transitions, public.ride_messages
+  IN ACCESS EXCLUSIVE MODE;
+LOCK TABLE public.users, public.driver_profiles, public.vehicles, public.driver_documents,
+  public.driver_score_events, public.driver_contracts, public.selfie_checks IN ACCESS EXCLUSIVE MODE;
+LOCK TABLE public.wallet_accounts, public.ledger_transactions, public.ledger_entries,
+  public.wallet_transfers, public.wallet_recharge_requests, public.wallet_receipts,
+  public.cancellation_penalties IN ACCESS EXCLUSIVE MODE;
+LOCK TABLE public.reviews, public.ticket_messages, public.support_tickets, public.ride_disputes,
+  public.incident_reports, public.lost_items, public.fraud_alerts, public.cancellation_reviews
+  IN ACCESS EXCLUSIVE MODE;
+LOCK TABLE public.corporate_accounts, public.corporate_employees, public.corporate_rides,
+  public.driver_fleets, public.fleet_members, public.promotions, public.referrals,
+  public.stuck_ride_alerts, public.team_invitations IN ACCESS EXCLUSIVE MODE;
+
 -- One SELECT policy per table, named <table>_select_operator. Each one only adds rows for the
 -- operator: the other policies of the table do not change.
 DO $policies$
@@ -138,29 +181,6 @@ $policies$;
 
 -- vehicles: 00644 refuses a third SELECT policy on the table, so the admin one widens instead.
 ALTER POLICY v_admin_select ON public.vehicles USING ((SELECT public.is_ops_staff()));
-
--- Storage: the operator opens driver documents and contracts (driver detail) and recharge
--- receipts (wallet) through signed URLs, which need SELECT on the object.
-DO $storage$
-DECLARE
-  v_bucket text;
-  v_name text;
-BEGIN
-  FOR v_bucket, v_name IN
-    SELECT * FROM (VALUES
-      ('driver-documents', 'storage_driver_documents_select_operator'),
-      ('driver-contracts', 'storage_driver_contracts_select_operator'),
-      ('receipts', 'storage_receipts_select_operator')
-    ) AS v(b, n)
-  LOOP
-    IF NOT EXISTS (SELECT 1 FROM pg_policies
-                   WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = v_name) THEN
-      EXECUTE format('CREATE POLICY %I ON storage.objects FOR SELECT TO authenticated USING (bucket_id = %L AND (SELECT public.is_operator()))',
-        v_name, v_bucket);
-    END IF;
-  END LOOP;
-END
-$storage$;
 
 -- 3. Views -------------------------------------------------------------------------------------
 -- The seven panel views end in the admin-or-marketing gate (00642, 00663). Each is recreated
@@ -378,10 +398,17 @@ ALTER TABLE public.team_invitations ADD CONSTRAINT team_invitations_role_check
 --   * The title carries the reporter's first name and initial (_third_party_person_name, as in
 --     the trusted-contact texts), and "[Prueba] " for a test account: store reviewers use the
 --     demo accounts, and staff must see their SOS but know it is a test.
+--   * The rate-limit key is the reporter, or the incident when reported_by is NULL:
+--     'sos-staff:' || NULL is NULL, and rate_limits.key is NOT NULL, so that push would fail.
 --   * lock_timeout: the rate limit upserts a rate_limits row, and a second SOS of the same person
---     waits on the first one's lock. Without a limit that wait would end in statement_timeout,
---     which WHEN OTHERS cannot catch, and the SOS insert itself would be cancelled. A lock
---     timeout is an ordinary error: the handler logs it and the SOS is kept.
+--     can wait here on the first one's lock. This function cuts its own lock waits at 2 s: a lock
+--     timeout is an ordinary error, the handler logs it, and this function never refuses the SOS.
+--     (Without the limit that wait would run into statement_timeout, which WHEN OTHERS cannot
+--     catch, and the SOS insert would be cancelled.) That is all it guarantees. The older trigger
+--     on the table, incident_reports_notify_sos (notify_trusted_contacts_on_sos), fires first by
+--     name order and calls check_rate_limit('sos:' || reported_by, 1, 60) with no lock timeout, so
+--     a second SOS of the same person can still wait there before it reaches this function. That
+--     trigger is out of this migration's scope.
 --   * search_path is empty: every name below is schema-qualified.
 CREATE OR REPLACE FUNCTION public._sos_staff_alert()
 RETURNS trigger
@@ -401,7 +428,8 @@ BEGIN
     RETURN NEW;
   END IF;
   BEGIN
-    SELECT r.allowed INTO v_allowed FROM public.check_rate_limit('sos-staff:' || NEW.reported_by::text, 1, 60) r;
+    SELECT r.allowed INTO v_allowed
+    FROM public.check_rate_limit('sos-staff:' || coalesce(NEW.reported_by::text, 'incident:' || NEW.id::text), 1, 60) r;
     IF NOT coalesce(v_allowed, true) THEN
       RETURN NEW;
     END IF;
@@ -415,7 +443,7 @@ BEGIN
     SELECT array_agg(u.id) INTO v_staff
     FROM public.users u
     WHERE u.role IN ('admin', 'super_admin', 'operator') AND u.is_active
-      AND u.id IS DISTINCT FROM NEW.reported_by;
+      AND u.id IS DISTINCT FROM NEW.reported_by;  -- a NULL reporter leaves out nobody
     IF v_staff IS NULL THEN
       RETURN NEW;
     END IF;
@@ -499,7 +527,7 @@ BEGIN
     SELECT * FROM (VALUES
       ('public.is_operator()', '16438eb527af61eaa2d0b3d9a53f08f9'),
       ('public.is_ops_staff()', 'd6774e4677be1072e66b247492e9cb9a'),
-      ('public._sos_staff_alert()', '6da23321f4fe680cb89f8585ce8e56e8')
+      ('public._sos_staff_alert()', 'b380a562b802cfe4fb68f06ffb772623')
     ) AS v(fn, md5)
   LOOP
     IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = v_name::regprocedure) IS DISTINCT FROM v_def THEN
@@ -581,6 +609,8 @@ BEGIN
   END IF;
 
   -- Exactly these policies mention the operator: the 33 above, the 3 storage ones and vehicles.
+  -- (A policy can also grant through the role name, current_user_role() = 'operator': the next
+  -- check.)
   SELECT string_agg(schemaname || '.' || tablename || '.' || policyname, ', ' ORDER BY 1) INTO v_got
   FROM pg_policies
   WHERE (position('is_operator' IN coalesce(qual, '') || coalesce(with_check, '')) > 0
@@ -592,6 +622,16 @@ BEGIN
     AND NOT (schemaname = 'public' AND tablename = 'vehicles' AND policyname = 'v_admin_select');
   IF v_got IS NOT NULL THEN
     RAISE EXCEPTION '00668: unexpected policies mention the operator: %', v_got;
+  END IF;
+  -- No policy of a public table or of storage.objects names the role itself: the quoted literal
+  -- 'operator' in its USING or WITH CHECK. None of the policies this file creates does (they call
+  -- is_operator()), so none is left out.
+  SELECT string_agg(schemaname || '.' || tablename || '.' || policyname, ', ' ORDER BY 1) INTO v_got
+  FROM pg_policies
+  WHERE (schemaname = 'public' OR (schemaname = 'storage' AND tablename = 'objects'))
+    AND position('''operator''' IN coalesce(qual, '') || ' ' || coalesce(with_check, '')) > 0;
+  IF v_got IS NOT NULL THEN
+    RAISE EXCEPTION '00668: policies grant through the operator role name: %', v_got;
   END IF;
   -- And no policy named for the operator does anything but SELECT.
   SELECT string_agg(schemaname || '.' || tablename || '.' || policyname, ', ') INTO v_got
