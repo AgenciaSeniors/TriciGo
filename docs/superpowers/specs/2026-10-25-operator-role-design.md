@@ -32,7 +32,7 @@ TriciGo needs a person who helps run the service from the admin panel: live ride
 
 Choices made in the design that the founder can still reverse:
 - **The operator does not see:**
-  - the audit log (`admin_actions`), earnings, settings and the team;
+  - the audit log (`admin_actions`), the earnings page (`/earnings`, `get_platform_earnings`), settings and the team. It still reads wallets and movements, from which the platform's totals and each ride's commission can be worked out;
   - content, campaigns, announcements, blog, quests, partner places, POIs and competitors;
   - segments (it exports personal data), funnel, codes, validation and gifts.
 - **The delivery code (OTP)** of a delivery stays hidden.
@@ -85,7 +85,7 @@ Choices made in the design that the founder can still reverse:
 - in delivery 4, with `/notifications`, `notification_log`.
 
 **What stays closed:**
-- the audit log (`admin_actions`), earnings and `platform_config` beyond what is already public;
+- the audit log (`admin_actions`), `get_platform_earnings` and `platform_config` beyond what is already public. Wallets and movements stay readable, so the platform's totals and each ride's commission can still be worked out; hiding them means leaving the platform account's rows (`…0001`) out of the operator's policies on `wallet_accounts`, `ledger_entries` and `ledger_transactions`;
 - `delivery_details`, read directly. The panel reads a delivery through `ops_delivery_details`, a view that leaves the code out.
 
 **Storage.** Read policies on the `driver-documents`, `driver-contracts` and `receipts` buckets. `dispute-evidence` is already public.
@@ -157,7 +157,7 @@ The operator never writes a table directly.
 - **Moderation:** `ops_set_review_visibility` and `ops_resolve_fraud_alert`.
 
 **Never opened, and the migration asserts it:**
-- money: `admin_adjust_wallet`, `admin_send_gift`, `admin_reverse_gift`, `freeze_wallet`, `unfreeze_wallet`, `approve_wallet_recharge`, `process_dispute_refund`, `admin_reward_referral`, `admin_invalidate_referral`, `set_referral_amounts` and `get_platform_earnings`;
+- money: `admin_adjust_wallet`, `admin_send_gift`, `admin_reverse_gift`, `freeze_wallet`, `unfreeze_wallet`, `approve_wallet_recharge`, `process_dispute_refund`, `admin_refund_ride_commission`, `admin_reward_referral`, `admin_invalidate_referral`, `set_referral_amounts`, `admin_send_wallet_v2_bonus_push` and `get_platform_earnings`;
 - roles and team: `promote_user_role`, `admin_set_user_level` and the team functions;
 - configuration.
 
@@ -261,7 +261,7 @@ Each delivery moves the panel services to the new functions for every role and h
 - **Re-running old migrations.** Re-running 00628, 00660, 00485, 00629, 00488 or the 00663 views, which use plain `CREATE OR REPLACE`, would silently reset the gates to admin-only. To be recorded in CLAUDE.md.
 - **Applying:**
   - `admin_set_user_active` has `DELETE` in its body, so its migration goes through the SQL Editor: MCP does not show the approval for it;
-  - the policies on about 30 tables are created with a `lock_timeout` and locks taken in the app's order, rides first;
+  - the policies on 33 tables and the seven panel views are created under `lock_timeout = '500ms'`, with the views locked first. No order of the tables agrees with every app path, so the migration is the side that gives up in a lock cycle: apply it at a quiet hour and run it again on 55P03 or 40P01;
   - CRLF is normalized.
 - **Per-person audit.** `ride_transitions.actor_role` says `admin` for an operator's actions. Reports by person use `actor_id` and `admin_actions`.
 - **Performance.** Every gate is wrapped in `(SELECT …)`. The live map evaluates RLS on every `driver_profiles` event, once per operator watching.

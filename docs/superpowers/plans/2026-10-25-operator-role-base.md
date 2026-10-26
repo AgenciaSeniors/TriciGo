@@ -1128,7 +1128,7 @@ The draft is complete. Read it before moving it: every section's comment says wh
 | 1 | `is_operator()`, `is_ops_staff()`, EXECUTE for anon, authenticated, service_role |
 | 2 | 33 `<table>_select_operator` policies, `v_admin_select` on vehicles widened to `is_ops_staff()`, three storage policies |
 | 3 | the seven panel views recreated from their deparsed text with the operator in the gate, panel_rides "staff" list; new `ops_delivery_details` view without `delivery_otp`, REVOKE ALL then GRANT SELECT to authenticated and service_role |
-| 4 + 5 | one md5-guarded patch loop over 30 functions (read gates, role lists, team), then the team_invitations CHECK replaced |
+| 4 + 5 | one md5-guarded patch loop over 29 functions (read gates, role lists, team), then the team_invitations CHECK replaced |
 | 6 | `_sos_staff_alert()` and its AFTER INSERT trigger |
 | 7 | CRLF cleanup of the three created functions |
 | 8 | the self-check block |
@@ -1227,7 +1227,7 @@ The runner builds `pr668` from stubs, prod objects, 00667 and the seed. It runs:
 
 | Group | What it checks |
 |---|---|
-| S0 | the scaffold is prod: patched bodies, view definitions, `is_admin()`, the enum value |
+| S0 | the scaffold is prod: patched bodies, view definitions, `is_admin()`, the enum value, the two money functions the scaffold lacks, and no function with the literal `'operator'` before 00668 |
 | T1 | helpers, by role and as anon |
 | T2 | the operator reads all 33 tables, vehicles and only the three buckets |
 | T3 | the operator reads the seven views like an admin; `ops_delivery_details` without the code, nothing for a customer, permission denied for anon; an operator's cancel counts as staff |
@@ -1235,13 +1235,14 @@ The runner builds `pr668` from stubs, prod objects, 00667 and the seed. It runs:
 | T5 | each of the 18 read gates refuses a customer and lets the operator through; the live fleet lists the online driver; marketing still has no fleet |
 | T6 | the operator cancels its own search as a customer |
 | T7 | a help alert reaches active admins, super admins and operators, not marketing or an inactive operator |
-| T8 | SOS: push recipients and incident link, one push per person and minute, not to the reporter, not for other incident types, a failing push or a missing key never refuses the SOS and is logged |
+| T8 | SOS: push recipients and incident link, one push per person and minute, not to the reporter, not for other incident types, a failing push or a missing key never refuses the SOS and is logged, the title (name and initial, the test prefix, the fallback), a lock wait on the rate limit, an SOS without a reporter |
 | T9 | team: rank, invite as operator, list, move marketing to operator, digest recipients |
 | T10 | level, promotion and blocking stay closed to the operator |
-| G1, G2 | the patched and created bodies (GREEN only) |
+| T11 | the operator's 177 write probes give the same result before and after 00668, and `ops_delivery_details` refuses every write |
+| G1-G7 | the patched and created bodies, the panel views, the functions with the literal `'operator'`, the SOS trigger and the settings of its function, and the reset of `lock_timeout` (GREEN only) |
 | G0 | a snapshot of everything else unchanged |
 | C | a CRLF copy on a fresh database |
-| N0-N8 | negative proofs that each self-check really aborts |
+| N0-N15b | negative proofs that each self-check really aborts |
 
 - [ ] **Step 1: Move the runner**
 
@@ -1257,15 +1258,15 @@ Expected: every file shows `w/lf` (`.gitattributes` forces LF there). If one sho
 
 Run: `PGBIN=$PGBIN PGPORT=$PGPORT PYTHON=python bash supabase/tests/00668/run.sh none`
 Expected:
-- **Pass:** S0.1 to S0.4, the customer half of every T5 gate, T5.m, T3.e (the view does not exist yet, so it has no code column) and T10.1 to T10.3. A T3 view row passes too when admin and operator both read 0 rows from it.
-- **Fail:** T1 (`is_operator` does not exist), every T2 table, T2.v, T2.s, T3 for the views an admin reads rows from, T3.d, T3.f to T3.h, the operator half of every T5 gate, T5.f, T6.1, T7.1, T8.1 to T8.6, T9.1 to T9.6.
+- **Pass:** S0.1 to S0.6, T3.e (the view does not exist yet, so it has no code column), the customer half of every T5 gate, T5.m, T8.4, T10.1 to T10.3 and T11.0 to T11.2 (the write probes are the same before and after). Measured on 2026-10-26: PASS 34, FAIL 92.
+- **Fail:** everything else.
 - **Exit code:** non-zero.
 - **Write down the counts** (PASS n, FAIL m) for the PR body.
 
 - [ ] **Step 3: GREEN**
 
 Run: `PGBIN=$PGBIN PGPORT=$PGPORT PYTHON=python bash supabase/tests/00668/run.sh supabase/migrations/00668_operator_role_base.sql`
-Expected: `FAIL 0`, exit code 0. That covers M1 and M2 (applied twice), T1-T10, G0-G2, C2-C4 and N0-N8.
+Expected: `FAIL 0`, exit code 0. Measured on 2026-10-26: PASS 163. That covers M1 and M2 (applied twice), S0, T1-T11, G0-G7, C2-C5 and N0-N15b.
 
 - [ ] **Step 4: If something fails, fix the cause, not the test**
   - **A wrong expectation from deparsing** (the exact text of a policy `qual`, a storage policy, the team CHECK, or a view tail) means the migration's check block expects text Postgres prints differently. Print the real text from `pr668`, which the runner keeps, and fix the constant in BOTH the migration's §8 and, if it is there, the runner. A sample query:
@@ -1320,6 +1321,8 @@ Expected: the build succeeds and its output contains the line `ƒ Middleware`.
 **Files:**
 - Modify: `CLAUDE.md`. Add a section after "### Rol `marketing` en el panel admin (00641/00642, PR #1115)" and its subsection.
 
+The section committed to CLAUDE.md is longer than the template below: it adds what the reviews found (the 29 patched functions, the earnings note, `share_token`, the advisor ERROR for `ops_delivery_details`, the SOS title and lock timeout, the literal `'operator'` checks, and how to apply the file).
+
 - [ ] **Step 1: Add this section** (Spanish, the house style of CLAUDE.md):
 
 ````markdown
@@ -1334,7 +1337,7 @@ Una persona de operaciones: viajes en vivo, soporte, alta de conductores, cuenta
 - **Transiciones de viaje:** `enforce_ride_transition` trata al operador como `customer`, igual que a marketing: viaja como pasajero sin transiciones de admin. La entrega 3 lo convierte en `admin` solo dentro de una función `ops_*` sobre ese viaje.
 - **Avisos:** `_support_alert` suma al operador. `_sos_staff_alert` (trigger `incident_reports_sos_staff_alert`, AFTER INSERT de un SOS) manda un push a operadores y admins activos, con el enlace al incidente, por `cron_http_post` (etiqueta `sos-staff-alert`), uno por persona que reporta por minuto, y nunca rechaza el SOS: un fallo queda en `rpc_attempt_log` (`_sos_staff_alert`, `alert_failed`).
 - **Equipo:** el operador entra al CHECK de `team_invitations`, a las listas de rol de las funciones de equipo y a `_team_role_rank` con 1, igual que marketing. Pasar de marketing a operador se hace con "Cambiar rol": aceptar una invitación nunca baja un rol.
-- **Cuerpos tras 00668** (md5 de `prosrc`): una migración que redefina cualquiera de las 30 funciones parcheadas parte del cuerpo vivo; los valores están en `supabase/tests/00668/run.sh` (`NEW_BODIES`). Re-correr 00628, 00660, 00485, 00629, 00488 o las vistas de 00663, que usan `CREATE OR REPLACE` sin guarda, devolvería esas verjas a solo admin sin error.
+- **Cuerpos tras 00668** (md5 de `prosrc`): una migración que redefina cualquiera de las 29 funciones parcheadas parte del cuerpo vivo; los valores están en `supabase/tests/00668/run.sh` (`NEW_BODIES`). Re-correr 00628, 00660, 00485, 00629, 00488 o las vistas de 00663, que usan `CREATE OR REPLACE` sin guarda, devolvería esas verjas a solo admin sin error.
 - **Estado (2026-10-25):** 00667 y 00668 no están aplicadas en prod.
 ````
 
