@@ -353,11 +353,12 @@ val "T8.3 an operator's own SOS does not push the operator" \
 val "T8.4 another kind of incident pushes nobody" \
   "BEGIN; $(as_owner) DELETE FROM public.test_http_calls; INSERT INTO public.incident_reports (type, reported_by) VALUES ('safety_concern', '$CARL'); SELECT count(*) FROM public.test_http_calls; ROLLBACK;" \
   "0"
+# The function warns on purpose; client_min_messages keeps the warning out of the compared value.
 val "T8.5 a failing push never refuses the SOS, and is logged" \
-  "BEGIN; SET LOCAL test.http_fail = '1'; $(as_owner) INSERT INTO public.incident_reports (id, type, reported_by) VALUES ('$SOS1', 'sos', '$CARL'); SELECT (SELECT count(*) FROM public.incident_reports WHERE id = '$SOS1') || ' ' || (SELECT outcome FROM public.test_rpc_log WHERE rpc_name = '_sos_staff_alert'); ROLLBACK;" \
+  "BEGIN; SET LOCAL client_min_messages = error; SET LOCAL test.http_fail = '1'; $(as_owner) INSERT INTO public.incident_reports (id, type, reported_by) VALUES ('$SOS1', 'sos', '$CARL'); SELECT (SELECT count(*) FROM public.incident_reports WHERE id = '$SOS1') || ' ' || (SELECT outcome FROM public.test_rpc_log WHERE rpc_name = '_sos_staff_alert'); ROLLBACK;" \
   "1 alert_failed"
 val "T8.6 without the service key the SOS is kept and the failure logged" \
-  "BEGIN; SET LOCAL test.no_key = '1'; $(as_owner) INSERT INTO public.incident_reports (id, type, reported_by) VALUES ('$SOS1', 'sos', '$CARL'); SELECT (SELECT count(*) FROM public.incident_reports WHERE id = '$SOS1') || ' ' || (SELECT metadata->>'error' FROM public.test_rpc_log WHERE rpc_name = '_sos_staff_alert'); ROLLBACK;" \
+  "BEGIN; SET LOCAL client_min_messages = error; SET LOCAL test.no_key = '1'; $(as_owner) INSERT INTO public.incident_reports (id, type, reported_by) VALUES ('$SOS1', 'sos', '$CARL'); SELECT (SELECT count(*) FROM public.incident_reports WHERE id = '$SOS1') || ' ' || (SELECT metadata->>'error' FROM public.test_rpc_log WHERE rpc_name = '_sos_staff_alert'); ROLLBACK;" \
   "1 no service role key"
 val "T8.7 the title names the reporter by first name and initial" \
   "BEGIN; $(as_owner) INSERT INTO public.incident_reports (id, type, reported_by) VALUES ('$SOS1', 'sos', '$CARL'); SELECT body->>'title' FROM public.test_http_calls; ROLLBACK;" \
@@ -402,11 +403,11 @@ val "T9.1 an operator ranks with marketing" "SELECT public._team_role_rank('oper
 hasnt "T9.2 a super admin invites an operator" \
   "BEGIN; $(as_user $SAM) SELECT public.create_team_invitation('nueva@example.com', 'operator', 'Nueva Operadora'); ROLLBACK;" "team_bad_role"
 val "T9.3 the invitation is stored for the operator role" \
-  "BEGIN; $(as_user $SAM) SELECT public.create_team_invitation('nueva@example.com', 'operator', 'Nueva Operadora'); RESET ROLE; SELECT role FROM public.team_invitations WHERE email = 'nueva@example.com'; ROLLBACK;" "operator"
+  "BEGIN; $(as_user $SAM) DO \$d\$ BEGIN PERFORM public.create_team_invitation('nueva@example.com', 'operator', 'Nueva Operadora'); END \$d\$; RESET ROLE; SELECT role FROM public.team_invitations WHERE email = 'nueva@example.com'; ROLLBACK;" "operator"
 has "T9.4 the team list shows the operator" \
   "BEGIN; $(as_user $SAM) SELECT public.list_team()::text; ROLLBACK;" "$OLGA"
 val "T9.5 a super admin moves marketing to operator" \
-  "BEGIN; $(as_user $SAM) SELECT public.set_team_member_role('$MIA', 'operator', 'Pasa a operaciones'); RESET ROLE; SELECT role FROM public.users WHERE id = '$MIA'; ROLLBACK;" "operator"
+  "BEGIN; $(as_user $SAM) DO \$d\$ BEGIN PERFORM public.set_team_member_role('$MIA', 'operator', 'Pasa a operaciones'); END \$d\$; RESET ROLE; SELECT role FROM public.users WHERE id = '$MIA'; ROLLBACK;" "operator"
 val "T9.6 the daily digest goes to the active operator" \
   "BEGIN; $(as_owner) SELECT string_agg(role::text, ',') FROM public.team_digest_recipients() WHERE user_id = '$OLGA'; ROLLBACK;" "operator"
 
