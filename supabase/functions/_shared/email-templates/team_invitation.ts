@@ -23,6 +23,7 @@ const ROLE_LABELS: Record<string, string> = {
   super_admin: 'Superadministrador',
   admin: 'Administrador',
   marketing: 'Marketing',
+  operator: 'Operador',
 };
 
 /** The only links this e-mail may carry: the panel's invitation page. */

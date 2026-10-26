@@ -81,6 +81,15 @@ describe('team daily digest template', () => {
     expect(html).not.toContain('Pendiente ahora');
   });
 
+  it('an operator sees the pending work but no money (00668)', () => {
+    const html = teamDailyDigestHtml({ ...base, role: 'operator' });
+    expect(html).toContain('Pendiente ahora');
+    expect(html).toContain('Conductores esperando aprobaci');
+    expect(html).toContain('Disputas abiertas');
+    expect(html).not.toContain('Cobrado en viajes');
+    expect(html).not.toContain('CUP');
+  });
+
   it('an unknown role gets the marketing version', () => {
     const html = teamDailyDigestHtml({ ...base, role: 'customer' });
     expect(html).not.toContain('CUP');
