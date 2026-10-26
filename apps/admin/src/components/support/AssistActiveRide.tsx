@@ -54,11 +54,14 @@ export function AssistActiveRide({
   ctx,
   now,
   onChanged,
+  allowed = true,
 }: {
   ctx: ActiveRideContext;
   now: number;
   /** Reloads the page; the buttons stay disabled until it settles. */
   onChanged: () => Promise<void>;
+  /** Shows the advance, complete and release buttons (rides.act). */
+  allowed?: boolean;
 }) {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
@@ -361,7 +364,7 @@ export function AssistActiveRide({
               )}
             </p>
           )}
-          {hasActions && (
+          {allowed && hasActions && (
             <div className="flex flex-wrap gap-3">
               {showAdvance && (
                 <button type="button" disabled={busy} className={ACTION_BTN} onClick={() => open('advance')}>

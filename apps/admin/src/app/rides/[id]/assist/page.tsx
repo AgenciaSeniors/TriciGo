@@ -31,6 +31,7 @@ import { assistErrorKey } from '@/components/support/assistErrors';
 import { AssistServiceChange } from '@/components/support/AssistServiceChange';
 import { telLink, waitLabel } from '@/components/support/supportFormat';
 import { formatAdminDate } from '@/lib/formatDate';
+import { usePanelCan } from '@/lib/usePanelCan';
 
 const CARD = 'rounded-xl border border-line bg-surface-elevated p-6 shadow-sm';
 // The statuses with a driver on the ride: the page shows the active view (00660) for them.
@@ -51,6 +52,8 @@ type LoadState = 'loading' | 'ready' | 'unavailable' | 'error';
 
 export default function RideAssistPage() {
   const { t } = useTranslation('admin');
+  const { can } = usePanelCan();
+  const canAssist = can('rides.act');
   const { id } = useParams<{ id: string }>();
   const [ctx, setCtx] = useState<RideAssistContext | null>(null);
   const [active, setActive] = useState<ActiveRideContext | null>(null);
@@ -205,7 +208,7 @@ export default function RideAssistPage() {
         </div>
       )}
 
-      {active && <AssistActiveRide ctx={active} now={now} onChanged={load} />}
+      {active && <AssistActiveRide ctx={active} now={now} onChanged={load} allowed={canAssist} />}
 
       {!active && (
         <>
@@ -294,8 +297,9 @@ export default function RideAssistPage() {
                 pickupAddress={ride.pickup_address}
                 typeOptions={typeOptions}
                 onChanged={load}
+                allowed={canAssist}
               />
-              <AssistServiceChange ride={ride} configs={configs} proposalLine={proposalLine} onChanged={load} />
+              {canAssist && <AssistServiceChange ride={ride} configs={configs} proposalLine={proposalLine} onChanged={load} />}
             </>
           )}
         </>

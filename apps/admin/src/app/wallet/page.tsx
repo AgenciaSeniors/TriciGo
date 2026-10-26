@@ -7,6 +7,7 @@ import { adminService } from '@tricigo/api/services/admin';
 import { formatTriciCoin, getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useAdminUser } from '@/lib/useAdminUser';
+import { usePanelCan } from '@/lib/usePanelCan';
 import type {
   LedgerTransaction,
   WalletRechargeRequest,
@@ -58,6 +59,7 @@ function ledgerTypeLabel(type: string): string {
 export default function WalletPage() {
   const { userId: adminUserId } = useAdminUser();
   const { t } = useTranslation('admin');
+  const { can } = usePanelCan();
   const { showToast } = useToast();
 
   const [stats, setStats] = useState<WalletStats | null>(null);
@@ -327,7 +329,7 @@ export default function WalletPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <WalletV2BonusPushButton />
+          {can('money.act') && <WalletV2BonusPushButton />}
           <button
             type="button"
             onClick={handleExport}
@@ -378,7 +380,7 @@ export default function WalletPage() {
           onSortChange={setSortRecharges}
           pagination={{ page, pageSize: PAGE_SIZE, hasMore: recharges.length === PAGE_SIZE }}
           onPaginationChange={(next) => setPage(next.page)}
-          rowActions={[
+          rowActions={can('money.act') ? [
             {
               label: t('wallet_admin.action_approve', { defaultValue: 'Aprobar' }),
               onClick: (r) => {
@@ -392,7 +394,7 @@ export default function WalletPage() {
                 if (processing !== r.id) void handleRecharge(r, 'rejected');
               },
             },
-          ]}
+          ] : undefined}
         />
       )}
 

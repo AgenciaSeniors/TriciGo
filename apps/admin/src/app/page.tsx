@@ -18,6 +18,7 @@ import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP } from '@tricigo/utils';
 import type { Ride, DriverProfileWithUser, AdminAction } from '@tricigo/types';
 import { useAdminUser } from '@/lib/useAdminUser';
+import { usePanelCan } from '@/lib/usePanelCan';
 import { getDashboardMetricsShared } from '@/lib/dashboardMetrics';
 import { DashboardHero } from '@/components/dashboard/DashboardHero';
 import { KpiCard } from '@/components/dashboard/KpiCard';
@@ -90,6 +91,9 @@ function deltaPercent(history: number[], current: number): number | null {
 
 export default function DashboardPage() {
   const { email } = useAdminUser();
+  const { can } = usePanelCan();
+  // The auto-actions card reads the audit log (00668: not for the operator).
+  const canReadAudit = can('audit.read');
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [recentRides, setRecentRides] = useState<Ride[]>([]);
   const [pendingDrivers, setPendingDrivers] = useState<DriverProfileWithUser[]>([]);
@@ -115,7 +119,7 @@ export default function DashboardPage() {
           getDashboardMetricsShared(),
           adminService.getRides({}, 0, 6),
           adminService.getDriversByStatus('pending_verification', 0, 5),
-          adminService.getRecentAutoActions(6).catch(() => [] as AdminAction[]),
+          canReadAudit ? adminService.getRecentAutoActions(6).catch(() => [] as AdminAction[]) : Promise.resolve([] as AdminAction[]),
         ]);
         if (cancelled) return;
         setMetrics(metricsData);
@@ -146,7 +150,7 @@ export default function DashboardPage() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, []);
+  }, [canReadAudit]);
 
   const kpis = useMemo(() => {
     const m = metrics ?? {
@@ -384,40 +388,42 @@ export default function DashboardPage() {
           )}
         </SectionCard>
 
-        <SectionCard
-          eyebrow="Automatismos"
-          title="Acciones del sistema"
-          description="Lo que el motor decidió sin intervención humana."
-          action={{ label: 'Auditoría', href: '/audit' }}
-        >
-          {autoActions.length === 0 ? (
-            <EmptyState
-              icon={Sparkles}
-              tone="info"
-              title="Motor en reposo"
-              body="No hay acciones automatizadas recientes. Todo se está manejando a mano."
-            />
-          ) : (
-            <div className="divide-y divide-line">
-              {autoActions.map((action) => (
-                <ActivityRow
-                  key={action.id}
-                  icon={Bot}
-                  tone="info"
-                  primary={action.action.replace(/_/g, ' ')}
-                  secondary={
-                    action.target_id ? (
-                      <span className="font-mono text-[10px]">{action.target_id.slice(0, 10)}…</span>
-                    ) : (
-                      'Sin objetivo'
-                    )
-                  }
-                  trailing={relativeTime(action.created_at)}
-                />
-              ))}
-            </div>
-          )}
-        </SectionCard>
+        {canReadAudit && (
+          <SectionCard
+            eyebrow="Automatismos"
+            title="Acciones del sistema"
+            description="Lo que el motor decidió sin intervención humana."
+            action={{ label: 'Auditoría', href: '/audit' }}
+          >
+            {autoActions.length === 0 ? (
+              <EmptyState
+                icon={Sparkles}
+                tone="info"
+                title="Motor en reposo"
+                body="No hay acciones automatizadas recientes. Todo se está manejando a mano."
+              />
+            ) : (
+              <div className="divide-y divide-line">
+                {autoActions.map((action) => (
+                  <ActivityRow
+                    key={action.id}
+                    icon={Bot}
+                    tone="info"
+                    primary={action.action.replace(/_/g, ' ')}
+                    secondary={
+                      action.target_id ? (
+                        <span className="font-mono text-[10px]">{action.target_id.slice(0, 10)}…</span>
+                      ) : (
+                        'Sin objetivo'
+                      )
+                    }
+                    trailing={relativeTime(action.created_at)}
+                  />
+                ))}
+              </div>
+            )}
+          </SectionCard>
+        )}
       </div>
     </div>
   );

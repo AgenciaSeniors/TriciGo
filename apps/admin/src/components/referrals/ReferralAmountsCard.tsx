@@ -58,7 +58,7 @@ function parseAmount(raw: string): number | null {
   return n <= INT4_MAX ? n : null;
 }
 
-export function ReferralAmountsCard() {
+export function ReferralAmountsCard({ readOnly = false }: { readOnly?: boolean } = {}) {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
   const [saved, setSaved] = useState<ReferralAmounts | null>(null);
@@ -190,7 +190,7 @@ export function ReferralAmountsCard() {
                     autoComplete="off"
                     value={value}
                     placeholder={draft ? undefined : '…'}
-                    disabled={!draft || saving}
+                    disabled={readOnly || !draft || saving}
                     aria-invalid={invalid || undefined}
                     aria-describedby={describedBy}
                     onChange={(e) => setDraft((d) => (d ? { ...d, [k]: e.target.value } : d))}
@@ -222,26 +222,28 @@ export function ReferralAmountsCard() {
               );
             })}
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {changedKeys.length > 0 && !saving && (
+          {!readOnly && (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {changedKeys.length > 0 && !saving && (
+                <button
+                  type="button"
+                  onClick={() => saved && setDraft(toDraft(saved))}
+                  className="inline-flex h-9 items-center rounded-full border border-line bg-surface px-4 text-[12.5px] font-medium text-ink transition-colors hover:bg-surface-sunken"
+                >
+                  {t('referrals.amounts_discard', { defaultValue: 'Descartar cambios' })}
+                </button>
+              )}
               <button
-                type="button"
-                onClick={() => saved && setDraft(toDraft(saved))}
-                className="inline-flex h-9 items-center rounded-full border border-line bg-surface px-4 text-[12.5px] font-medium text-ink transition-colors hover:bg-surface-sunken"
+                type="submit"
+                disabled={!draft || saving || changedKeys.length === 0}
+                className="inline-flex h-9 items-center rounded-full bg-ink px-4 text-[12.5px] font-medium text-surface transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {t('referrals.amounts_discard', { defaultValue: 'Descartar cambios' })}
+                {saving
+                  ? t('referrals.amounts_saving', { defaultValue: 'Guardando…' })
+                  : t('referrals.amounts_save', { defaultValue: 'Guardar montos' })}
               </button>
-            )}
-            <button
-              type="submit"
-              disabled={!draft || saving || changedKeys.length === 0}
-              className="inline-flex h-9 items-center rounded-full bg-ink px-4 text-[12.5px] font-medium text-surface transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {saving
-                ? t('referrals.amounts_saving', { defaultValue: 'Guardando…' })
-                : t('referrals.amounts_save', { defaultValue: 'Guardar montos' })}
-            </button>
-          </div>
+            </div>
+          )}
         </form>
       )}
     </SectionCard>

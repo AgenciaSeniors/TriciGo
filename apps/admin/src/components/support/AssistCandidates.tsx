@@ -29,13 +29,15 @@ interface Props {
   pickupAddress: string;
   typeOptions: ServiceTypeOption[];
   onChanged: () => void;
+  /** Shows the offer and assign buttons (rides.act). */
+  allowed?: boolean;
 }
 
 const CHIP = 'rounded-full px-2 py-0.5 text-xs font-semibold';
 const LINK_BTN =
   'inline-flex items-center gap-1 rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface-sunken';
 
-export function AssistCandidates({ rideId, rideServiceType, pickupAddress, typeOptions, onChanged }: Props) {
+export function AssistCandidates({ rideId, rideServiceType, pickupAddress, typeOptions, onChanged, allowed = true }: Props) {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
   const [serviceType, setServiceType] = useState(rideServiceType);
@@ -216,25 +218,29 @@ export function AssistCandidates({ rideId, rideServiceType, pickupAddress, typeO
                       {t('ride_assist.call')}
                     </a>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => void offer(c)}
-                    disabled={!canAct}
-                    className="rounded-lg bg-primary-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {t('ride_assist.send_offer')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setReason('');
-                      setAssignTo(c);
-                    }}
-                    disabled={!canAct || !c.is_online || c.busy_ride_id !== null}
-                    className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {t('ride_assist.assign')}
-                  </button>
+                  {allowed && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => void offer(c)}
+                        disabled={!canAct}
+                        className="rounded-lg bg-primary-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {t('ride_assist.send_offer')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReason('');
+                          setAssignTo(c);
+                        }}
+                        disabled={!canAct || !c.is_online || c.busy_ride_id !== null}
+                        className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {t('ride_assist.assign')}
+                      </button>
+                    </>
+                  )}
                 </div>
               </li>
             );

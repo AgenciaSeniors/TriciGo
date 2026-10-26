@@ -6,7 +6,6 @@ import { referralService } from '@tricigo/api/services/referral';
 import { formatCUP, getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import type { Referral, ReferralStatus } from '@tricigo/types';
-import { menuRole } from '@tricigo/utils/adminPanelAccess';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
@@ -15,7 +14,7 @@ import { StatusBadge } from '@/components/data/StatusBadge';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { ReferralAmountsCard } from '@/components/referrals/ReferralAmountsCard';
 import { formatAdminDate } from '@/lib/formatDate';
-import { usePanelRole } from '@/lib/panelRole';
+import { usePanelCan } from '@/lib/usePanelCan';
 
 const PAGE_SIZE = 20;
 
@@ -25,8 +24,7 @@ export default function ReferralsPage() {
   const { t } = useTranslation('admin');
   // 00642: marketing reads referrals; rewarding or invalidating one moves money, so it stays with admins.
   // 00666: admins and marketing both edit the four referral amounts (the "Montos" card).
-  const { role } = usePanelRole();
-  const isMarketing = menuRole(role) === 'marketing';
+  const { can } = usePanelCan();
 
   const TABS: StatusTab<Filter>[] = useMemo(() => [
     { id: 'all', label: t('referrals.filter_all', { defaultValue: 'Todos' }) },
@@ -201,7 +199,7 @@ export default function ReferralsPage() {
         </p>
       </div>
 
-      <ReferralAmountsCard />
+      <ReferralAmountsCard readOnly={!can('referrals.amounts')} />
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <KpiCard label={t('referrals.kpi_total', { defaultValue: 'Total' })} value={String(stats.total)} loading={loading} />
@@ -248,7 +246,7 @@ export default function ReferralsPage() {
         onSortChange={setSort}
         pagination={{ page, pageSize: PAGE_SIZE, hasMore: referrals.length === PAGE_SIZE }}
         onPaginationChange={(next) => setPage(next.page)}
-        rowActions={isMarketing ? undefined : [
+        rowActions={!can('referrals.rewards') ? undefined : [
           {
             label: t('referrals.action_reward', { defaultValue: 'Premiar' }),
             onClick: (r) => {

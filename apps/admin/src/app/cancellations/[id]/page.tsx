@@ -7,6 +7,7 @@ import { adminService } from '@tricigo/api/services/admin';
 import { useTranslation } from '@tricigo/i18n';
 import { getErrorMessage } from '@tricigo/utils';
 import { useAdminUser } from '@/lib/useAdminUser';
+import { usePanelCan } from '@/lib/usePanelCan';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
@@ -46,6 +47,7 @@ type Level = 'dismiss' | 'warning' | 'reputation';
 
 export default function CancellationReviewDetailPage() {
   const { t } = useTranslation('admin');
+  const { can } = usePanelCan();
   const { showToast } = useToast();
   const { userId: adminUserId } = useAdminUser();
   const { id } = useParams<{ id: string }>();
@@ -142,30 +144,32 @@ export default function CancellationReviewDetailPage() {
         </div>
 
         {/* Actions */}
-        <div className="flex flex-wrap gap-2">
-          {open && (
-            <>
-              <button type="button" onClick={() => { setNotes(''); setPendingLevel('dismiss'); }}
-                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700">
-                {t('cancellations.action_dismiss', { defaultValue: 'Descartar' })}
+        {can('moderation.act') && (
+          <div className="flex flex-wrap gap-2">
+            {open && (
+              <>
+                <button type="button" onClick={() => { setNotes(''); setPendingLevel('dismiss'); }}
+                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700">
+                  {t('cancellations.action_dismiss', { defaultValue: 'Descartar' })}
+                </button>
+                <button type="button" onClick={() => { setNotes(''); setPendingLevel('warning'); }}
+                  className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-600">
+                  {t('cancellations.action_warning', { defaultValue: 'Aviso' })}
+                </button>
+                <button type="button" onClick={() => { setNotes(''); setPendingLevel('reputation'); }}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700">
+                  {t('cancellations.action_reputation', { defaultValue: 'Bajar reputación' })}
+                </button>
+              </>
+            )}
+            {review.status === 'sanctioned' && (
+              <button type="button" onClick={() => setPendingLevel('reverse')}
+                className="rounded-lg border border-line bg-surface-elevated px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-sunken">
+                {t('cancellations.action_reverse', { defaultValue: 'Revertir' })}
               </button>
-              <button type="button" onClick={() => { setNotes(''); setPendingLevel('warning'); }}
-                className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-600">
-                {t('cancellations.action_warning', { defaultValue: 'Aviso' })}
-              </button>
-              <button type="button" onClick={() => { setNotes(''); setPendingLevel('reputation'); }}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700">
-                {t('cancellations.action_reputation', { defaultValue: 'Bajar reputación' })}
-              </button>
-            </>
-          )}
-          {review.status === 'sanctioned' && (
-            <button type="button" onClick={() => setPendingLevel('reverse')}
-              className="rounded-lg border border-line bg-surface-elevated px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-sunken">
-              {t('cancellations.action_reverse', { defaultValue: 'Revertir' })}
-            </button>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Signals */}

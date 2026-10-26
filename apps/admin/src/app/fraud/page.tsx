@@ -7,6 +7,7 @@ import type { FraudAlert } from '@tricigo/types';
 import { getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useAdminUser } from '@/lib/useAdminUser';
+import { usePanelCan } from '@/lib/usePanelCan';
 import { useToast } from '@/components/ui/AdminToast';
 import { DataTable, type DataColumn } from '@/components/data/DataTable';
 import { FilterBar, type StatusTab } from '@/components/data/FilterBar';
@@ -24,6 +25,7 @@ const SEVERITY_CLASS: Record<string, string> = {
 export default function FraudAlertsPage() {
   const { userId: adminUserId } = useAdminUser();
   const { t } = useTranslation('admin');
+  const { can } = usePanelCan();
   const { showToast } = useToast();
 
   const [alerts, setAlerts] = useState<FraudAlert[]>([]);
@@ -197,14 +199,14 @@ export default function FraudAlertsPage() {
               : t('fraud.empty_all_body', { defaultValue: 'Todavía no hay alertas para mostrar en este alcance.' }),
           tone: 'success',
         }}
-        rowActions={[
+        rowActions={can('moderation.act') ? [
           {
             label: t('fraud.resolve', { defaultValue: 'Resolver' }),
             onClick: (a) => {
               if (!a.resolved) setResolveModalId(a.id);
             },
           },
-        ]}
+        ] : undefined}
       />
 
       {/* Resolve modal */}

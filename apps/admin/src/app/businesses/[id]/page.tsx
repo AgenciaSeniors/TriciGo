@@ -7,6 +7,7 @@ import { formatTriciCoin, getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
 import { useAdminUser } from '@/lib/useAdminUser';
+import { usePanelCan } from '@/lib/usePanelCan';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { formatAdminDate } from '@/lib/formatDate';
 import { FleetReview } from '@/components/FleetReview';
@@ -26,6 +27,9 @@ const statusClasses: Record<CorporateAccountStatus, string> = {
 
 export default function BusinessDetailPage() {
   const { t } = useTranslation('admin');
+  const { can } = usePanelCan();
+  // A fleet account is fleets.review, a corporate client account corporate.clients (00668).
+  const canReviewAccount = (isFleet: boolean) => (isFleet ? can('fleets.review') : can('corporate.clients'));
   const { showToast } = useToast();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -178,7 +182,7 @@ export default function BusinessDetailPage() {
 
         {/* Actions */}
         <div className="flex gap-2">
-          {account.status === 'pending' && (
+          {canReviewAccount(Boolean(account.is_fleet_owner || hasFleet)) && account.status === 'pending' && (
             <>
               <button
                 className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
@@ -196,7 +200,7 @@ export default function BusinessDetailPage() {
               </button>
             </>
           )}
-          {account.status === 'approved' && (
+          {can('corporate.clients') && account.status === 'approved' && (
             <button
               className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
               onClick={() => setShowSuspendModal(true)}
@@ -205,7 +209,7 @@ export default function BusinessDetailPage() {
               {t('businesses.suspend')}
             </button>
           )}
-          {account.status === 'suspended' && (
+          {can('corporate.clients') && account.status === 'suspended' && (
             <button
               className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
               onClick={handleReactivate}
@@ -288,27 +292,29 @@ export default function BusinessDetailPage() {
               el pasajero paga menos pero el conductor cobra lo mismo. Deja vacío para usar el default.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              min={0}
-              max={15}
-              step={0.5}
-              className="w-24 border rounded-lg px-3 py-2 text-sm font-mono"
-              placeholder="—"
-              value={commissionInput}
-              aria-label="Comisión por viaje (%)"
-              onChange={(e) => setCommissionInput(e.target.value)}
-            />
-            <span className="text-sm text-ink-muted">%</span>
-            <button
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
-              onClick={handleSaveCommission}
-              disabled={savingCommission}
-            >
-              {savingCommission ? 'Guardando…' : 'Guardar'}
-            </button>
-          </div>
+          {can('corporate.clients') && (
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={0}
+                max={15}
+                step={0.5}
+                className="w-24 border rounded-lg px-3 py-2 text-sm font-mono"
+                placeholder="—"
+                value={commissionInput}
+                aria-label="Comisión por viaje (%)"
+                onChange={(e) => setCommissionInput(e.target.value)}
+              />
+              <span className="text-sm text-ink-muted">%</span>
+              <button
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+                onClick={handleSaveCommission}
+                disabled={savingCommission}
+              >
+                {savingCommission ? 'Guardando…' : 'Guardar'}
+              </button>
+            </div>
+          )}
         </div>
         {account.commission_percent !== null && account.commission_percent !== undefined && (
           <p className="mt-2 text-xs text-emerald-700">
@@ -323,7 +329,7 @@ export default function BusinessDetailPage() {
       {(account.is_fleet_owner || hasFleet) && adminUserId && (
         <div className="bg-surface-elevated border-line rounded-xl p-5">
           <h3 className="text-sm font-medium text-ink-muted mb-3">Flota — conductores</h3>
-          <FleetReview corporateAccountId={account.id} adminUserId={adminUserId} />
+          <FleetReview corporateAccountId={account.id} adminUserId={adminUserId} canReview={can('fleets.review')} />
         </div>
       )}
 

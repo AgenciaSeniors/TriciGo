@@ -8,6 +8,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
 import type { SupportTicket, TicketMessage, TicketStatus } from '@tricigo/types';
 import { useAdminUser } from '@/lib/useAdminUser';
+import { usePanelCan } from '@/lib/usePanelCan';
 import { formatAdminDate } from '@/lib/formatDate';
 import { FilterBar, type StatusTab } from '@/components/data/FilterBar';
 import { StatusBadge } from '@/components/data/StatusBadge';
@@ -25,6 +26,8 @@ const PRIORITY_CLASS: Record<string, string> = {
 export default function SupportPage() {
   const { userId: adminUserId } = useAdminUser();
   const { t } = useTranslation('admin');
+  const { can } = usePanelCan();
+  const canReply = can('tickets.act');
   const { showToast } = useToast();
 
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
@@ -294,24 +297,26 @@ export default function SupportPage() {
                 </div>
                 <div className="flex flex-col items-end gap-1.5">
                   <StatusBadge domain="support" status={selected.status} size="md" />
-                  <div className="flex gap-1.5">
-                    {selected.status !== 'resolved' && (
-                      <button
-                        onClick={() => void handleStatusChange(selected.id, 'resolved')}
-                        className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-400"
-                      >
-                        {t('support.btn_resolve', { defaultValue: 'Resolver' })}
-                      </button>
-                    )}
-                    {selected.status !== 'closed' && (
-                      <button
-                        onClick={() => void handleStatusChange(selected.id, 'closed')}
-                        className="rounded-full border border-line bg-surface px-2.5 py-0.5 text-[11px] font-medium text-ink-muted hover:text-ink"
-                      >
-                        {t('support.btn_close', { defaultValue: 'Cerrar' })}
-                      </button>
-                    )}
-                  </div>
+                  {canReply && (
+                    <div className="flex gap-1.5">
+                      {selected.status !== 'resolved' && (
+                        <button
+                          onClick={() => void handleStatusChange(selected.id, 'resolved')}
+                          className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-400"
+                        >
+                          {t('support.btn_resolve', { defaultValue: 'Resolver' })}
+                        </button>
+                      )}
+                      {selected.status !== 'closed' && (
+                        <button
+                          onClick={() => void handleStatusChange(selected.id, 'closed')}
+                          className="rounded-full border border-line bg-surface px-2.5 py-0.5 text-[11px] font-medium text-ink-muted hover:text-ink"
+                        >
+                          {t('support.btn_close', { defaultValue: 'Cerrar' })}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -349,31 +354,33 @@ export default function SupportPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 border-t border-line px-4 py-3">
-                <input
-                  value={reply}
-                  onChange={(e) => setReply(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey && reply.trim()) {
-                      e.preventDefault();
-                      void handleReply();
-                    }
-                  }}
-                  placeholder={t('support.reply_placeholder', { defaultValue: 'Escribe tu respuesta y aprieta Enter…' })}
-                  aria-label={t('support.reply_aria', { defaultValue: 'Respuesta' })}
-                  className="h-10 flex-1 rounded-full border border-line bg-surface px-4 text-[13px] text-ink placeholder:text-ink-subtle focus:border-primary-500 focus:outline-none"
-                />
-                <button
-                  onClick={() => void handleReply()}
-                  disabled={sending || !reply.trim()}
-                  className="inline-flex h-10 items-center gap-1.5 rounded-full bg-ink px-4 text-[12px] font-medium text-surface transition-opacity hover:opacity-90 disabled:opacity-50"
-                >
-                  <Send className="h-3.5 w-3.5" />
-                  {sending
-                    ? t('support.sending', { defaultValue: 'Enviando…' })
-                    : t('support.send', { defaultValue: 'Enviar' })}
-                </button>
-              </div>
+              {canReply && (
+                <div className="flex items-center gap-2 border-t border-line px-4 py-3">
+                  <input
+                    value={reply}
+                    onChange={(e) => setReply(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey && reply.trim()) {
+                        e.preventDefault();
+                        void handleReply();
+                      }
+                    }}
+                    placeholder={t('support.reply_placeholder', { defaultValue: 'Escribe tu respuesta y aprieta Enter…' })}
+                    aria-label={t('support.reply_aria', { defaultValue: 'Respuesta' })}
+                    className="h-10 flex-1 rounded-full border border-line bg-surface px-4 text-[13px] text-ink placeholder:text-ink-subtle focus:border-primary-500 focus:outline-none"
+                  />
+                  <button
+                    onClick={() => void handleReply()}
+                    disabled={sending || !reply.trim()}
+                    className="inline-flex h-10 items-center gap-1.5 rounded-full bg-ink px-4 text-[12px] font-medium text-surface transition-opacity hover:opacity-90 disabled:opacity-50"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    {sending
+                      ? t('support.sending', { defaultValue: 'Enviando…' })
+                      : t('support.send', { defaultValue: 'Enviar' })}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
