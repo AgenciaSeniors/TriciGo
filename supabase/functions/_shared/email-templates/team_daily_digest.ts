@@ -133,6 +133,7 @@ export function ridesSummary(requested: number, completed: number): string {
     `${formatCount(c)} ${c === 1 ? 'completado' : 'completados'}`;
 }
 
+/** Only admins and super admins see the money block. */
 export function seesMoney(role: string): boolean {
   return role === 'super_admin' || role === 'admin';
 }

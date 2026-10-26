@@ -86,8 +86,17 @@ describe('team daily digest template', () => {
     expect(html).toContain('Pendiente ahora');
     expect(html).toContain('Conductores esperando aprobaci');
     expect(html).toContain('Disputas abiertas');
-    expect(html).not.toContain('Cobrado en viajes');
-    expect(html).not.toContain('CUP');
+    // The whole pending block, value by value (METRICS.pending: 1 under review; 2 incidents, 1 of
+    // them SOS; 2 disputes, 1 overdue).
+    const text = decode(html);
+    expect(text).toMatch(/Conductores esperando aprobación<\/td><td[^>]*>1<\/td>/);
+    expect(text).toContain('Incidentes abiertos');
+    expect(text).toContain('2 (SOS: 1)');
+    expect(text).toContain('2 (fuera de plazo: 1)');
+    // Nothing of the money block or its amounts (3,500 charged, 525 commission, 5,000 recharged).
+    for (const leak of ['Dinero', 'Cobrado en viajes', 'Comisión', 'Saldo recargado', 'CUP', '3,500', '525', '5,000']) {
+      expect(text).not.toContain(leak);
+    }
   });
 
   it('an unknown role gets the marketing version', () => {
