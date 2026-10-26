@@ -190,7 +190,8 @@ export function ReferralAmountsCard({ readOnly = false }: { readOnly?: boolean }
                     autoComplete="off"
                     value={value}
                     placeholder={draft ? undefined : '…'}
-                    disabled={readOnly || !draft || saving}
+                    readOnly={readOnly}
+                    disabled={!draft || saving}
                     aria-invalid={invalid || undefined}
                     aria-describedby={describedBy}
                     onChange={(e) => setDraft((d) => (d ? { ...d, [k]: e.target.value } : d))}

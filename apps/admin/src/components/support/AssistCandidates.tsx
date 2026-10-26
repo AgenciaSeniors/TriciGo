@@ -147,7 +147,7 @@ export function AssistCandidates({ rideId, rideServiceType, pickupAddress, typeO
         </label>
       </div>
 
-      {otherType && (
+      {otherType && allowed && (
         <p className="mb-3 rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-400">
           {t('ride_assist.candidates_other_type')}
         </p>

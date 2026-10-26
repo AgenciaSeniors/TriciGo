@@ -169,7 +169,7 @@ export type PanelCapability =
   | 'money.act'
   /** Create, edit, pause and delete promotions. */
   | 'promotions.write'
-  /** See and act on the promotions waiting for an admin: the strip and the menu dot. */
+  /** See what waits for approval: the strip and the menu dot. */
   | 'promotions.approve'
   /** Edit the referral amounts; without it the card is read-only. */
   | 'referrals.amounts'

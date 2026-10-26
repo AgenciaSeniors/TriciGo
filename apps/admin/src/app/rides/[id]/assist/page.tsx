@@ -300,6 +300,9 @@ export default function RideAssistPage() {
                 allowed={canAssist}
               />
               {canAssist && <AssistServiceChange ride={ride} configs={configs} proposalLine={proposalLine} onChanged={load} />}
+              {!canAssist && proposalLine && (
+                <p className="mb-6 rounded-lg bg-surface-sunken px-3 py-2 text-sm text-ink">{proposalLine}</p>
+              )}
             </>
           )}
         </>

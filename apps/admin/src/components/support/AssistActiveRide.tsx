@@ -349,7 +349,7 @@ export function AssistActiveRide({
         )}
       </section>
 
-      {(hasActions || ctx.delivery_proof_missing || scheduledLater) && (
+      {((allowed && hasActions) || ctx.delivery_proof_missing || scheduledLater) && (
         <section className={`${CARD} mb-6`}>
           <h2 className="mb-4 text-lg font-bold">{t('ride_assist.actions_card')}</h2>
           {scheduledLater && <p className="mb-4 text-sm text-ink-muted">{t('ride_assist.scheduled_later_note')}</p>}

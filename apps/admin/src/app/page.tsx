@@ -327,7 +327,7 @@ export default function DashboardPage() {
       {/* Activity feed + automated actions */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <SectionCard
-          className="lg:col-span-2"
+          className={canReadAudit ? 'lg:col-span-2' : 'lg:col-span-3'}
           eyebrow="Últimos seis"
           title="Viajes recientes"
           description="Las solicitudes más recientes, en cualquier estado."
