@@ -140,9 +140,9 @@ function rememberRole(request: NextRequest, response: NextResponse, role: PanelR
  * blocked. An account without a panel role (admin, super_admin, marketing or operator)
  * accepts a pending team invitation for its address, or goes to /sin-acceso.
  *
- * Sends a marketing or operator account that opens a page it cannot open to its home
- * (panelHome in @tricigo/utils/adminPanelAccess, which also holds the allow-lists the menus
- * use, 00642 and 00668).
+ * Sends an account that opens a page its role cannot open to its home (panelHome). The
+ * allow-lists live in @tricigo/utils/adminPanelAccess, the same ones the menus use (00642,
+ * 00668).
  */
 export async function middleware(request: NextRequest) {
   // Dev-only escape hatch for design previews: /foo?__preview=1

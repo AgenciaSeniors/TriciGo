@@ -99,24 +99,22 @@ function underRoute(routes: readonly string[], pathname: string): boolean {
 }
 
 /**
- * The path as Next.js matches it to a page: percent-decoded once, backslashes as slashes,
- * empty and "." segments dropped, ".." resolved. Null when it cannot be decoded. Without this,
- * "/wallet/%67ifts" or "//settings" would get past the lists below.
+ * A conservative, fail-closed reading of the raw pathname: each segment is decoded on its own,
+ * and a segment that decodes to "." or ".." or contains a slash or a backslash makes the whole
+ * path unreadable (null). So an encoded letter cannot slip past the lists below, and an encoded
+ * separator cannot change which page the lists think it is.
  */
 function normalizePanelPath(pathname: string): string | null {
-  let decoded: string;
-  try {
-    decoded = decodeURIComponent(pathname);
-  } catch {
-    return null;
-  }
   const segments: string[] = [];
-  for (const segment of decoded.replace(/\\/g, '/').split('/')) {
-    if (segment === '' || segment === '.') continue;
-    if (segment === '..') {
-      segments.pop();
-      continue;
+  for (const raw of pathname.replace(/\\/g, '/').split('/')) {
+    if (raw === '') continue;
+    let segment: string;
+    try {
+      segment = decodeURIComponent(raw);
+    } catch {
+      return null;
     }
+    if (segment === '.' || segment === '..' || segment.includes('/') || segment.includes('\\')) return null;
     segments.push(segment);
   }
   return `/${segments.join('/')}`;

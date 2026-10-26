@@ -158,6 +158,14 @@ describe('canOpenPanelPath on encoded and odd paths', () => {
     expect(canOpenPanelPath('super_admin', '/%65quipo')).toBe(true);
   });
 
+  it('refuses a path whose encoded separators could change the page the lists see', () => {
+    for (const path of ['/rides/x%2Fy/assist', '/rides/x%5Cy/assist',
+      '/rides/3f1c2b4a-0000-4000-8000-000000000001%2F../assist', '/rides/x%2F..%2F/assist']) {
+      expect(canOpenPanelPath('marketing', path)).toBe(false);
+    }
+    expect(canOpenPanelPath('operator', '/wallet%2Fgifts')).toBe(false);
+  });
+
   it('still opens the ordinary pages', () => {
     for (const path of ['/rides/abc', '/rides/abc/', '/wallet/receipts']) {
       expect(canOpenPanelPath('operator', path)).toBe(true);

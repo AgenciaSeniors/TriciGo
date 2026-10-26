@@ -15,7 +15,7 @@
 // The panel roles here are not a copy of PANEL_ROLES in packages/utils/src/adminPanelAccess.ts
 // (Deno cannot import it). isPanelStaffRole opens bulk e-mail and campaigns, including their
 // pushes, which the operator does not get (spec docs/superpowers/specs/2026-10-25-operator-role-design.md
-// section 6). Adding 'operator' here is a decision for a later delivery, not a sync.
+// section 6). The operator never joins isPanelStaffRole; a later delivery adds a separate isOpsRole (spec §6).
 // ============================================================
 
 /** The push categories marketing's pages send. */
