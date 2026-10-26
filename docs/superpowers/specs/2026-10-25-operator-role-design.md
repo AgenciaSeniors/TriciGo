@@ -205,7 +205,7 @@ The operator never writes a table directly.
 **Shell:**
 - the operator gets the waiting-rides banner and the SOS bell;
 - the header says "Operador" and hides "Mi perfil";
-- `BottomNav` filters its items with `canOpenPanelPath`;
+- `BottomNav` does not change: the operator gets the default four tabs, all of which it can open;
 - the sidebar does not load the pending-promotions count.
 
 **Mixed pages:**

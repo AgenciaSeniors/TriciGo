@@ -11,6 +11,7 @@ import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { formatAdminDate } from '@/lib/formatDate';
 import { USER_LEVEL_LABEL, labelFor } from '@/lib/labels';
 import { usePanelCan } from '@/lib/usePanelCan';
+import { isPanelRole } from '@tricigo/utils/adminPanelAccess';
 import { UserDetailReadOnly } from '@/components/panel/UserDetailReadOnly';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
@@ -38,6 +39,7 @@ const roleBadgeClasses: Record<string, string> = {
   admin: 'bg-purple-50 text-purple-700',
   super_admin: 'bg-red-50 text-red-700',
   marketing: 'bg-violet-50 text-violet-700',
+  operator: 'bg-teal-50 text-teal-700',
 };
 
 function formatCurrency(amount: number): string {
@@ -46,6 +48,7 @@ function formatCurrency(amount: number): string {
 
 function AdminUserDetailPage() {
   const { t } = useTranslation('admin');
+  const { can } = usePanelCan();
   const { showToast } = useToast();
   const { id } = useParams<{ id: string }>();
   // The level override is super_admin only (00629); the server refuses it too.
@@ -192,7 +195,7 @@ function AdminUserDetailPage() {
                 roleBadgeClasses[user.role] ?? 'bg-surface-sunken text-ink-muted'
               }`}
             >
-              {user.role}
+              {t(`users.role_${user.role}`, { defaultValue: user.role })}
             </span>
             <span
               className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${levelBadgeClasses[currentLevel]}`}
@@ -211,29 +214,33 @@ function AdminUserDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={() => setWalletModalOpen(true)}
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 transition-colors"
-          >
-            {t('admin_ops.adjust_wallet_btn', { defaultValue: 'Ajustar saldo TC' })}
-          </button>
-          {user.is_active ? (
+          {can('money.act') && (
             <button
-              onClick={() => setBlockModalOpen(true)}
-              className="px-4 py-2 rounded-lg text-sm font-medium bg-red-500 text-white hover:bg-red-600 transition-colors"
+              onClick={() => setWalletModalOpen(true)}
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 transition-colors"
             >
-              {t('users.block_user')}
-            </button>
-          ) : (
-            <button
-              onClick={handleToggleActive}
-              disabled={blockUpdating}
-              className="px-4 py-2 rounded-lg text-sm font-medium bg-green-500 text-white hover:bg-green-600 transition-colors disabled:opacity-50"
-            >
-              {blockUpdating ? t('common.processing') : t('users.unblock_user')}
+              {t('admin_ops.adjust_wallet_btn', { defaultValue: 'Ajustar saldo TC' })}
             </button>
           )}
-          {user.role !== 'admin' && user.role !== 'super_admin' && (
+          {can('users.block') && (
+            user.is_active ? (
+              <button
+                onClick={() => setBlockModalOpen(true)}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-red-500 text-white hover:bg-red-600 transition-colors"
+              >
+                {t('users.block_user')}
+              </button>
+            ) : (
+              <button
+                onClick={handleToggleActive}
+                disabled={blockUpdating}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-green-500 text-white hover:bg-green-600 transition-colors disabled:opacity-50"
+              >
+                {blockUpdating ? t('common.processing') : t('users.unblock_user')}
+              </button>
+            )
+          )}
+          {can('accounts.delete_pending') && !isPanelRole(user.role) && (
             <button
               onClick={() => setDeleteModalOpen(true)}
               className="px-4 py-2 rounded-lg text-sm font-medium border border-red-500 text-red-700 dark:text-red-600 hover:bg-red-50 transition-colors"

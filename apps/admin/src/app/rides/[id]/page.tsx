@@ -76,6 +76,7 @@ type RideDetail = {
 
 function AdminRideDetailPage() {
   const { t } = useTranslation('admin');
+  const { can } = usePanelCan();
   const { showToast } = useToast();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -195,7 +196,7 @@ function AdminRideDetailPage() {
               {t('ride_assist.assist_open', { defaultValue: 'Asistir' })}
             </Link>
           )}
-          {CANCELABLE_STATUSES.includes(ride.status) && (
+          {can('rides.act') && CANCELABLE_STATUSES.includes(ride.status) && (
             <button
               onClick={() => { setCancelReason(''); setCancelOpen(true); }}
               className="mt-3 px-4 py-2 text-sm rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium"
