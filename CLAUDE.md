@@ -2658,6 +2658,45 @@ Desde la 00663, marketing también abre en solo lectura Viajes, Conductores, Usu
   | `get_product_failures` | `57a40ccc37b3efd3f6053804d922b03e` | 7232 | nueva |
   | `_panel_driver_churn_risk` | `20240a8b10635d4349bc31b96ef0eb50` | 306 | nueva |
 
+### Rol `operator` en el panel admin (00667/00668, entrega 1 de 4)
+
+Una persona de operaciones: viajes en vivo, soporte, alta de conductores, cuentas y moderación. Nunca toca dinero, configuración ni equipo. Diseño: `docs/superpowers/specs/2026-10-25-operator-role-design.md`. Plan de esta entrega: `docs/superpowers/plans/2026-10-25-operator-role-base.md`. Ensayo: `supabase/tests/00668/run.sh` (sin la migración pasan 34 y fallan 92; con la migración aplicada dos veces pasan las 163, incluidas una copia CRLF, 177 pruebas de escritura y una prueba negativa de cada autochequeo).
+
+- **Qué hace esta entrega:** el operador entra (invitado desde `/equipo`), abre sus páginas y lee todo lo que muestran, y recibe los avisos de soporte y SOS y el resumen diario sin el bloque de dinero. Todavía no actúa sobre nada: cada botón de acción se oculta por capacidad y el servidor lo rechaza por su cuenta. Las entregas 2 (alta de conductores y flotas), 3 (viajes en vivo) y 4 (soporte, cuentas y moderación) abren las acciones con funciones `ops_*`.
+- **Helpers:** `is_operator()` (solo operator) e `is_ops_staff()` (admin, super_admin u operator). Son plpgsql con el `RETURN false` sin sesión de 00592, y `anon` tiene EXECUTE porque las políticas los llaman también cuando lee `anon`. `is_admin()` no cambia.
+- **Lecturas:**
+  - Una política `<tabla>_select_operator` (SELECT, `{authenticated}`, `USING ((SELECT public.is_operator()))`) en 33 tablas. La lista está en `c_tables`, en el §8 de la migración.
+  - `v_admin_select` de `vehicles` pasa a `is_ops_staff()`: el chequeo de 00644 no admite una tercera política.
+  - Tres políticas de storage: `driver-documents`, `driver-contracts` y `receipts`.
+  - Las siete vistas `panel_*` suman al operador en su verja.
+  - `ops_delivery_details` es `delivery_details` sin `delivery_otp`: el operador nunca ve el código de entrega. Corre con los permisos de su dueño, igual que las `panel_*`, así que el advisor `security_definer_view` del correo semanal también la marca como ERROR. Es esperado.
+  - **El operador lee la fila entera de `rides`, `share_token` incluido** (el enlace de seguimiento, que marketing no ve). Para ocultarlo hace falta una vista, como `panel_rides`.
+  - **Ganancias:** el operador no abre `/earnings` ni puede llamar a `get_platform_earnings`, pero lee las billeteras y los movimientos (decisión del dueño), y con eso puede sacar los totales de la plataforma y la comisión de cada viaje. Para ocultarlos, las políticas del operador sobre `wallet_accounts`, `ledger_entries` y `ledger_transactions` tienen que dejar afuera las filas de la cuenta de plataforma (`…0001`).
+- **El autochequeo (§8 de 00668) aborta si:**
+  - aparece una política o una función que llama a `is_operator()` o `is_ops_staff()` y no está en sus listas;
+  - una política de `public` o de `storage.objects` nombra el rol con el literal `'operator'` en su USING o WITH CHECK;
+  - el literal `'operator'` aparece en una función que no está entre las 13 de su lista (las 10 parcheadas que tienen listas de rol y las 3 que crea la migración);
+  - una función de dinero, rol o equipo menciona al operador. La lista incluye `admin_refund_ride_commission` y `admin_send_wallet_v2_bonus_push`.
+
+  Una tabla nueva que el operador tenga que leer se agrega en una migración que también actualice esas listas.
+- **Panel:** `panelCanAct` ya no existe. Las páginas preguntan `usePanelCan().can('<capacidad>')` (`packages/utils/src/adminPanelAccess.ts`). En esta entrega el operador solo tiene `detail.full`: ve el detalle completo (GPS, documentos, chat, billetera) y ningún botón. Una página nueva con acciones pregunta por la capacidad que corresponde, no por el rol.
+- **Transiciones de viaje:** `enforce_ride_transition` trata al operador como `customer`, igual que a marketing: viaja como pasajero, sin transiciones de admin. La entrega 3 lo trata como `admin` solo dentro de una función `ops_*` sobre ese viaje.
+- **Avisos:**
+  - `_support_alert` suma al operador a los avisos de soporte.
+  - **El push de SOS lo manda `_sos_staff_alert`** (trigger `incident_reports_sos_staff_alert`, AFTER INSERT de un SOS) por `cron_http_post`, con la etiqueta `sos-staff-alert`:
+    - Le llega a los operadores y admins activos, menos a quien reporta, con el enlace al incidente.
+    - El título lleva el nombre e inicial de quien reporta (`_third_party_person_name`, o "Usuario sin nombre"), y "[Prueba] " delante si es una cuenta de prueba, como las cuentas demo de las tiendas.
+    - Sale uno por minuto por persona que reporta (clave `sos-staff:<id>` en `rate_limits`; sin `reported_by`, la clave es la del incidente).
+    - Nunca rechaza el SOS: un fallo queda en `rpc_attempt_log` (`_sos_staff_alert`, `alert_failed`). La función corta sus esperas de bloqueo a los 2 s (`SET lock_timeout`), así que una espera en el límite de envíos también termina en ese registro, sin cancelar el SOS.
+    - El trigger viejo `incident_reports_notify_sos` corre antes y no tiene ese límite, así que un segundo SOS de la misma persona todavía puede esperar ahí. Queda fuera de esta migración.
+- **Equipo:** el operador entra al CHECK de `team_invitations`, a las listas de rol de las funciones de equipo y a `_team_role_rank` con 1, igual que marketing. Para pasar de marketing a operador se usa "Cambiar rol": aceptar una invitación nunca baja un rol.
+- **Cuerpos tras 00668:** una migración que redefina cualquiera de las 29 funciones parcheadas parte del cuerpo vivo. Los md5 de esos cuerpos están en `supabase/tests/00668/run.sh` (`NEW_BODIES`), y los de las 3 funciones creadas, en `CREATED`. Re-correr 00628, 00660, 00485, 00629, 00488 o las vistas de 00663, que usan `CREATE OR REPLACE` sin guarda, devolvería esas verjas a solo admin sin ningún error.
+- **Aplicarla:**
+  - Toma bloqueos ACCESS EXCLUSIVE sobre las siete vistas y las 33 tablas con `lock_timeout = '500ms'`, la mitad del `deadlock_timeout` de prod. En un ciclo de bloqueos con la app cede ella y se deshace entera. Aplicarla en una hora tranquila y, si falla con 55P03 o 40P01, volver a correrla.
+  - Trae barras invertidas, así que por MCP se manda con el envoltorio `@@BS@@` de 00663.
+  - Tiene un `DROP CONSTRAINT` (el CHECK de equipo): si MCP se queda esperando una aprobación que no llega, se aplica desde el SQL Editor.
+- **Estado (2026-10-26):** 00667 y 00668 no están aplicadas en prod.
+
 ### Equipo del panel: invitaciones (00661)
 
 Un super_admin invita a alguien al panel desde **Equipo** (`/equipo`, solo super_admin: `SUPER_ADMIN_ROUTES` en `@tricigo/utils/adminPanelAccess`). Antes, la persona entraba, rebotaba a `/login?error=unauthorized` y alguien corría `promote_user_role` por SQL. Diseño: `docs/superpowers/specs/2026-10-12-team-invitations-design.md`. Ensayo: `supabase/tests/00661/run.sh`.
