@@ -71,7 +71,7 @@ VIEWS="panel_rides panel_driver_profiles panel_driver_documents panel_driver_chu
 OLD_BODIES="_panel_driver_churn_risk()=20240a8b10635d4349bc31b96ef0eb50,_support_alert(uuid,text)=1ee5af719375723f47a7e17e037c0781,_team_lock_target(uuid,uuid)=bf7977def160b0af45d331f6c8ba6aa8,_team_role_rank(text)=b4d7921637a5ce8ac112b1ccf2b4c47e,admin_active_ride_context(uuid)=648f573019cac9a07b8f6c0bc9b53cf1,admin_get_online_fleet()=16cae4581898b17f1f0da664e1424c9e,admin_incomplete_driver_signups()=65aad048b3031c8398c21cf3649bd47f,admin_launch_pulse(integer)=bb5d37a5bca57a64d3e3409ada2dd6b6,admin_ride_assist_candidates(uuid,text)=8fc752f5230186f458d8b81ce1f82bad,admin_ride_assist_context(uuid)=b4f972c16a8105000b473584b2d9972e,admin_support_waiting_rides()=cf28c7189a299171fbc876981cab0fde,apply_user_rating(uuid)=96be8c154990651738312ef44861242f,create_team_invitation(text,text,text)=208a91a24bdde5104dc298616aa41668,enforce_ride_transition()=f806997fab31c18e7b369e69f5321c30,ensure_driver_role_and_tricicoin_on_approval()=1940d4379a446c8afdf0d47434945c07,get_admin_dashboard_metrics()=32cec76d3f079f6938b09f8bb7e919b2,get_admin_wallet_stats()=0f937c94cda1d26e7dd2da7d574949dd,get_corporate_balance(uuid)=3f0a78535f6f62def35d7544abead12c,get_corporate_employees(uuid)=707be40934363bf3444de3c66d573e4c,get_driver_utilization()=deb8280b477f4dc4ccf64acfcdd0cafa,get_peak_hours(integer)=29e882b3dfbf6c3f2d5ad5946d04e3d8,get_product_failures(integer)=57a40ccc37b3efd3f6053804d922b03e,get_rides_by_day(integer)=fd5363b072a17da61325a23cfd1486af,get_rides_by_payment_method(integer)=2ecacefdfef6c96da84d3b2f20a0b138,get_rides_by_service_type(integer)=ffd6c633752a21bba4945625fc9aaaaf,get_top_drivers(integer)=03e7be0213769612782ed3bcb0183f3a,list_team()=3caa19878a9f42757340073dd44a8e63,set_team_member_role(uuid,text,text)=0efaca07aab64cbebde239d4db8515b6,team_digest_recipients()=07045d8aa3abed148082614ba441e01e"
 NEW_BODIES="_panel_driver_churn_risk()=afa2e6a392bdf498d226d1e8db94ebf9,_support_alert(uuid,text)=992c2ce11b664d72e437a683170abb97,_team_lock_target(uuid,uuid)=de70508776541e934d4225ce6e3c3510,_team_role_rank(text)=149307088a8dbbcb9eebb662187e260b,admin_active_ride_context(uuid)=76344d251a2f75b1d4c9f4f059131668,admin_get_online_fleet()=09160feb71a0436f0ceb5648ccba2081,admin_incomplete_driver_signups()=8b9c5c6014c48768b51735b199d34d81,admin_launch_pulse(integer)=8a1937bbe51baf3772cfd067f7d3df2e,admin_ride_assist_candidates(uuid,text)=18ec24b4eff82a82c401df6889eb399c,admin_ride_assist_context(uuid)=2b7a2a9cb6ca0566c3fde8614220e91a,admin_support_waiting_rides()=6220ecbb3b398b62c22dc2534ce55570,apply_user_rating(uuid)=855ff6a7587434d60c8e45c2112cf7a3,create_team_invitation(text,text,text)=fba442720206be555335875c37968405,enforce_ride_transition()=0f18b49d2d65e00923fa7f8d136b2387,ensure_driver_role_and_tricicoin_on_approval()=ee418d59c865532fcdb6df0af3b991b2,get_admin_dashboard_metrics()=8b5f98c002141541b6837511ccee100c,get_admin_wallet_stats()=21cd9a7f16058d01740029b430cf13d9,get_corporate_balance(uuid)=b607f588cce860b868a53755ecbbcd7a,get_corporate_employees(uuid)=64e9679cb6d0b677dda93a6490bd465b,get_driver_utilization()=1f4c8030ad426c728d47008afe6567fb,get_peak_hours(integer)=9cc7e8ba4a44a026e5c7a02c939ad466,get_product_failures(integer)=f735ec7c60ad2405226983505677fe0a,get_rides_by_day(integer)=339b0f0dbf075ea8c470097be5495bb1,get_rides_by_payment_method(integer)=beb36eb41b576ec41e81430e9f6e8308,get_rides_by_service_type(integer)=1cd2058668e150fb7ce5d228cb9ab389,get_top_drivers(integer)=b3b7bfa483c01f678c53b05fb35d2942,list_team()=54b81a4f2941beff89205a37c95f8fc9,set_team_member_role(uuid,text,text)=e835ab6ff0f4b4f7310aca565ba08e80,team_digest_recipients()=a64e560f1aef14b8b1a782865d5624c9"
 # The bodies 00668 creates (md5 of prosrc; _sos_staff_alert measured in this rehearsal).
-CREATED="_sos_staff_alert()=6da23321f4fe680cb89f8585ce8e56e8,is_operator()=16438eb527af61eaa2d0b3d9a53f08f9,is_ops_staff()=d6774e4677be1072e66b247492e9cb9a"
+CREATED="_sos_staff_alert()=b380a562b802cfe4fb68f06ffb772623,is_operator()=16438eb527af61eaa2d0b3d9a53f08f9,is_ops_staff()=d6774e4677be1072e66b247492e9cb9a"
 PATCHED_LIST="'_panel_driver_churn_risk()','_support_alert(uuid,text)','_team_lock_target(uuid,uuid)','_team_role_rank(text)','admin_active_ride_context(uuid)','admin_get_online_fleet()','admin_incomplete_driver_signups()','admin_launch_pulse(integer)','admin_ride_assist_candidates(uuid,text)','admin_ride_assist_context(uuid)','admin_support_waiting_rides()','apply_user_rating(uuid)','create_team_invitation(text,text,text)','enforce_ride_transition()','ensure_driver_role_and_tricicoin_on_approval()','get_admin_dashboard_metrics()','get_admin_wallet_stats()','get_corporate_balance(uuid)','get_corporate_employees(uuid)','get_driver_utilization()','get_peak_hours(integer)','get_product_failures(integer)','get_rides_by_day(integer)','get_rides_by_payment_method(integer)','get_rides_by_service_type(integer)','get_top_drivers(integer)','list_team()','set_team_member_role(uuid,text,text)','team_digest_recipients()'"
 BODIES="SET search_path = public, pg_catalog; SELECT string_agg(p.oid::regprocedure::text || '=' || md5(p.prosrc), ',' ORDER BY p.oid::regprocedure::text COLLATE \"C\")
   FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.oid::regprocedure::text IN ($PATCHED_LIST)"
@@ -126,6 +126,11 @@ SNAP="SET search_path = pg_catalog; SELECT md5(string_agg(x, '|' ORDER BY x COLL
 # and an UPDATE, DELETE and INSERT on storage.objects in each of the three buckets. Each records
 # the rows it touched or its SQLSTATE and message. The output before 00668 must equal the output
 # after it.
+# Known blind spot: on corporate_employees the UPDATE and DELETE probes fail with 42P17 (infinite
+# recursion in prod's own policies of that table, a bug that predates 00668) both before and after,
+# so a write widened there would not change their output. For that table the guard is the
+# migration's own policy scans (section 8), which refuse any policy that calls is_operator() or
+# is_ops_staff() other than the ones the file creates (N1), and any that names the role (N15).
 PROBE_RELS=$(echo $TABLES vehicles delivery_details $VIEWS | tr ' ' ',')
 PROBE_COUNT=$(( $(echo $TABLES vehicles delivery_details $VIEWS | wc -w) * 4 + 9 ))
 cat > "$TMP/probe.sql" <<'SQL'
@@ -297,12 +302,24 @@ if [ "$MIG" != none ]; then
 fi
 
 # T5: read gates -----------------------------------------------------------------------------
-gate(){ # gate NAME SQL MESSAGE
+# The operator half passes only if the call returns without the gate's refusal (some gates refuse
+# by returning {"error": "forbidden"}), or fails with another error: a SQLSTATE other than 42501
+# and a message other than the refusal. The scaffold has no unaccent nor PostGIS, so some calls
+# that pass the gate then fail on a missing function (42883); that still shows the gate let the
+# operator through. The call runs in a DO block that records "ok|<first column>" or
+# "err|<SQLSTATE>|<message>"; any other output (the DO block itself failing) fails the test.
+gate(){ # gate NAME SQL REFUSAL
   local r
   r=$(run "$DB" "BEGIN; $(as_user $CARL) $2; ROLLBACK;")
   if echo "$r" | grep -q -- "$3"; then ok "T5 $1 refuses a customer"; else ko "T5 $1 refuses a customer" "got [$r]"; fi
-  r=$(run "$DB" "BEGIN; $(as_user $OLGA) $2; ROLLBACK;")
-  if echo "$r" | grep -q -- "$3"; then ko "T5 $1 lets the operator through" "got [$r]"; else ok "T5 $1 lets the operator through"; fi
+  r=$(run "$DB" "BEGIN; $(as_user $OLGA) DO \$g\$ DECLARE v text; BEGIN EXECUTE \$q\$$2\$q\$ INTO v; PERFORM set_config('test.gate', 'ok|' || coalesce(v, ''), true); EXCEPTION WHEN OTHERS THEN PERFORM set_config('test.gate', 'err|' || SQLSTATE || '|' || SQLERRM, true); END \$g\$; SELECT current_setting('test.gate'); ROLLBACK;")
+  case "$r" in
+    err\|42501\|*) ko "T5 $1 lets the operator through" "refused with 42501: [$r]" ;;
+    ok\|*|err\|?????\|*)
+      if echo "$r" | grep -q -- "$3"; then ko "T5 $1 lets the operator through" "got the refusal: [$r]"
+      else ok "T5 $1 lets the operator through"; fi ;;
+    *) ko "T5 $1 lets the operator through" "unexpected output: [$r]" ;;
+  esac
 }
 gate get_admin_dashboard_metrics "SELECT public.get_admin_dashboard_metrics()" "forbidden: admin only"
 gate get_admin_wallet_stats "SELECT public.get_admin_wallet_stats()" "forbidden: admin only"
@@ -397,6 +414,12 @@ if [ "$MIG" != none ]; then
   if echo "$r" | grep -q "canceling statement due to statement timeout"; then ok "T8.11 without the function's lock_timeout the same wait cancels the SOS"
   else ko "T8.11 without the function's lock_timeout the same wait cancels the SOS" "got [$r]"; fi
 fi
+# The superuser (no role switch) inserts an SOS without a reporter: the rate-limit key falls back
+# to the incident ('sos-staff:' || NULL would be NULL, and the stub's key column, like
+# rate_limits.key, is NOT NULL), nobody is left out of the recipients, and nothing is logged.
+val "T8.12 an SOS without a reporter is kept and pushes every active operator and admin" \
+  "BEGIN; SET LOCAL client_min_messages = error; DELETE FROM public.test_http_calls; INSERT INTO public.incident_reports (id, type, reported_by) VALUES ('$SOS1', 'sos', NULL); SELECT (SELECT count(*) FROM public.incident_reports WHERE id = '$SOS1') || ' ' || coalesce((SELECT string_agg(c.jobname || ' ' || (SELECT string_agg(u, ',' ORDER BY u) FROM jsonb_array_elements_text(c.body->'user_ids') u) || ' ' || (c.body->>'title'), '; ') FROM public.test_http_calls c), 'no push') || ' ' || coalesce((SELECT string_agg(outcome, ',') FROM public.test_rpc_log WHERE rpc_name = '_sos_staff_alert'), 'no log'); ROLLBACK;" \
+  "1 sos-staff-alert $SAM,$ANA,$OLGA SOS · Usuario sin nombre no log"
 
 # T9: team -----------------------------------------------------------------------------------
 val "T9.1 an operator ranks with marketing" "SELECT public._team_role_rank('operator'), public._team_role_rank('marketing')" "1|1"
@@ -412,12 +435,17 @@ val "T9.6 the daily digest goes to the active operator" \
   "BEGIN; $(as_owner) SELECT string_agg(role::text, ',') FROM public.team_digest_recipients() WHERE user_id = '$OLGA'; ROLLBACK;" "operator"
 
 # T10: nothing of money, roles or settings opens -----------------------------------------------
+# Each call is valid for a caller with the right role, and must meet that function's own refusal
+# (its message, and its DETAIL code where it has one): any other error fails the test.
 has "T10.1 the operator cannot change a level" \
-  "BEGIN; $(as_user $OLGA) SELECT public.admin_set_user_level('$CARL', 'oro', 'Prueba de nivel'); ROLLBACK;" "ERROR"
+  "BEGIN; $(as_user $OLGA) SELECT public.admin_set_user_level('$CARL', 'oro'); ROLLBACK;" \
+  "^ERROR:  Solo un super admin puede cambiar el nivel de una cuenta\.;DETAIL:  not_super_admin;"
 has "T10.2 the operator cannot promote anyone" \
-  "BEGIN; $(as_user $OLGA) SELECT public.promote_user_role('$CARL', 'admin', 'Prueba de rol'); ROLLBACK;" "ERROR"
+  "BEGIN; $(as_user $OLGA) SELECT public.promote_user_role('$CARL', 'admin', 'Prueba de rol'); ROLLBACK;" \
+  "^ERROR:  forbidden: only super_admin can promote user roles;"
 has "T10.3 the operator cannot block an account yet" \
-  "BEGIN; $(as_user $OLGA) SELECT public.admin_set_user_active('$CARL', false, 'Prueba de bloqueo'); ROLLBACK;" "ERROR"
+  "BEGIN; $(as_user $OLGA) SELECT public.admin_set_user_active('$CARL', false, 'Prueba de bloqueo'); ROLLBACK;" \
+  "^ERROR:  Solo un administrador puede bloquear o desbloquear cuentas\.;DETAIL:  not_admin;"
 
 # T11: the operator writes nothing more ---------------------------------------------------------
 probes "$DB" > "$TMP/probes_after"
@@ -555,6 +583,14 @@ open(sys.argv[2], 'w', encoding='utf-8', newline='').write(t)
   neg "N14 an owner that cannot call _third_party_person_name aborts" \
     "REVOKE EXECUTE ON FUNCTION public._third_party_person_name(text) FROM postgres;" \
     "the owner of _sos_staff_alert() cannot execute _third_party_person_name"
+  # A policy that grants through the role name and never calls is_operator(): the scan of N1 does
+  # not see it, the role-name scan does.
+  neg "N15 a policy that names the operator role aborts" \
+    "CREATE POLICY zz_role_name ON public.wallet_accounts FOR UPDATE TO authenticated USING ((public.current_user_role() = 'operator'::public.user_role));" \
+    "policies grant through the operator role name: public.wallet_accounts.zz_role_name"
+  neg "N15b a storage policy that names the operator role aborts" \
+    "CREATE POLICY zz_role_name ON storage.objects FOR DELETE TO authenticated USING ((public.current_user_role() = ANY (ARRAY['admin'::public.user_role, 'operator'::public.user_role])));" \
+    "policies grant through the operator role name: storage.objects.zz_role_name"
 
   # Without 00667 the file refuses to run -------------------------------------------------------
   if build "${DB}noenum" noenum; then
