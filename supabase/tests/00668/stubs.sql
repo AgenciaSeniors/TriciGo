@@ -4,7 +4,8 @@
 -- member of anon, authenticated and service_role, as in prod (00668's check runs SET ROLE anon).
 -- Stubs: cron_http_post (records each call in test_http_calls; fails when test.http_fail = '1'),
 -- get_service_role_key (empty when test.no_key = '1'), log_rpc_attempt (records in test_rpc_log),
--- check_rate_limit (counts in test_rate_hits). PostGIS is not installed: locations are text, and
+-- check_rate_limit (counts in test_rate_hits, and holds a row lock on its key until the transaction
+-- ends, as prod's upsert on rate_limits does). PostGIS is not installed: locations are text, and
 -- geometry/geography are text domains with st_x/st_y returning 0.
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon NOLOGIN; END IF;
@@ -97,6 +98,7 @@ CREATE TABLE public.test_http_calls (
 );
 CREATE TABLE public.test_rpc_log (rpc_name text, caller uuid, target uuid, outcome text, metadata jsonb);
 CREATE TABLE public.test_rate_hits (key text, at timestamptz DEFAULT clock_timestamp());
+CREATE TABLE public.test_rate_locks (key text PRIMARY KEY, n integer NOT NULL DEFAULT 1);
 
 CREATE FUNCTION public.cron_http_post(p_jobname text, url text, headers jsonb DEFAULT '{}'::jsonb,
                                       body jsonb DEFAULT '{}'::jsonb, timeout_milliseconds integer DEFAULT 30000)
@@ -144,6 +146,10 @@ AS $function$
 DECLARE
   v_n integer;
 BEGIN
+  -- Prod upserts a rate_limits row per key and window: a second caller with the same key waits on
+  -- the first one's row lock until that transaction ends. The same wait here.
+  INSERT INTO public.test_rate_locks (key) VALUES (p_key)
+  ON CONFLICT (key) DO UPDATE SET n = public.test_rate_locks.n + 1;
   SELECT count(*) INTO v_n FROM public.test_rate_hits h
   WHERE h.key = p_key AND h.at > clock_timestamp() - make_interval(secs => p_window_seconds);
   IF v_n >= p_max_requests THEN

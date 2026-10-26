@@ -10,6 +10,9 @@ INSERT INTO public.users (id, role, full_name, email, phone, is_active, email_ve
   ('a2000000-0000-4000-8000-000000000005', 'operator',    'Otto Inactivo',   'otto@example.com',  '+5350000005', false, now()),
   ('a2000000-0000-4000-8000-000000000006', 'customer',    'Carl Cliente',    'carl@example.com',  '+5350000006', true,  now()),
   ('a2000000-0000-4000-8000-000000000007', 'driver',      'Diego Conductor', 'diego@example.com', '+5350000007', true,  now());
+-- A test account, like the demo accounts store reviewers use: its SOS reaches staff marked as a test.
+INSERT INTO public.users (id, role, full_name, email, phone, is_active, email_verified_at, is_test) VALUES
+  ('a2000000-0000-4000-8000-000000000008', 'customer', 'Teresa Prueba Demo', 'teresa@example.com', '+5350000008', true, now(), true);
 
 INSERT INTO public.driver_profiles (id, user_id, status, is_online, current_location, current_heading) VALUES
   ('d2000000-0000-4000-8000-000000000007', 'a2000000-0000-4000-8000-000000000007', 'approved', true, 'POINT(-82.38 23.13)', 90);
