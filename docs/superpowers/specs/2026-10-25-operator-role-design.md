@@ -195,7 +195,7 @@ The operator never writes a table directly.
 
 **`adminPanelAccess.ts`:**
 - `PANEL_ROLES` adds `operator`, with `OPERATOR_ROUTES` (the pages above) and `OPERATOR_DENIED` (`/wallet/gifts`). `panelHome('operator')` is `/`.
-- **`panelCanAct` is replaced by capabilities:** `panelCan(role, cap)` and a `useCan(cap)` hook. A per-page check is not enough: `/drivers/[id]` mixes operations and money.
+- **`panelCanAct` is replaced by capabilities:** `panelCan(role, cap)` and a `usePanelCan().can(cap)` hook. A per-page check is not enough: `/drivers/[id]` mixes operations and money.
   - Operator, once all four deliveries are in: `detail.full`, `rides.act`, `tickets.act`, `cases.act`, `drivers.review`, `fleets.review`, `users.block`, `accounts.delete_pending`, `moderation.act`, plus a push capability in delivery 4. Delivery 1 gives it only `detail.full`.
   - Admin only: `money.act`, `corporate.clients`, `pois.act`, `promotions.write`, `promotions.approve`, `referrals.amounts`, `referrals.rewards`, `audit.read`.
   - Marketing keeps what it has today: `tickets.act`, `promotions.write`, `referrals.amounts`.

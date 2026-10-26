@@ -44,7 +44,7 @@ export default function DisputesPage() {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
   const { can, ready } = usePanelCan();
-  // The operator reads the full disputes (evidence, notes) but resolves none yet (00668).
+  // The operator reads the full disputes (evidence, refunds, resolution) but resolves none yet (00668).
   const fullData = can('detail.full');
   const canAct = can('cases.act');
 
