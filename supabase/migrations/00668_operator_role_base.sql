@@ -26,13 +26,19 @@
 -- Rehearsal: supabase/tests/00668/run.sh (RED without this file, GREEN with it, applied twice)
 -- ============================================================
 
--- Creating a policy locks its table; fail fast instead of queueing the app's reads behind us.
-SET lock_timeout = '2s';
+-- Creating a policy locks its table. Every public table this file creates a policy on is locked
+-- up front, and every app query on them waits behind this file until it commits.
+-- There is no lock order that agrees with every app path: complete_ride_and_pay takes rides and
+-- then driver_profiles, update_driver_position takes them the other way. So this file is meant to
+-- be the one that gives up in a lock cycle: its lock_timeout (500 ms) is half of prod's
+-- deadlock_timeout (1 s), the wait after which Postgres looks for a cycle and cancels one of the
+-- transactions in it, possibly an app's. (An app transaction that had already waited more than
+-- half a second when this file closed the cycle can still be the one cancelled.) The file then
+-- rolls back whole. Apply it at a quiet hour; on 55P03 (lock_timeout) or 40P01 (deadlock) run it
+-- again. The setting is reset at the end of the file; if the file aborts, the transaction takes
+-- the setting with it.
+SET lock_timeout = '500ms';
 
--- Every public table this file creates a policy on, locked up front in the order the app takes them:
--- a ride before what hangs off it, a wallet before its ledger, a ticket's messages before the
--- ticket (a message reads its ticket through RLS). On 40P01 (deadlock) or 55P03 (lock_timeout)
--- the whole file rolls back; run it again.
 LOCK TABLE public.rides, public.ride_pricing_snapshots, public.ride_transitions, public.ride_messages
   IN ACCESS EXCLUSIVE MODE;
 LOCK TABLE public.users, public.driver_profiles, public.vehicles, public.driver_documents,
@@ -161,7 +167,9 @@ $storage$;
 -- from its own deparsed text with the operator added to that gate, and panel_rides also counts
 -- an operator's cancel as staff's. Deparsed with search_path = pg_catalog, so every name in the
 -- text is schema-qualified. CREATE OR REPLACE VIEW keeps the columns and the grants; the options
--- are given again because CREATE OR REPLACE resets them.
+-- are given again because CREATE OR REPLACE resets them. Each view runs only on the definition
+-- this file was written against (old md5, measured in prod on 2026-10-25), is skipped on the one
+-- it leaves (new md5, measured in the rehearsal) and refuses any other.
 DO $views$
 DECLARE
   c_gate      constant text := 'WHERE (( SELECT public.is_admin() AS is_admin) OR ( SELECT public.is_marketing() AS is_marketing));';
@@ -175,19 +183,23 @@ BEGIN
   PERFORM set_config('search_path', 'pg_catalog', true);
   FOR v_rec IN
     SELECT * FROM (VALUES
-      ('panel_driver_churn_risk', 'b87b6f0bc8d28b876f83689b321f9186'),
-      ('panel_driver_documents',  '6d67c1d2cd218577e1d04c2778ffc163'),
-      ('panel_driver_profiles',   '0b033cc9fdbf0e9f2baa1c392e1e0dfc'),
-      ('panel_incident_reports',  '4188a17c7cc3a7de1038bc9097f0c4e8'),
-      ('panel_lost_items',        'ae8852916298e3a732f6f121c885568c'),
-      ('panel_ride_disputes',     '8ea3d38235a707ca52f26f245f5340f4'),
-      ('panel_rides',             '5669aa5ad6fc84317a5ae8eb9f48a40c')
-    ) AS v(name, old_md5)
+      ('panel_driver_churn_risk', 'b87b6f0bc8d28b876f83689b321f9186', '4c330ab7bd5fdc183c2308dbd9ba2bd1'),
+      ('panel_driver_documents',  '6d67c1d2cd218577e1d04c2778ffc163', '74055a9b910d5a537d595c4d65767c93'),
+      ('panel_driver_profiles',   '0b033cc9fdbf0e9f2baa1c392e1e0dfc', '552b909c14c563224028f51856b8694f'),
+      ('panel_incident_reports',  '4188a17c7cc3a7de1038bc9097f0c4e8', '42845330e233beeff8f616c57bc561ea'),
+      ('panel_lost_items',        'ae8852916298e3a732f6f121c885568c', 'e6184e47553958386c33fdd05d676471'),
+      ('panel_ride_disputes',     '8ea3d38235a707ca52f26f245f5340f4', '3553ba142b12c738e169d18f8a822dc4'),
+      ('panel_rides',             '5669aa5ad6fc84317a5ae8eb9f48a40c', '8c6989cdaa84779f548e7efe0ebe2ce4')
+    ) AS v(name, old_md5, new_md5)
   LOOP
     v_def := pg_get_viewdef(('public.' || v_rec.name)::regclass);
-    CONTINUE WHEN right(v_def, length(c_gate_new)) = c_gate_new;
+    CONTINUE WHEN md5(v_def) = v_rec.new_md5;
     IF md5(v_def) <> v_rec.old_md5 THEN
       RAISE EXCEPTION '00668: view % has a definition this file does not know (md5 %)', v_rec.name, md5(v_def);
+    END IF;
+    -- The slice below cuts exactly the old gate off the end: make sure it is there.
+    IF right(v_def, length(c_gate)) <> c_gate THEN
+      RAISE EXCEPTION '00668: view % does not end in the admin-or-marketing gate', v_rec.name;
     END IF;
     v_def := left(v_def, length(v_def) - length(c_gate)) || c_gate_new;
     IF v_rec.name = 'panel_rides' THEN
@@ -198,6 +210,10 @@ BEGIN
     END IF;
     EXECUTE format('CREATE OR REPLACE VIEW public.%I WITH (security_barrier = true, security_invoker = false) AS %s',
       v_rec.name, rtrim(v_def, ';'));
+    IF md5(pg_get_viewdef(('public.' || v_rec.name)::regclass)) <> v_rec.new_md5 THEN
+      RAISE EXCEPTION '00668: view % was recreated with an unexpected definition (md5 %)', v_rec.name,
+        md5(pg_get_viewdef(('public.' || v_rec.name)::regclass));
+    END IF;
   END LOOP;
   PERFORM set_config('search_path', v_path, true);
 END
@@ -359,23 +375,33 @@ ALTER TABLE public.team_invitations ADD CONSTRAINT team_invitations_role_check
 -- link to the incident, through cron_http_post (label sos-staff-alert): check_cron_http_failures
 -- reports it when send-push refuses it. One push per reporter and minute. It runs in its own
 -- exception block: an SOS is never refused because its alert failed.
+--   * The title carries the reporter's first name and initial (_third_party_person_name, as in
+--     the trusted-contact texts), and "[Prueba] " for a test account: store reviewers use the
+--     demo accounts, and staff must see their SOS but know it is a test.
+--   * lock_timeout: the rate limit upserts a rate_limits row, and a second SOS of the same person
+--     waits on the first one's lock. Without a limit that wait would end in statement_timeout,
+--     which WHEN OTHERS cannot catch, and the SOS insert itself would be cancelled. A lock
+--     timeout is an ordinary error: the handler logs it and the SOS is kept.
+--   * search_path is empty: every name below is schema-qualified.
 CREATE OR REPLACE FUNCTION public._sos_staff_alert()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_catalog
+SET search_path = ''
+SET lock_timeout = '2s'
 AS $fn$
 DECLARE
   v_staff   uuid[];
   v_key     text;
   v_name    text;
+  v_is_test boolean;
   v_allowed boolean;
 BEGIN
   IF NEW.type <> 'sos' THEN
     RETURN NEW;
   END IF;
   BEGIN
-    SELECT allowed INTO v_allowed FROM public.check_rate_limit('sos-staff:' || NEW.reported_by::text, 1, 60);
+    SELECT r.allowed INTO v_allowed FROM public.check_rate_limit('sos-staff:' || NEW.reported_by::text, 1, 60) r;
     IF NOT coalesce(v_allowed, true) THEN
       RETURN NEW;
     END IF;
@@ -393,14 +419,17 @@ BEGIN
     IF v_staff IS NULL THEN
       RETURN NEW;
     END IF;
-    SELECT left(btrim(u.full_name), 40) INTO v_name FROM public.users u WHERE u.id = NEW.reported_by;
+    SELECT public._third_party_person_name(u.full_name), coalesce(u.is_test, false)
+      INTO v_name, v_is_test
+    FROM public.users u WHERE u.id = NEW.reported_by;
     PERFORM public.cron_http_post('sos-staff-alert',
       url     := 'https://lqaufszburqvlslpcuac.supabase.co/functions/v1/send-push',
       headers := jsonb_build_object('Content-Type', 'application/json',
                                     'Authorization', 'Bearer ' || v_key, 'apikey', v_key),
       body    := jsonb_build_object(
         'user_ids', to_jsonb(v_staff),
-        'title', 'SOS · ' || coalesce(nullif(v_name, ''), 'Usuario sin nombre'),
+        'title', CASE WHEN v_is_test THEN '[Prueba] ' ELSE '' END
+                 || 'SOS · ' || coalesce(nullif(v_name, ''), 'Usuario sin nombre'),
         'body', 'Alguien pidió ayuda de emergencia. Abre el panel para atenderla.',
         'category', 'system',
         'data', jsonb_build_object('event', 'sos_staff', 'incident_id', NEW.id::text,
@@ -460,6 +489,7 @@ DECLARE
   v_def text;
   v_got text;
   v_want text;
+  v_n bigint;
   v_rec record;
 BEGIN
   PERFORM set_config('search_path', 'pg_catalog', true);
@@ -469,7 +499,7 @@ BEGIN
     SELECT * FROM (VALUES
       ('public.is_operator()', '16438eb527af61eaa2d0b3d9a53f08f9'),
       ('public.is_ops_staff()', 'd6774e4677be1072e66b247492e9cb9a'),
-      ('public._sos_staff_alert()', '48cd587078324579a75543d10f809436')
+      ('public._sos_staff_alert()', '6da23321f4fe680cb89f8585ce8e56e8')
     ) AS v(fn, md5)
   LOOP
     IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = v_name::regprocedure) IS DISTINCT FROM v_def THEN
@@ -491,6 +521,12 @@ BEGIN
      OR has_function_privilege('anon', 'public._sos_staff_alert()', 'EXECUTE')
      OR has_function_privilege('authenticated', 'public._sos_staff_alert()', 'EXECUTE') THEN
     RAISE EXCEPTION '00668: _sos_staff_alert() must be SECURITY DEFINER and not executable by clients';
+  END IF;
+  -- Its settings: an empty search_path, and the lock timeout that keeps a lock wait from
+  -- cancelling the SOS.
+  SELECT array_to_string(proconfig, ',') INTO v_got FROM pg_proc WHERE oid = 'public._sos_staff_alert()'::regprocedure;
+  IF v_got IS DISTINCT FROM 'search_path="",lock_timeout=2s' THEN
+    RAISE EXCEPTION '00668: _sos_staff_alert() has the settings % instead of search_path="",lock_timeout=2s', coalesce(v_got, 'none');
   END IF;
   -- is_admin() itself does not change (00592).
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.is_admin()'::regprocedure) <> '22cb75e91980d512498034cd33e1eda2' THEN
@@ -579,6 +615,24 @@ BEGIN
   IF (SELECT count(*) FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relkind = 'v' AND relname LIKE 'panel\_%') <> 7 THEN
     RAISE EXCEPTION '00668: expected the seven panel views';
   END IF;
+  -- And each one is exactly the definition section 3 leaves (md5 of pg_get_viewdef with
+  -- search_path = pg_catalog, measured in the rehearsal).
+  FOR v_name, v_want IN
+    SELECT * FROM (VALUES
+      ('panel_driver_churn_risk', '4c330ab7bd5fdc183c2308dbd9ba2bd1'),
+      ('panel_driver_documents',  '74055a9b910d5a537d595c4d65767c93'),
+      ('panel_driver_profiles',   '552b909c14c563224028f51856b8694f'),
+      ('panel_incident_reports',  '42845330e233beeff8f616c57bc561ea'),
+      ('panel_lost_items',        'e6184e47553958386c33fdd05d676471'),
+      ('panel_ride_disputes',     '3553ba142b12c738e169d18f8a822dc4'),
+      ('panel_rides',             '8c6989cdaa84779f548e7efe0ebe2ce4')
+    ) AS v(n, m)
+  LOOP
+    v_got := md5(pg_get_viewdef(('public.' || v_name)::regclass));
+    IF v_got IS DISTINCT FROM v_want THEN
+      RAISE EXCEPTION '00668: view % is not the definition of this file (md5 %)', v_name, v_got;
+    END IF;
+  END LOOP;
   IF position($t$ARRAY['admin'::public.user_role, 'super_admin'::public.user_role, 'operator'::public.user_role]$t$
               IN pg_get_viewdef('public.panel_rides'::regclass)) = 0 THEN
     RAISE EXCEPTION '00668: panel_rides does not count an operator cancel as staff';
@@ -622,7 +676,10 @@ BEGIN
     RAISE EXCEPTION '00668: unexpected functions mention the operator: %', v_got;
   END IF;
 
-  -- The money, role and team functions never open to the operator.
+  -- The money, role and team functions never open to the operator. Checked by name, every
+  -- overload; a name that does not exist has nothing to open (the rehearsal's scaffold lacks
+  -- admin_refund_ride_commission and admin_send_wallet_v2_bonus_push, which prod has: its
+  -- negative proofs create them to show this check catches them).
   SELECT string_agg(p.oid::regprocedure::text, ', ') INTO v_got
   FROM pg_proc p
   WHERE p.pronamespace = 'public'::regnamespace
@@ -630,28 +687,69 @@ BEGIN
                       'unfreeze_wallet', 'approve_wallet_recharge', 'process_dispute_refund',
                       'admin_reward_referral', 'admin_invalidate_referral', 'set_referral_amounts',
                       'get_platform_earnings', 'promote_user_role', 'admin_set_user_level',
-                      'admin_set_user_active')
+                      'admin_set_user_active', 'admin_refund_ride_commission',
+                      'admin_send_wallet_v2_bonus_push')
     AND (p.prosrc ~ 'is_(operator|ops_staff)\(' OR p.prosrc ~ '''operator''');
   IF v_got IS NOT NULL THEN
     RAISE EXCEPTION '00668: % must stay closed to the operator', v_got;
   END IF;
 
-  -- The team CHECK.
-  IF (SELECT pg_get_constraintdef(oid) FROM pg_constraint
-      WHERE conrelid = 'public.team_invitations'::regclass AND conname = 'team_invitations_role_check')
-     IS DISTINCT FROM $t$CHECK ((role = ANY (ARRAY['super_admin'::public.user_role, 'admin'::public.user_role, 'marketing'::public.user_role, 'operator'::public.user_role])))$t$ THEN
-    RAISE EXCEPTION '00668: team_invitations_role_check is not the one of this file';
+  -- Exactly these functions carry the quoted literal 'operator' in their body: the role lists
+  -- section 5 patches and the three functions this file creates. Extension functions are not
+  -- this file's and are left out. (A bare search for the word would also find code that names
+  -- an OSM operator tag or a PostGIS operator.)
+  SELECT string_agg(p.oid::regprocedure::text, ', ' ORDER BY p.oid::regprocedure::text COLLATE "C") INTO v_got
+  FROM pg_proc p
+  WHERE p.pronamespace = 'public'::regnamespace AND position('''operator''' IN p.prosrc) > 0
+    AND NOT EXISTS (SELECT 1 FROM pg_depend d
+                    WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e');
+  v_want := 'public._sos_staff_alert(), public._support_alert(uuid,text), public._team_lock_target(uuid,uuid), '
+         || 'public._team_role_rank(text), public.apply_user_rating(uuid), '
+         || 'public.create_team_invitation(text,text,text), public.enforce_ride_transition(), '
+         || 'public.ensure_driver_role_and_tricicoin_on_approval(), public.is_operator(), '
+         || 'public.is_ops_staff(), public.list_team(), public.set_team_member_role(uuid,text,text), '
+         || 'public.team_digest_recipients()';
+  IF v_got IS DISTINCT FROM v_want THEN
+    RAISE EXCEPTION '00668: the functions with the quoted operator literal are % instead of %', coalesce(v_got, 'none'), v_want;
   END IF;
 
-  -- The SOS trigger: AFTER INSERT, row by row, only for an SOS, enabled.
-  -- tgtype bits: ROW 1, INSERT 4 (AFTER is the absence of BEFORE 2).
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger
-                 WHERE tgrelid = 'public.incident_reports'::regclass AND tgname = 'incident_reports_sos_staff_alert'
-                   AND tgfoid = 'public._sos_staff_alert()'::regprocedure AND tgenabled = 'O'
-                   AND tgtype = (1 | 4) AND tgqual IS NOT NULL) THEN
-    RAISE EXCEPTION '00668: incident_reports_sos_staff_alert must fire AFTER INSERT FOR EACH ROW WHEN (NEW.type = sos), enabled';
+  -- The team CHECK: exactly one CHECK constraint of team_invitations reads its role column, and it
+  -- is the one of this file.
+  SELECT count(*), string_agg(c.conname || ' ' || pg_get_constraintdef(c.oid), '; ') INTO v_n, v_got
+  FROM pg_constraint c
+  WHERE c.conrelid = 'public.team_invitations'::regclass AND c.contype = 'c'
+    AND (SELECT a.attnum FROM pg_attribute a
+         WHERE a.attrelid = 'public.team_invitations'::regclass AND a.attname = 'role') = ANY (c.conkey);
+  IF v_n <> 1 OR v_got IS DISTINCT FROM
+     $t$team_invitations_role_check CHECK ((role = ANY (ARRAY['super_admin'::public.user_role, 'admin'::public.user_role, 'marketing'::public.user_role, 'operator'::public.user_role])))$t$ THEN
+    RAISE EXCEPTION '00668: the role CHECK of team_invitations is not the one of this file: %', coalesce(v_got, 'none');
+  END IF;
+
+  -- The SOS trigger: exactly this definition, and enabled.
+  SELECT pg_get_triggerdef(t.oid) INTO v_got FROM pg_trigger t
+  WHERE t.tgrelid = 'public.incident_reports'::regclass AND t.tgname = 'incident_reports_sos_staff_alert'
+    AND t.tgenabled = 'O';
+  IF v_got IS DISTINCT FROM
+     $t$CREATE TRIGGER incident_reports_sos_staff_alert AFTER INSERT ON public.incident_reports FOR EACH ROW WHEN ((new.type = 'sos'::public.incident_type)) EXECUTE FUNCTION public._sos_staff_alert()$t$ THEN
+    RAISE EXCEPTION '00668: incident_reports_sos_staff_alert must be AFTER INSERT FOR EACH ROW WHEN (NEW.type = sos), enabled; it is %', coalesce(v_got, 'missing or disabled');
+  END IF;
+
+  -- _sos_staff_alert() runs as its owner: the owner must be able to call each function it calls
+  -- (by name, so this does not depend on their argument lists).
+  SELECT string_agg(n.fn, ', ' ORDER BY n.fn) INTO v_got
+  FROM unnest(ARRAY['check_rate_limit', 'get_service_role_key', 'log_rpc_attempt',
+                    '_third_party_person_name', 'cron_http_post']) AS n(fn)
+  WHERE NOT EXISTS (
+    SELECT 1 FROM pg_proc p
+    WHERE p.pronamespace = 'public'::regnamespace AND p.proname = n.fn
+      AND has_function_privilege((SELECT proowner FROM pg_proc WHERE oid = 'public._sos_staff_alert()'::regprocedure),
+                                 p.oid, 'EXECUTE'));
+  IF v_got IS NOT NULL THEN
+    RAISE EXCEPTION '00668: the owner of _sos_staff_alert() cannot execute %', v_got;
   END IF;
 
   PERFORM set_config('search_path', v_path, true);
 END
 $check$;
+
+RESET lock_timeout;
