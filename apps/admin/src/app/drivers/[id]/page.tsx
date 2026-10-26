@@ -807,7 +807,7 @@ function AdminDriverDetailPage() {
                           </div>
                         )}
 
-                        {/* Admin replace — always visible when not in reject panel */}
+                        {/* Admin replace: drivers.review only; hidden while the reject panel is open */}
                         {canReview && !docVerified && rejectingDocId !== doc.id && (
                           <button
                             onClick={() => handleAdminUploadDoc(docType)}
@@ -1346,8 +1346,9 @@ function Metric({ label, value, icon }: { label: string; value: string; icon?: R
 }
 
 /**
- * Admins keep the full page above; marketing gets the read-only view (00663), which reads only
- * the panel views. The role picks which component mounts, so the hooks of each never change.
+ * Roles with `detail.full` (admins and the operator) get the full page above, with each action
+ * behind its own capability; marketing gets the read-only view (00663), which reads only the
+ * panel views. The role picks which component mounts, so the hooks of each never change.
  */
 export default function DriverDetailPage() {
   const { id } = useParams<{ id: string }>();

@@ -554,8 +554,9 @@ function AdminUserDetailPage() {
 }
 
 /**
- * Admins keep the full page above; marketing gets the read-only view (00663), which reads only
- * the panel views. The role picks which component mounts, so the hooks of each never change.
+ * Roles with `detail.full` (admins and the operator) get the full page above, with each action
+ * behind its own capability; marketing gets the read-only view (00663), which reads only the
+ * panel views. The role picks which component mounts, so the hooks of each never change.
  */
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();

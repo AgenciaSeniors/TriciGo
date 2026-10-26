@@ -209,7 +209,7 @@ The operator never writes a table directly.
 - the sidebar does not load the pending-promotions count.
 
 **Mixed pages:**
-- **`/drivers/[id]` and `/users/[id]`:** no wallet adjustment. `/users/[id]` also hides the level, and shows "Bloquear" only when the target is a passenger or a driver.
+- **`/drivers/[id]` and `/users/[id]`:** no wallet adjustment. `/users/[id]` keeps the level selector disabled for anyone but a super admin (it already is), and shows "Bloquear" only when the target is a passenger or a driver.
 - **Disputes:** the refund options become "Escalar con monto sugerido".
 - **`/businesses/[id]`:** approve or reject only when the account is a fleet; no commission, suspend or reactivate.
 - **Referrals and promotions:** read-only.

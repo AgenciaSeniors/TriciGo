@@ -188,22 +188,25 @@ function AdminRideDetailPage() {
           {ride.final_fare_cup != null && ride.final_fare_cup !== ride.estimated_fare_cup && (
             <p className="text-sm text-ink-subtle line-through">{formatCUP(ride.estimated_fare_cup)} {t('rides.estimated')}</p>
           )}
-          {['searching', 'accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'arrived_at_destination'].includes(ride.status) && (
-            <Link
-              href={`/rides/${ride.id}/assist`}
-              className="mt-3 mr-2 inline-block px-4 py-2 text-sm rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-medium"
-            >
-              {t('ride_assist.assist_open', { defaultValue: 'Asistir' })}
-            </Link>
-          )}
-          {can('rides.act') && CANCELABLE_STATUSES.includes(ride.status) && (
-            <button
-              onClick={() => { setCancelReason(''); setCancelOpen(true); }}
-              className="mt-3 px-4 py-2 text-sm rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium"
-            >
-              {t('rides.cancel_ride', { defaultValue: 'Cancelar viaje' })}
-            </button>
-          )}
+          {/* empty:hidden keeps the row from adding its margin when no button shows */}
+          <div className="mt-3 flex justify-end gap-2 empty:hidden">
+            {['searching', 'accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'arrived_at_destination'].includes(ride.status) && (
+              <Link
+                href={`/rides/${ride.id}/assist`}
+                className="inline-block px-4 py-2 text-sm rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-medium"
+              >
+                {t('ride_assist.assist_open', { defaultValue: 'Asistir' })}
+              </Link>
+            )}
+            {can('rides.act') && CANCELABLE_STATUSES.includes(ride.status) && (
+              <button
+                onClick={() => { setCancelReason(''); setCancelOpen(true); }}
+                className="px-4 py-2 text-sm rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium"
+              >
+                {t('rides.cancel_ride', { defaultValue: 'Cancelar viaje' })}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -594,8 +597,9 @@ function AdminRideDetailPage() {
 }
 
 /**
- * Admins keep the full page above; marketing gets the read-only view (00663), which reads only
- * the panel views. The role picks which component mounts, so the hooks of each never change.
+ * Roles with `detail.full` (admins and the operator) get the full page above, with each action
+ * behind its own capability; marketing gets the read-only view (00663), which reads only the
+ * panel views. The role picks which component mounts, so the hooks of each never change.
  */
 export default function RideDetailPage() {
   const { id } = useParams<{ id: string }>();
