@@ -158,7 +158,7 @@ The operator never writes a table directly.
 
 **Never opened, and the migration asserts it:**
 - money: `admin_adjust_wallet`, `admin_send_gift`, `admin_reverse_gift`, `freeze_wallet`, `unfreeze_wallet`, `approve_wallet_recharge`, `process_dispute_refund`, `admin_refund_ride_commission`, `admin_reward_referral`, `admin_invalidate_referral`, `set_referral_amounts`, `admin_send_wallet_v2_bonus_push` and `get_platform_earnings`;
-- roles and team: `promote_user_role`, `admin_set_user_level` and the team functions;
+- roles: `promote_user_role` and `admin_set_user_level`. The team functions stay closed too, but not through this assertion: they name the operator because it is a role that can be invited, and `_team_require_super_admin` is what keeps it out of them;
 - configuration.
 
 ### 4. Disputes: escalating with a suggested amount
