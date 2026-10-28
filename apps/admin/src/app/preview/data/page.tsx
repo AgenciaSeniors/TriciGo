@@ -281,6 +281,12 @@ export default function DataPreviewPage() {
           setPageSize(next.pageSize);
         }}
         rowActions={[
+          {
+            label: 'Asistir',
+            tone: 'primary',
+            visible: (r) => ['searching', 'accepted', 'in_progress'].includes(r.status),
+            onClick: (r) => alert('Asistir ' + r.id),
+          },
           { label: 'Ver', onClick: (r) => alert('Ver ' + r.id) },
           { label: 'Cancelar', tone: 'danger', onClick: (r) => alert('Cancelar ' + r.id) },
         ]}
