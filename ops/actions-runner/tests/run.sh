@@ -91,9 +91,9 @@ run_gate() {
 }
 emails() { if [[ -s "$MOCK/emails.jsonl" ]]; then grep -c '' "$MOCK/emails.jsonl"; else echo 0; fi; }
 
-R=GITHUB_REPOSITORY=AgenciaSeniors/TriciGo
-WEB=GITHUB_WORKFLOW_REF=AgenciaSeniors/TriciGo/.github/workflows/deploy-web.yml@refs/heads/master
-ADMIN=GITHUB_WORKFLOW_REF=AgenciaSeniors/TriciGo/.github/workflows/deploy-admin.yml@refs/heads/master
+R=GITHUB_REPOSITORY=Edua050923/TriciGo
+WEB=GITHUB_WORKFLOW_REF=Edua050923/TriciGo/.github/workflows/deploy-web.yml@refs/heads/master
+ADMIN=GITHUB_WORKFLOW_REF=Edua050923/TriciGo/.github/workflows/deploy-admin.yml@refs/heads/master
 M=GITHUB_REF=refs/heads/master
 J=GITHUB_JOB=deploy
 
@@ -105,8 +105,8 @@ has "  journal line" "$JOURNAL" "tricigo-runner-gate: permitido:"
 chk "  no e-mail" "$(emails)" 0
 run_gate "$GATE" "$R" GITHUB_EVENT_NAME=workflow_dispatch "$M" "$ADMIN" "$J"
 chk "dispatch on master, deploy-admin: allowed" "$RC" 0
-run_gate "$GATE" GITHUB_REPOSITORY=agenciaseniors/tricigo GITHUB_EVENT_NAME=push "$M" \
-  GITHUB_WORKFLOW_REF=agenciaseniors/TRICIGO/.github/workflows/deploy-web.yml@refs/heads/master "$J"
+run_gate "$GATE" GITHUB_REPOSITORY=edua050923/tricigo GITHUB_EVENT_NAME=push "$M" \
+  GITHUB_WORKFLOW_REF=edua050923/TRICIGO/.github/workflows/deploy-web.yml@refs/heads/master "$J"
 chk "repository name in another case: allowed" "$RC" 0
 
 echo "== refused"
@@ -117,29 +117,36 @@ refused() {   # <label> <want-in-reason> VAR=value ...
   has "  reason in the job log" "$OUT" "$want"
 }
 refused "pull request (fork or branch)" "evento pull_request" "$R" GITHUB_EVENT_NAME=pull_request \
-  GITHUB_REF=refs/pull/7/merge GITHUB_WORKFLOW_REF=AgenciaSeniors/TriciGo/.github/workflows/deploy-web.yml@refs/pull/7/merge "$J"
+  GITHUB_REF=refs/pull/7/merge GITHUB_WORKFLOW_REF=Edua050923/TriciGo/.github/workflows/deploy-web.yml@refs/pull/7/merge "$J"
 refused "pull_request_target" "evento pull_request_target" "$R" GITHUB_EVENT_NAME=pull_request_target "$M" "$WEB" "$J"
 refused "push to another branch" "rama o ref refs/heads/feature" "$R" GITHUB_EVENT_NAME=push \
-  GITHUB_REF=refs/heads/feature GITHUB_WORKFLOW_REF=AgenciaSeniors/TriciGo/.github/workflows/deploy-web.yml@refs/heads/feature "$J"
+  GITHUB_REF=refs/heads/feature GITHUB_WORKFLOW_REF=Edua050923/TriciGo/.github/workflows/deploy-web.yml@refs/heads/feature "$J"
 refused "dispatch from another branch" "rama o ref refs/heads/x" "$R" GITHUB_EVENT_NAME=workflow_dispatch \
-  GITHUB_REF=refs/heads/x GITHUB_WORKFLOW_REF=AgenciaSeniors/TriciGo/.github/workflows/deploy-admin.yml@refs/heads/x "$J"
+  GITHUB_REF=refs/heads/x GITHUB_WORKFLOW_REF=Edua050923/TriciGo/.github/workflows/deploy-admin.yml@refs/heads/x "$J"
 refused "ref master but workflow read from a branch" "workflow leído de refs/heads/evil" "$R" GITHUB_EVENT_NAME=push "$M" \
-  GITHUB_WORKFLOW_REF=AgenciaSeniors/TriciGo/.github/workflows/deploy-web.yml@refs/heads/evil "$J"
+  GITHUB_WORKFLOW_REF=Edua050923/TriciGo/.github/workflows/deploy-web.yml@refs/heads/evil "$J"
 refused "a tag" "rama o ref refs/tags/v1" "$R" GITHUB_EVENT_NAME=push GITHUB_REF=refs/tags/v1 \
-  GITHUB_WORKFLOW_REF=AgenciaSeniors/TriciGo/.github/workflows/deploy-web.yml@refs/tags/v1 "$J"
+  GITHUB_WORKFLOW_REF=Edua050923/TriciGo/.github/workflows/deploy-web.yml@refs/tags/v1 "$J"
 refused "another workflow on master" "workflow ci.yml" "$R" GITHUB_EVENT_NAME=push "$M" \
-  GITHUB_WORKFLOW_REF=AgenciaSeniors/TriciGo/.github/workflows/ci.yml@refs/heads/master "$J"
+  GITHUB_WORKFLOW_REF=Edua050923/TriciGo/.github/workflows/ci.yml@refs/heads/master "$J"
 refused "a look-alike workflow file" "workflow deploy-web.yml.bak" "$R" GITHUB_EVENT_NAME=push "$M" \
-  GITHUB_WORKFLOW_REF=AgenciaSeniors/TriciGo/.github/workflows/deploy-web.yml.bak@refs/heads/master "$J"
+  GITHUB_WORKFLOW_REF=Edua050923/TriciGo/.github/workflows/deploy-web.yml.bak@refs/heads/master "$J"
 refused "a workflow in a subfolder" "workflow sub/.github/workflows/deploy-web.yml" "$R" GITHUB_EVENT_NAME=push "$M" \
-  GITHUB_WORKFLOW_REF=AgenciaSeniors/TriciGo/.github/workflows/sub/.github/workflows/deploy-web.yml@refs/heads/master "$J"
+  GITHUB_WORKFLOW_REF=Edua050923/TriciGo/.github/workflows/sub/.github/workflows/deploy-web.yml@refs/heads/master "$J"
 refused "a second @ in the workflow ref" "workflow leído de" "$R" GITHUB_EVENT_NAME=push "$M" \
-  GITHUB_WORKFLOW_REF=AgenciaSeniors/TriciGo/.github/workflows/deploy-web.yml@refs/heads/master@refs/heads/evil "$J"
+  GITHUB_WORKFLOW_REF=Edua050923/TriciGo/.github/workflows/deploy-web.yml@refs/heads/master@refs/heads/evil "$J"
 refused "the build job" "trabajo build" "$R" GITHUB_EVENT_NAME=push "$M" "$WEB" GITHUB_JOB=build
 refused "another repository" "repositorio distinto" GITHUB_REPOSITORY=someone/TriciGo GITHUB_EVENT_NAME=push "$M" \
   GITHUB_WORKFLOW_REF=someone/TriciGo/.github/workflows/deploy-web.yml@refs/heads/master "$J"
 refused "a workflow of another repository" "workflow de otro repositorio" "$R" GITHUB_EVENT_NAME=push "$M" \
   GITHUB_WORKFLOW_REF=someone/TriciGo/.github/workflows/deploy-web.yml@refs/heads/master "$J"
+# The repository moved from AgenciaSeniors/TriciGo (2026-10). GitHub redirects the
+# old name, but whoever holds it now could create a new repository there.
+refused "the repository's old name" "repositorio distinto" GITHUB_REPOSITORY=AgenciaSeniors/TriciGo \
+  GITHUB_EVENT_NAME=push "$M" \
+  GITHUB_WORKFLOW_REF=AgenciaSeniors/TriciGo/.github/workflows/deploy-web.yml@refs/heads/master "$J"
+refused "a workflow under the old name" "workflow de otro repositorio" "$R" GITHUB_EVENT_NAME=push "$M" \
+  GITHUB_WORKFLOW_REF=AgenciaSeniors/TriciGo/.github/workflows/deploy-admin.yml@refs/heads/master "$J"
 refused "a schedule" "evento schedule" "$R" GITHUB_EVENT_NAME=schedule "$M" "$WEB" "$J"
 for v in GITHUB_REPOSITORY GITHUB_EVENT_NAME GITHUB_REF GITHUB_WORKFLOW_REF GITHUB_JOB; do
   args=()
@@ -152,7 +159,7 @@ chk "no variables at all: refused" "$RC" 1
 
 echo "== the refusal is logged and e-mailed"
 run_gate "$GATE" "$R" GITHUB_EVENT_NAME=pull_request GITHUB_REF=refs/pull/7/merge \
-  GITHUB_WORKFLOW_REF=AgenciaSeniors/TriciGo/.github/workflows/evil.yml@refs/pull/7/merge "$J"
+  GITHUB_WORKFLOW_REF=Edua050923/TriciGo/.github/workflows/evil.yml@refs/pull/7/merge "$J"
 chk "exit 1" "$RC" 1
 has "error annotation in the job log" "$OUT" "::error::Este runner solo ejecuta"
 has "journal: refused" "$JOURNAL" "tricigo-runner-gate: RECHAZADO (evento pull_request)"
@@ -160,7 +167,7 @@ has "journal: e-mail sent" "$JOURNAL" "aviso enviado (resend http=200)"
 chk "one e-mail" "$(emails)" 1
 chk "  to both recipients" "$(cat "$MOCK/last.to")" "ops@example.com,owner@example.com"
 has "  subject names the reason" "$(cat "$MOCK/last.subject")" "trabajo rechazado (evento pull_request)"
-has "  body has the run link" "$(cat "$MOCK/last.text")" "https://github.com/AgenciaSeniors/TriciGo/actions/runs/12345"
+has "  body has the run link" "$(cat "$MOCK/last.text")" "https://github.com/Edua050923/TriciGo/actions/runs/12345"
 has "  body has the workflow" "$(cat "$MOCK/last.text")" "evil.yml@refs/pull/7/merge"
 chk "  valid JSON" "$(cat "$MOCK/last.valid")" y
 chk "  key only in the Authorization header" "$(cat "$MOCK/last.auth")" "Bearer $SECRET_KEY"
@@ -186,7 +193,7 @@ mv "$CONF.bak" "$CONF"
 
 echo "== hostile values are printed, never run"
 run_gate "$GATE" "$R" GITHUB_EVENT_NAME=push "GITHUB_REF=refs/heads/\$(touch $WORK/pwned1)" \
-  "GITHUB_WORKFLOW_REF=AgenciaSeniors/TriciGo/.github/workflows/deploy-web.yml@refs/heads/\`touch $WORK/pwned2\`" "$J"
+  "GITHUB_WORKFLOW_REF=Edua050923/TriciGo/.github/workflows/deploy-web.yml@refs/heads/\`touch $WORK/pwned2\`" "$J"
 chk "branch with \$(...) and backticks: refused" "$RC" 1
 chk "  nothing executed" "$(ls "$WORK" | grep -c pwned)" 0
 run_gate "$GATE" "$R" GITHUB_EVENT_NAME=push $'GITHUB_REF=refs/heads/a\n::add-mask::x' "$WEB" "$J"
@@ -221,9 +228,9 @@ mutant job    "the build job" "$R" GITHUB_EVENT_NAME=push "$M" "$WEB" GITHUB_JOB
 mutant wfrepo "workflow of another repository" "$R" GITHUB_EVENT_NAME=push "$M" \
   GITHUB_WORKFLOW_REF=someone/TriciGo/.github/workflows/deploy-web.yml@refs/heads/master "$J"
 mutant wffile "another workflow" "$R" GITHUB_EVENT_NAME=push "$M" \
-  GITHUB_WORKFLOW_REF=AgenciaSeniors/TriciGo/.github/workflows/ci.yml@refs/heads/master "$J"
+  GITHUB_WORKFLOW_REF=Edua050923/TriciGo/.github/workflows/ci.yml@refs/heads/master "$J"
 mutant wfref  "workflow read from a branch" "$R" GITHUB_EVENT_NAME=push "$M" \
-  GITHUB_WORKFLOW_REF=AgenciaSeniors/TriciGo/.github/workflows/deploy-web.yml@refs/heads/evil "$J"
+  GITHUB_WORKFLOW_REF=Edua050923/TriciGo/.github/workflows/deploy-web.yml@refs/heads/evil "$J"
 
 echo
 echo "passed: $pass  failed: $fail"
