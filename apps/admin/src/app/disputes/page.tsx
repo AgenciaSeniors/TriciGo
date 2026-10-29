@@ -610,7 +610,7 @@ export default function DisputesPage() {
                   </section>
                 )}
 
-              {canAct && (
+              {canAct ? (
                 <section className="px-5 py-4">
                   <h3 className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
                     {t('disputes.admin_notes_title', { defaultValue: 'Notas internas' })}
@@ -630,7 +630,23 @@ export default function DisputesPage() {
                     </button>
                   </div>
                 </section>
-              )}
+              ) : fullData ? (
+                // The operator reads the notes but writes none yet (00668). Marketing's view has no notes.
+                <section className="px-5 py-4">
+                  <h3 className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
+                    {t('disputes.admin_notes_title', { defaultValue: 'Notas internas' })}
+                  </h3>
+                  {selected.admin_notes?.trim() ? (
+                    <p className="whitespace-pre-wrap break-words rounded-xl border border-line bg-surface-sunken px-3 py-2 text-[13px] text-ink">
+                      {selected.admin_notes}
+                    </p>
+                  ) : (
+                    <p className="text-[12.5px] italic text-ink-subtle">
+                      {t('disputes.admin_notes_empty', { defaultValue: 'Sin notas internas.' })}
+                    </p>
+                  )}
+                </section>
+              ) : null}
             </div>
           )}
         </div>

@@ -1613,6 +1613,7 @@
     "return_fee_label": "Tarifa:",
     "return_location_label": "Lugar:",
     "admin_notes_title": "Notas internas",
+    "admin_notes_empty": "Sin notas internas.",
     "save_notes": "Guardar notas",
     "closing": "Cerrando…",
     "close_report": "Cerrar reporte"
@@ -1799,6 +1800,7 @@
     "resolve_button": "Resolver",
     "refund_suffix": "Reembolso:",
     "admin_notes_title": "Notas internas",
+    "admin_notes_empty": "Sin notas internas.",
     "save_notes": "Guardar notas",
     "filter_closed": "Cerradas",
     "filter_escalated": "Escaladas",

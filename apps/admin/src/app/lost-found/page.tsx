@@ -275,6 +275,7 @@ export default function LostFoundPage() {
               onClose={() => void handleClose()}
               closing={closing}
               readOnly={!canAct}
+              canReadNotes={fullData}
             />
           ) : (
             <div className="flex min-h-[480px] items-center justify-center p-6">
@@ -301,6 +302,7 @@ function ItemDetail({
   onClose,
   closing,
   readOnly,
+  canReadNotes,
 }: {
   item: PanelLostItem;
   adminNotes: string;
@@ -308,8 +310,10 @@ function ItemDetail({
   onSaveNotes: () => void;
   onClose: () => void;
   closing: boolean;
-  /** Marketing: no notes and no actions (its view leaves out the notes and the return arrangements). */
+  /** No actions: marketing, and the operator until it gets its own (00668). */
   readOnly: boolean;
+  /** Read-only notes for the operator. Marketing's view leaves out the notes and the return arrangements. */
+  canReadNotes: boolean;
 }) {
   const { t } = useTranslation('admin');
   const Icon = CATEGORY_ICON[item.category] ?? Package;
@@ -430,7 +434,7 @@ function ItemDetail({
         </section>
       )}
 
-      {!readOnly && (
+      {!readOnly ? (
         <section className="px-5 py-4">
           <h3 className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
             {t('lost_found.admin_notes_title', { defaultValue: 'Notas internas' })}
@@ -461,7 +465,22 @@ function ItemDetail({
             )}
           </div>
         </section>
-      )}
+      ) : canReadNotes ? (
+        <section className="px-5 py-4">
+          <h3 className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
+            {t('lost_found.admin_notes_title', { defaultValue: 'Notas internas' })}
+          </h3>
+          {item.admin_notes?.trim() ? (
+            <p className="whitespace-pre-wrap break-words rounded-xl border border-line bg-surface-sunken px-3 py-2 text-[13px] text-ink">
+              {item.admin_notes}
+            </p>
+          ) : (
+            <p className="text-[12.5px] italic text-ink-subtle">
+              {t('lost_found.admin_notes_empty', { defaultValue: 'Sin notas internas.' })}
+            </p>
+          )}
+        </section>
+      ) : null}
     </div>
   );
 }
