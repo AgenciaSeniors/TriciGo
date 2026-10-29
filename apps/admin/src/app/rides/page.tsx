@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Download, Route, Search } from 'lucide-react';
 import { panelReadService, type PanelRide } from '@tricigo/api';
 import { formatCUP, getErrorMessage } from '@tricigo/utils';
@@ -16,6 +17,8 @@ import { rideCancelSummary } from '@/lib/rideCancel';
 import { exportToCsv } from '@/lib/exportCsv';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useRequestGuard } from '@/hooks/useRequestGuard';
+import { canAssistRide, rideAssistHref } from '@/lib/rideAssist';
+import { useCanAct } from '@/lib/useCanAct';
 
 const PAGE_SIZE = 20;
 
@@ -42,6 +45,9 @@ function truncate(str: string | null | undefined, len: number) {
 
 export default function RidesPage() {
   const { t } = useTranslation('admin');
+  const router = useRouter();
+  // Marketing reads this list but cannot open the assist page (MARKETING_DENIED).
+  const { canAct } = useCanAct();
 
   const STATUS_TABS: StatusTab<StatusFilter>[] = useMemo(() => [
     { id: 'all', label: t('rides.filter_all', { defaultValue: 'Todos' }) },
@@ -442,6 +448,18 @@ export default function RidesPage() {
               }
         }
         rowHref={(r) => `/rides/${r.id}`}
+        rowActions={canAct ? [
+          {
+            label: t('ride_assist.assist_open', { defaultValue: 'Asistir' }),
+            tone: 'primary',
+            visible: (r) => canAssistRide(r.status),
+            ariaLabel: (r) => t('rides.assist_row_aria', {
+              code: r.id.slice(0, 8),
+              defaultValue: 'Asistir el viaje #{{code}}',
+            }),
+            onClick: (r) => router.push(rideAssistHref(r.id)),
+          },
+        ] : undefined}
         sort={sort}
         onSortChange={setSort}
         pagination={{

@@ -37,8 +37,22 @@ export type SortState = {
 type Action<T> = {
   label: string;
   onClick: (row: T) => void;
-  tone?: 'default' | 'danger';
+  /** 'primary' is for the action a row is usually opened for, like "Asistir" on an active ride. */
+  tone?: 'default' | 'danger' | 'primary';
+  /** Rows where this returns false don't get the action. Omitted: every row gets it. */
+  visible?: (row: T) => boolean;
+  /** Screen-reader name when the label alone repeats on every row. */
+  ariaLabel?: (row: T) => string;
 };
+
+// Light: -700 on the /10 tint is 4.6:1 even over the row hover; the button's own /15
+// hover drops it to 4.35:1, so the text goes to -800 there (6.0:1). Dark keeps -400 (≥5.4:1).
+const PRIMARY_ACTION =
+  'bg-primary-500/10 text-primary-700 hover:bg-primary-500/15 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-400';
+
+function visibleActions<T>(actions: Action<T>[] | undefined, row: T): Action<T>[] {
+  return actions ? actions.filter((a) => !a.visible || a.visible(row)) : [];
+}
 
 type Props<T> = {
   columns: DataColumn<T>[];
@@ -248,15 +262,18 @@ export function DataTable<T>({
                         {rowActions && rowActions.length > 0 && (
                           <td className={`border-b border-line px-2 ${padY} text-right ${i === rows.length - 1 ? 'border-b-0' : ''}`}>
                             <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                              {rowActions.map((a, ai) => (
+                              {visibleActions(rowActions, row).map((a, ai) => (
                                 <button
                                   key={ai}
                                   type="button"
                                   onClick={() => a.onClick(row)}
-                                  className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                                  aria-label={a.ariaLabel?.(row)}
+                                  className={`whitespace-nowrap rounded-md px-2 py-1 text-[11px] transition-colors ${
                                     a.tone === 'danger'
-                                      ? 'text-red-700 hover:bg-red-500/10 dark:text-red-400'
-                                      : 'text-ink-muted hover:bg-surface-sunken hover:text-ink'
+                                      ? 'font-medium text-red-700 hover:bg-red-500/10 dark:text-red-400'
+                                      : a.tone === 'primary'
+                                        ? `font-semibold ${PRIMARY_ACTION}`
+                                        : 'font-medium text-ink-muted hover:bg-surface-sunken hover:text-ink'
                                   }`}
                                 >
                                   {a.label}
@@ -294,6 +311,7 @@ export function DataTable<T>({
           <ul className="divide-y divide-line md:hidden">
             {rows.map((row) => {
               const rowKey = String(row[keyField]);
+              const cardActions = visibleActions(rowActions, row);
               const cardBody = (
                 <div className="flex flex-col gap-2 px-4 py-3">
                   <div className="flex items-start justify-between gap-3">
@@ -324,20 +342,26 @@ export function DataTable<T>({
                       ))}
                     </dl>
                   )}
-                  {rowActions && rowActions.length > 0 && (
+                  {cardActions.length > 0 && (
                     <div className="mt-1 flex flex-wrap gap-2 pt-1">
-                      {rowActions.map((a, ai) => (
+                      {cardActions.map((a, ai) => (
                         <button
                           key={ai}
                           type="button"
                           onClick={(e) => {
+                            // The card is a link: stopPropagation keeps Next's handler out, but
+                            // without preventDefault the browser still follows the card's href.
+                            e.preventDefault();
                             e.stopPropagation();
                             a.onClick(row);
                           }}
-                          className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                          aria-label={a.ariaLabel?.(row)}
+                          className={`rounded-full border ${
                             a.tone === 'danger'
-                              ? 'border-red-500/30 text-red-600 dark:text-red-400'
-                              : 'border-line text-ink-muted hover:text-ink'
+                              ? 'border-red-500/30 px-2.5 py-1 text-[11px] font-medium text-red-600 dark:text-red-400'
+                              : a.tone === 'primary'
+                                ? `inline-flex min-h-10 items-center border-primary-500/30 px-4 text-[12.5px] font-semibold ${PRIMARY_ACTION}`
+                                : 'border-line px-2.5 py-1 text-[11px] font-medium text-ink-muted hover:text-ink'
                           }`}
                         >
                           {a.label}
