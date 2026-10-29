@@ -9,10 +9,10 @@
 //      that fails claims nothing, so the day stays open and the 08:05 dispatch tries again;
 //   2. claims the day (claim_team_digest: one winner; a lost claim sends nothing). Nothing is sent
 //      before the claim, so only one run can send;
-//   3. renders each person's version (marketing without money) and sends it through send-email,
-//      one at a time, as raw HTML, with a 20 s timeout and one retry about 1 s later. Each person
-//      is in their own try: a failure, or an exception in their token or render, counts as failed
-//      and the loop goes on;
+//   3. renders each person's version (marketing and the operator get no money, and the operator
+//      also gets the pending block) and sends it through send-email, one at a time, as raw HTML,
+//      with a 20 s timeout and one retry about 1 s later. Each person is in their own try: a
+//      failure, or an exception in their token or render, counts as failed and the loop goes on;
 //   4. records the outcome (finish_team_digest), also with nobody to send to. A run that dies
 //      before this stays 'sending' and becomes 'failed' 30 minutes later;
 //      check_team_digest_overdue alerts after 9:00.

@@ -45,7 +45,8 @@
     "light_mode": "Light mode",
     "dark_mode": "Dark mode",
     "role_admin": "Administrator",
-    "role_marketing": "Marketing"
+    "role_marketing": "Marketing",
+    "role_operator": "Operator"
   },
   "notifications_bell": {
     "aria": "Updates",
@@ -624,6 +625,7 @@
     "empty_zero_title": "No users yet",
     "empty_zero_body": "When someone registers, they will appear here.",
     "role_marketing": "Marketing",
+    "role_operator": "Operator",
     "level_updated": "Level updated",
     "wallet_frozen": "Frozen",
     "work_wallet": "Work balance (TC)"
@@ -1611,6 +1613,7 @@
     "return_fee_label": "Fee:",
     "return_location_label": "Location:",
     "admin_notes_title": "Internal notes",
+    "admin_notes_empty": "No internal notes.",
     "save_notes": "Save notes",
     "closing": "Closing…",
     "close_report": "Close report"
@@ -1797,6 +1800,7 @@
     "resolve_button": "Resolve",
     "refund_suffix": "Refund:",
     "admin_notes_title": "Internal notes",
+    "admin_notes_empty": "No internal notes.",
     "save_notes": "Save notes",
     "filter_closed": "Closed",
     "filter_escalated": "Escalated",
@@ -2734,6 +2738,7 @@
     "role_super_admin": "Super admin",
     "role_admin": "Admin",
     "role_marketing": "Marketing",
+    "role_operator": "Operator",
     "members": "Members",
     "no_members": "Nobody yet.",
     "invitations": "Pending invitations",

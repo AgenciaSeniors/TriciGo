@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { LogOut, Menu, Moon, Search, Sun, User as UserIcon } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
-import { menuRole } from '@tricigo/utils/adminPanelAccess';
+import { canOpenPanelPath, menuRole } from '@tricigo/utils/adminPanelAccess';
 import { useAdminUser } from '@/lib/useAdminUser';
 import { usePanelRole } from '@/lib/panelRole';
 import { createBrowserClient } from '@/lib/supabase-server';
@@ -71,7 +71,8 @@ export function Header() {
   const { theme, toggle: toggleTheme } = useTheme();
   const { t } = useTranslation('admin');
   const { role } = usePanelRole();
-  const isMarketing = menuRole(role) === 'marketing';
+  const panelRole = menuRole(role);
+  const isMarketing = panelRole === 'marketing';
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -203,13 +204,15 @@ export function Header() {
                 <div className="flex min-w-0 flex-col">
                   <span className="truncate text-sm font-medium text-ink">{email || '—'}</span>
                   <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
-                    {isMarketing
+                    {panelRole === 'marketing'
                       ? t('header.role_marketing', { defaultValue: 'Marketing' })
-                      : t('header.role_admin', { defaultValue: 'Administrador' })}
+                      : panelRole === 'operator'
+                        ? t('header.role_operator', { defaultValue: 'Operador' })
+                        : t('header.role_admin', { defaultValue: 'Administrador' })}
                   </span>
                 </div>
               </div>
-              {!isMarketing && (
+              {canOpenPanelPath(panelRole, '/settings') && (
                 <button
                   onClick={() => router.push('/settings')}
                   className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-ink-muted hover:bg-surface-sunken hover:text-ink"

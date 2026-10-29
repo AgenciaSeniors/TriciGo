@@ -9,7 +9,7 @@ import { useToast } from '@/components/ui/AdminToast';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { DataTable, type DataColumn } from '@/components/data/DataTable';
 import { formatAdminDate } from '@/lib/formatDate';
-import { useCanAct } from '@/lib/useCanAct';
+import { usePanelCan } from '@/lib/usePanelCan';
 
 const PAGE_SIZE = 50;
 
@@ -31,7 +31,8 @@ const emptyForm: PoiInput & { _editingId: number | null } = {
 
 export default function PoisAdminPage() {
   const { showToast } = useToast();
-  const { canAct } = useCanAct();
+  const { can } = usePanelCan();
+  const canAct = can('pois.act');
 
   const [pois, setPois] = useState<Poi[]>([]);
   const [total, setTotal] = useState(0);

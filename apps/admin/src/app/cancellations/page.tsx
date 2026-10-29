@@ -11,6 +11,7 @@ import { DataTable, type DataColumn } from '@/components/data/DataTable';
 import { FilterBar, type StatusTab } from '@/components/data/FilterBar';
 import { formatAdminDate } from '@/lib/formatDate';
 import { useRequestGuard } from '@/hooks/useRequestGuard';
+import { usePanelCan } from '@/lib/usePanelCan';
 
 const PAGE_SIZE = 20;
 
@@ -55,6 +56,7 @@ const STATUS_CLASS: Record<string, string> = {
 export default function CancellationReviewsPage() {
   const router = useRouter();
   const { t } = useTranslation('admin');
+  const { can } = usePanelCan();
   const { showToast } = useToast();
 
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -188,16 +190,18 @@ export default function CancellationReviewsPage() {
             {t('cancellations.page_description', { defaultValue: 'Pares que cancelan repetido tras encontrarse — posible colusión para evadir la comisión.' })}
           </p>
         </div>
-        <button
-          type="button"
-          disabled={scanning}
-          onClick={() => void rescan()}
-          className="rounded-lg border border-line bg-surface-elevated px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-sunken disabled:opacity-50"
-        >
-          {scanning
-            ? t('cancellations.rescanning', { defaultValue: 'Escaneando…' })
-            : t('cancellations.rescan', { defaultValue: 'Re-escanear' })}
-        </button>
+        {can('moderation.act') && (
+          <button
+            type="button"
+            disabled={scanning}
+            onClick={() => void rescan()}
+            className="rounded-lg border border-line bg-surface-elevated px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-sunken disabled:opacity-50"
+          >
+            {scanning
+              ? t('cancellations.rescanning', { defaultValue: 'Escaneando…' })
+              : t('cancellations.rescan', { defaultValue: 'Re-escanear' })}
+          </button>
+        )}
       </div>
 
       <FilterBar<StatusFilter>

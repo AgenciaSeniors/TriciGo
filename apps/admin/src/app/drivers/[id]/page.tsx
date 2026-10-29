@@ -21,7 +21,7 @@ import type {
 import { useAdminUser } from '@/lib/useAdminUser';
 import { formatAdminDate } from '@/lib/formatDate';
 import { DOC_TYPE_LABEL, VEHICLE_TYPE_LABEL, labelFor } from '@/lib/labels';
-import { useCanAct } from '@/lib/useCanAct';
+import { usePanelCan } from '@/lib/usePanelCan';
 import { DriverDetailReadOnly } from '@/components/panel/DriverDetailReadOnly';
 import {
   ArrowLeft,
@@ -95,6 +95,10 @@ function vehicleIcon(type?: string) {
 
 function AdminDriverDetailPage() {
   const { t } = useTranslation('admin');
+  const { can } = usePanelCan();
+  const canReview = can('drivers.review');
+  const canMoney = can('money.act');
+  const canDeletePending = can('accounts.delete_pending');
   const { showToast } = useToast();
   const { userId: adminUserId } = useAdminUser();
   const { id } = useParams<{ id: string }>();
@@ -496,74 +500,84 @@ function AdminDriverDetailPage() {
           </div>
 
           {/* Actions menu */}
-          <div className="relative" ref={actionsMenuRef}>
-            <button
-              onClick={() => setActionsMenuOpen((v) => !v)}
-              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-line bg-surface-elevated text-sm font-medium text-ink hover:bg-surface-sunken transition-colors"
-            >
-              {t('drivers.actions', { defaultValue: 'Acciones' })}
-              <MoreVertical size={14} />
-            </button>
-            {actionsMenuOpen && (
-              <div className="absolute left-0 sm:left-auto sm:right-0 mt-1 w-56 max-w-[calc(100vw-2rem)] rounded-lg border border-line bg-surface-elevated shadow-lg overflow-hidden z-20">
-                {(status === 'under_review' || status === 'pending_verification' || status === 'rejected' || status === 'suspended') && (
-                  <button
-                    onClick={handleApprove}
-                    disabled={actionLoading || !allDocsVerified}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-green-700 hover:bg-green-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-left"
-                    title={!allDocsVerified ? `Debe verificar los documentos requeridos (${requiredVerifiedCount}/${REQUIRED_DOC_TYPES.length})` : ''}
-                  >
-                    <CheckCircle2 size={14} />
-                    {t('drivers.action_approve', { defaultValue: 'Aprobar conductor' })}
-                    {!allDocsVerified && <span className="ml-auto text-xs text-ink-subtle">{requiredVerifiedCount}/{REQUIRED_DOC_TYPES.length}</span>}
-                  </button>
-                )}
-                {(status === 'under_review' || status === 'pending_verification') && (
-                  <button
-                    onClick={() => { setShowReasonModal('reject'); setActionsMenuOpen(false); }}
-                    disabled={actionLoading}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-40 transition-colors text-left"
-                  >
-                    <XCircle size={14} />
-                    {t('drivers.action_reject', { defaultValue: 'Rechazar conductor' })}
-                  </button>
-                )}
-                {status === 'approved' && (
-                  <button
-                    onClick={() => { setShowReasonModal('suspend'); setActionsMenuOpen(false); }}
-                    disabled={actionLoading}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-orange-700 hover:bg-orange-50 disabled:opacity-40 transition-colors text-left"
-                  >
-                    <AlertTriangle size={14} />
-                    {t('drivers.action_suspend', { defaultValue: 'Suspender conductor' })}
-                  </button>
-                )}
+          {(canReview || canMoney || canDeletePending) && (
+            <div className="relative" ref={actionsMenuRef}>
+              <button
+                onClick={() => setActionsMenuOpen((v) => !v)}
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-line bg-surface-elevated text-sm font-medium text-ink hover:bg-surface-sunken transition-colors"
+              >
+                {t('drivers.actions', { defaultValue: 'Acciones' })}
+                <MoreVertical size={14} />
+              </button>
+              {actionsMenuOpen && (
+                <div className="absolute left-0 sm:left-auto sm:right-0 mt-1 w-56 max-w-[calc(100vw-2rem)] rounded-lg border border-line bg-surface-elevated shadow-lg overflow-hidden z-20">
+                  {canReview && (status === 'under_review' || status === 'pending_verification' || status === 'rejected' || status === 'suspended') && (
+                    <button
+                      onClick={handleApprove}
+                      disabled={actionLoading || !allDocsVerified}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-green-700 hover:bg-green-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-left"
+                      title={!allDocsVerified ? `Debe verificar los documentos requeridos (${requiredVerifiedCount}/${REQUIRED_DOC_TYPES.length})` : ''}
+                    >
+                      <CheckCircle2 size={14} />
+                      {t('drivers.action_approve', { defaultValue: 'Aprobar conductor' })}
+                      {!allDocsVerified && <span className="ml-auto text-xs text-ink-subtle">{requiredVerifiedCount}/{REQUIRED_DOC_TYPES.length}</span>}
+                    </button>
+                  )}
+                  {canReview && (status === 'under_review' || status === 'pending_verification') && (
+                    <button
+                      onClick={() => { setShowReasonModal('reject'); setActionsMenuOpen(false); }}
+                      disabled={actionLoading}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-40 transition-colors text-left"
+                    >
+                      <XCircle size={14} />
+                      {t('drivers.action_reject', { defaultValue: 'Rechazar conductor' })}
+                    </button>
+                  )}
+                  {canReview && status === 'approved' && (
+                    <button
+                      onClick={() => { setShowReasonModal('suspend'); setActionsMenuOpen(false); }}
+                      disabled={actionLoading}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-orange-700 hover:bg-orange-50 disabled:opacity-40 transition-colors text-left"
+                    >
+                      <AlertTriangle size={14} />
+                      {t('drivers.action_suspend', { defaultValue: 'Suspender conductor' })}
+                    </button>
+                  )}
 
-                {/* Wallet ops — always available */}
-                <div className="border-t border-line my-1" />
-                <button
-                  onClick={() => { setWalletModalOpen(true); setActionsMenuOpen(false); }}
-                  disabled={actionLoading}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-primary-700 hover:bg-primary-50 disabled:opacity-40 transition-colors text-left"
-                >
-                  <span className="text-base leading-none">±</span>
-                  {t('admin_ops.adjust_wallet_btn', { defaultValue: 'Ajustar saldo TC' })}
-                </button>
+                  {/* Wallet ops — money.act only */}
+                  {canMoney && (
+                    <>
+                      <div className="border-t border-line my-1" />
+                      <button
+                        onClick={() => { setWalletModalOpen(true); setActionsMenuOpen(false); }}
+                        disabled={actionLoading}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-primary-700 hover:bg-primary-50 disabled:opacity-40 transition-colors text-left"
+                      >
+                        <span className="text-base leading-none">±</span>
+                        {t('admin_ops.adjust_wallet_btn', { defaultValue: 'Ajustar saldo TC' })}
+                      </button>
+                    </>
+                  )}
 
-                {/* Delete pending/empty account — frees the phone for re-registration.
-                    The EF re-checks a strict safety gate (refuses if balance/rides). */}
-                <div className="border-t border-line my-1" />
-                <button
-                  onClick={() => { setDeleteAccountModalOpen(true); setActionsMenuOpen(false); }}
-                  disabled={actionLoading}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-40 transition-colors text-left"
-                >
-                  <XCircle size={14} />
-                  {t('users.delete_account_btn', { defaultValue: 'Eliminar cuenta' })}
-                </button>
-              </div>
-            )}
-          </div>
+                  {/* Delete pending/empty account — frees the phone for re-registration.
+                      The EF re-checks a strict safety gate (refuses if balance/rides). */}
+                  {canDeletePending && (
+                    <>
+                      <div className="border-t border-line my-1" />
+                      <button
+                        onClick={() => { setDeleteAccountModalOpen(true); setActionsMenuOpen(false); }}
+                        disabled={actionLoading}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-40 transition-colors text-left"
+                      >
+                        <XCircle size={14} />
+                        {t('users.delete_account_btn', { defaultValue: 'Eliminar cuenta' })}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </header>
 
@@ -641,15 +655,17 @@ function AdminDriverDetailPage() {
                         <span className="text-[11px] text-ink-muted text-center">
                           {t('drivers.doc_not_uploaded', { defaultValue: 'El conductor no subió este documento' })}
                         </span>
-                        <button
-                          onClick={() => handleAdminUploadDoc(docType)}
-                          disabled={isUploading}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 transition-colors"
-                        >
-                          {isUploading
-                            ? <><Clock size={11} className="animate-spin" /> {t('common.uploading', { defaultValue: 'Subiendo…' })}</>
-                            : <><Upload size={11} /> {t('drivers.upload_for_driver', { defaultValue: 'Subir foto' })}</>}
-                        </button>
+                        {canReview && (
+                          <button
+                            onClick={() => handleAdminUploadDoc(docType)}
+                            disabled={isUploading}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                          >
+                            {isUploading
+                              ? <><Clock size={11} className="animate-spin" /> {t('common.uploading', { defaultValue: 'Subiendo…' })}</>
+                              : <><Upload size={11} /> {t('drivers.upload_for_driver', { defaultValue: 'Subir foto' })}</>}
+                          </button>
+                        )}
                       </div>
                     ) : (
                     <div>
@@ -714,7 +730,7 @@ function AdminDriverDetailPage() {
                         )}
 
                         {/* Verify/Reject controls */}
-                        {!docVerified && rejectingDocId !== doc.id && (
+                        {canReview && !docVerified && rejectingDocId !== doc.id && (
                           <div className="mt-2 flex gap-1.5">
                             <button
                               onClick={() => handleVerifyDoc(doc.id, true)}
@@ -791,8 +807,8 @@ function AdminDriverDetailPage() {
                           </div>
                         )}
 
-                        {/* Admin replace — always visible when not in reject panel */}
-                        {!docVerified && rejectingDocId !== doc.id && (
+                        {/* Admin replace: drivers.review only; hidden while the reject panel is open */}
+                        {canReview && !docVerified && rejectingDocId !== doc.id && (
                           <button
                             onClick={() => handleAdminUploadDoc(docType)}
                             disabled={isUploading}
@@ -853,16 +869,18 @@ function AdminDriverDetailPage() {
                 <p className="text-xs text-ink-muted">
                   {t('drivers.contract_missing', { defaultValue: 'Este conductor todavía no tiene contrato generado.' })}
                 </p>
-                <button
-                  onClick={handleGenerateContract}
-                  disabled={generatingContract}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 transition-colors"
-                >
-                  <FileText size={12} />
-                  {generatingContract
-                    ? t('drivers.contract_generating', { defaultValue: 'Generando…' })
-                    : t('drivers.contract_generate', { defaultValue: 'Generar contrato' })}
-                </button>
+                {canReview && (
+                  <button
+                    onClick={handleGenerateContract}
+                    disabled={generatingContract}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                  >
+                    <FileText size={12} />
+                    {generatingContract
+                      ? t('drivers.contract_generating', { defaultValue: 'Generando…' })
+                      : t('drivers.contract_generate', { defaultValue: 'Generar contrato' })}
+                  </button>
+                )}
               </div>
             )}
           </section>
@@ -1328,12 +1346,13 @@ function Metric({ label, value, icon }: { label: string; value: string; icon?: R
 }
 
 /**
- * Admins keep the full page above; marketing gets the read-only view (00663), which reads only
- * the panel views. The role picks which component mounts, so the hooks of each never change.
+ * Roles with `detail.full` (admins and the operator) get the full page above, with each action
+ * behind its own capability; marketing gets the read-only view (00663), which reads only the
+ * panel views. The role picks which component mounts, so the hooks of each never change.
  */
 export default function DriverDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { canAct, ready } = useCanAct();
+  const { can, ready } = usePanelCan();
   if (!ready) return null;
-  return canAct ? <AdminDriverDetailPage /> : <DriverDetailReadOnly driverId={id} />;
+  return can('detail.full') ? <AdminDriverDetailPage /> : <DriverDetailReadOnly driverId={id} />;
 }

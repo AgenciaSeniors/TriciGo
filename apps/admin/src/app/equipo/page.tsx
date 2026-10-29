@@ -17,7 +17,7 @@ import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { DataTable, type DataColumn } from '@/components/data/DataTable';
 import { formatAdminDate } from '@/lib/formatDate';
 
-const ROLES: TeamRole[] = ['super_admin', 'admin', 'marketing'];
+const ROLES: TeamRole[] = ['super_admin', 'admin', 'operator', 'marketing'];
 
 /**
  * Equipo (00661): who has access to the panel, the invitations on their way, and

@@ -18,7 +18,7 @@ import type { LucideIcon } from 'lucide-react';
 import { lostItemService, panelReadService, type PanelLostItem } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { useAdminUser } from '@/lib/useAdminUser';
-import { useCanAct } from '@/lib/useCanAct';
+import { usePanelCan } from '@/lib/usePanelCan';
 import { formatCUP, getErrorMessage } from '@tricigo/utils';
 import type { LostItemStatus } from '@tricigo/types';
 import { formatAdminDate } from '@/lib/formatDate';
@@ -61,7 +61,10 @@ export default function LostFoundPage() {
   const { userId: adminUserId } = useAdminUser();
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
-  const { canAct, ready } = useCanAct();
+  const { can, ready } = usePanelCan();
+  // The operator reads the full lost items but acts on none yet (00668).
+  const fullData = can('detail.full');
+  const canAct = can('cases.act');
 
   const [items, setItems] = useState<PanelLostItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,7 +91,7 @@ export default function LostFoundPage() {
     setError(null);
     try {
       const options = { status: statusFilter === 'all' ? undefined : statusFilter, limit: 100 };
-      const data = canAct
+      const data = fullData
         ? await lostItemService.getAllLostItems(options)
         : await panelReadService.getLostItems(options);
       setItems(data);
@@ -98,7 +101,7 @@ export default function LostFoundPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, t, canAct, ready]);
+  }, [statusFilter, t, fullData, ready]);
 
   useEffect(() => {
     void fetchItems();
@@ -272,6 +275,7 @@ export default function LostFoundPage() {
               onClose={() => void handleClose()}
               closing={closing}
               readOnly={!canAct}
+              canReadNotes={fullData}
             />
           ) : (
             <div className="flex min-h-[480px] items-center justify-center p-6">
@@ -298,6 +302,7 @@ function ItemDetail({
   onClose,
   closing,
   readOnly,
+  canReadNotes,
 }: {
   item: PanelLostItem;
   adminNotes: string;
@@ -305,8 +310,10 @@ function ItemDetail({
   onSaveNotes: () => void;
   onClose: () => void;
   closing: boolean;
-  /** Marketing: no notes and no actions (its view leaves out the notes and the return arrangements). */
+  /** No actions: marketing, and the operator until it gets its own (00668). */
   readOnly: boolean;
+  /** Read-only notes for the operator. Marketing's view leaves out the notes and the return arrangements. */
+  canReadNotes: boolean;
 }) {
   const { t } = useTranslation('admin');
   const Icon = CATEGORY_ICON[item.category] ?? Package;
@@ -427,7 +434,7 @@ function ItemDetail({
         </section>
       )}
 
-      {!readOnly && (
+      {!readOnly ? (
         <section className="px-5 py-4">
           <h3 className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
             {t('lost_found.admin_notes_title', { defaultValue: 'Notas internas' })}
@@ -458,7 +465,22 @@ function ItemDetail({
             )}
           </div>
         </section>
-      )}
+      ) : canReadNotes ? (
+        <section className="px-5 py-4">
+          <h3 className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
+            {t('lost_found.admin_notes_title', { defaultValue: 'Notas internas' })}
+          </h3>
+          {item.admin_notes?.trim() ? (
+            <p className="whitespace-pre-wrap break-words rounded-xl border border-line bg-surface-sunken px-3 py-2 text-[13px] text-ink">
+              {item.admin_notes}
+            </p>
+          ) : (
+            <p className="text-[12.5px] italic text-ink-subtle">
+              {t('lost_found.admin_notes_empty', { defaultValue: 'Sin notas internas.' })}
+            </p>
+          )}
+        </section>
+      ) : null}
     </div>
   );
 }

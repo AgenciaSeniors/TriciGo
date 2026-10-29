@@ -82,6 +82,7 @@ beforeAll(async () => {
 const ADMIN = 'a1000000-0000-4000-8000-000000000001';
 const SUPER = 'a1000000-0000-4000-8000-000000000002';
 const MKT = 'a1000000-0000-4000-8000-000000000003';
+const OPERATOR = 'a1000000-0000-4000-8000-000000000004';
 const ADDRESSES = ['ana@example.com', 'sam@example.com', 'mia@example.com'];
 
 const zeroTotals = {
@@ -230,6 +231,21 @@ describe('send-team-digest: the run', () => {
       expect(b.template.trim().startsWith('<')).toBe(true);
       expect(b.subject.length).toBeGreaterThan(0);
     }
+  });
+
+  it('an operator gets the pending block and none of the money (00668)', async () => {
+    db.recipients = [{ user_id: OPERATOR, role: 'operator', email: 'ora@example.com', full_name: 'Ora' }];
+    await call({ day: '2026-10-07' });
+    expect(sentTo()).toEqual(['ora@example.com']);
+    const html = sentBodies()[0].template;
+    expect(html).toContain('Pendiente ahora');
+    expect(html).toContain('Conductores esperando aprobaci');
+    expect(html).toContain('Disputas abiertas');
+    // The money block and its amounts (3,500 charged, 525 commission, 5,000 recharged).
+    for (const leak of ['Dinero', 'Cobrado en viajes', 'Comisi', 'Saldo recargado', 'CUP', '3,500', '525', '5,000']) {
+      expect(html).not.toContain(leak);
+    }
+    expect(finishArgs()).toEqual({ p_day: '2026-10-07', p_recipients: 1, p_sent: 1, p_failed: 0, p_error: null });
   });
 
   it('puts a signed unsubscribe link for that person in each e-mail, account and token in the fragment', async () => {

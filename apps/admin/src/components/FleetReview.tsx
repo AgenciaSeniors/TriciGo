@@ -18,6 +18,8 @@ import { useToast } from '@/components/ui/AdminToast';
 interface Props {
   corporateAccountId: string;
   adminUserId: string;
+  /** Shows approve and reject (fleets.review). Without it the list is read-only (00668). */
+  canReview?: boolean;
 }
 
 const STATUS_COLORS: Record<FleetMemberStatus, string> = {
@@ -63,7 +65,7 @@ function changeNotice(shown: FleetMember, current: FleetMember): string {
     : 'Cambió mientras la revisabas: estos son los datos actuales.';
 }
 
-export function FleetReview({ corporateAccountId, adminUserId }: Props) {
+export function FleetReview({ corporateAccountId, adminUserId, canReview = true }: Props) {
   const { showToast } = useToast();
   const [fleet, setFleet] = useState<DriverFleet | null>(null);
   const [members, setMembers] = useState<FleetMember[]>([]);
@@ -234,7 +236,7 @@ export function FleetReview({ corporateAccountId, adminUserId }: Props) {
                     <ChangeNotice shown={changedRows.get(m.id)} current={m} />
                   </td>
                   <td className="py-2 pr-2">
-                    {m.status === 'pending_review' && (
+                    {canReview && m.status === 'pending_review' && (
                       <div className="flex gap-2 justify-end">
                         <button
                           className="px-3 py-1 bg-green-600 text-white rounded text-xs disabled:opacity-50"

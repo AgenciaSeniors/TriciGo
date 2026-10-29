@@ -137,11 +137,12 @@ function rememberRole(request: NextRequest, response: NextResponse, role: PanelR
  * itself stayed behind RLS and the admin RPCs).
  *
  * Redirects to /login if there is no valid Supabase session or the account is
- * blocked. An account without a panel role (admin, super_admin or marketing)
+ * blocked. An account without a panel role (admin, super_admin, marketing or operator)
  * accepts a pending team invitation for its address, or goes to /sin-acceso.
  *
- * Sends a marketing account that opens a page outside its allow-list to its home
- * (@tricigo/utils/adminPanelAccess, the same list the menus use, 00642).
+ * Sends an account that opens a page its role cannot open to its home (panelHome). The
+ * allow-lists live in @tricigo/utils/adminPanelAccess, the same ones the menus use (00642,
+ * 00668).
  */
 export async function middleware(request: NextRequest) {
   // Dev-only escape hatch for design previews: /foo?__preview=1

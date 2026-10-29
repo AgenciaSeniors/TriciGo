@@ -6,13 +6,12 @@ import { useTranslation } from '@tricigo/i18n';
 import { promotionService, notificationService } from '@tricigo/api';
 import type { Promotion, PromotionType } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
-import { menuRole } from '@tricigo/utils/adminPanelAccess';
 import { havanaLocalToUtcIso, utcIsoToHavanaLocal } from '@tricigo/utils/date';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
 import { formatAdminDate } from '@/lib/formatDate';
-import { usePanelRole } from '@/lib/panelRole';
+import { usePanelCan } from '@/lib/usePanelCan';
 
 type FormState = {
   code: string;
@@ -98,8 +97,10 @@ export default function PromotionsAdminPage() {
   // notify). The server still refuses deleting a used one (promo_delete_blocked), and its Spanish
   // message reaches the toast through getErrorMessage. The pending-approval count stays admin-only:
   // only drafts saved before 00666 can be pending.
-  const { role } = usePanelRole();
-  const isMarketing = menuRole(role) === 'marketing';
+  const { can } = usePanelCan();
+  // Marketing and admins write promotions; only admins see what waits for approval (00668).
+  const canWrite = can('promotions.write');
+  const canApprove = can('promotions.approve');
   const [pendingCount, setPendingCount] = useState(0);
 
   const typeLabel = useCallback(
@@ -126,14 +127,14 @@ export default function PromotionsAdminPage() {
     try {
       const data = await promotionService.getAll(page, PAGE_SIZE);
       setItems(data);
-      if (!isMarketing) setPendingCount(await promotionService.countPendingApproval());
+      if (canApprove) setPendingCount(await promotionService.countPendingApproval());
     } catch (err) {
       setItems([]);
       setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
-  }, [page, t, isMarketing]);
+  }, [page, t, canApprove]);
 
   useEffect(() => {
     void loadItems();
@@ -480,16 +481,18 @@ export default function PromotionsAdminPage() {
               <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:text-amber-400">
                 {t('promotions.status_pending', { defaultValue: 'Pendiente de aprobación' })}
               </span>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void handleToggleActive(p);
-                }}
-                className="rounded-full bg-ink px-2.5 py-0.5 text-[10.5px] font-medium text-surface transition-opacity hover:opacity-90"
-              >
-                {t('promotions.action_approve', { defaultValue: 'Aprobar y activar' })}
-              </button>
+              {canWrite && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void handleToggleActive(p);
+                  }}
+                  className="rounded-full bg-ink px-2.5 py-0.5 text-[10.5px] font-medium text-surface transition-opacity hover:opacity-90"
+                >
+                  {t('promotions.action_approve', { defaultValue: 'Aprobar y activar' })}
+                </button>
+              )}
             </span>
           ) : (
             <span className="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-medium text-ink-muted">
@@ -531,7 +534,7 @@ export default function PromotionsAdminPage() {
         width: '170px',
       },
     ],
-    [t, typeLabel, discountLabel, handleToggleActive],
+    [t, typeLabel, discountLabel, handleToggleActive, canWrite],
   );
 
   return (
@@ -548,7 +551,7 @@ export default function PromotionsAdminPage() {
             {t('promotions.page_description', { defaultValue: 'Códigos de descuento y bonos. Activa una para avisar a todos por push.' })}
           </p>
         </div>
-        {!showForm && (
+        {canWrite && !showForm && (
           <button
             onClick={() => {
               resetForm();
@@ -562,7 +565,7 @@ export default function PromotionsAdminPage() {
         )}
       </div>
 
-      {!isMarketing && pendingCount > 0 && (
+      {canApprove && pendingCount > 0 && (
         <div
           role="status"
           className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-[13px] font-medium text-amber-800 dark:text-amber-400"
@@ -777,19 +780,19 @@ export default function PromotionsAdminPage() {
           icon: Ticket,
           title: t('promotions.empty_title', { defaultValue: 'Sin promociones' }),
           body: t('promotions.empty_body', { defaultValue: 'Crea la primera para ofrecer un descuento y avisar a todos.' }),
-          action: {
+          action: canWrite ? {
             label: t('promotions.new', { defaultValue: 'Nueva promoción' }),
             onClick: () => {
               resetForm();
               setShowForm(true);
             },
-          },
+          } : undefined,
         }}
         sort={sort}
         onSortChange={setSort}
         pagination={{ page, pageSize: PAGE_SIZE, hasMore: items.length === PAGE_SIZE }}
         onPaginationChange={(next) => setPage(next.page)}
-        rowActions={[
+        rowActions={canWrite ? [
           { label: t('promotions.action_edit', { defaultValue: 'Editar' }), onClick: (p) => handleEdit(p) },
           {
             label: t('promotions.action_toggle', { defaultValue: 'Activar/Desactivar' }),
@@ -804,7 +807,7 @@ export default function PromotionsAdminPage() {
             tone: 'danger',
             onClick: (p) => setDeleteModalId(p.id),
           },
-        ]}
+        ] : undefined}
       />
 
       <AdminConfirmModal

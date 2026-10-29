@@ -11,7 +11,7 @@ import { useToast } from '@/components/ui/AdminToast';
 import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
 import { FilterBar, type StatusTab } from '@/components/data/FilterBar';
 import { KpiCard } from '@/components/dashboard/KpiCard';
-import { useCanAct } from '@/lib/useCanAct';
+import { usePanelCan } from '@/lib/usePanelCan';
 
 const PAGE_SIZE = 20;
 
@@ -49,7 +49,8 @@ function Stars({ rating, ariaLabel }: { rating: number; ariaLabel: string }) {
 export default function ReviewsPage() {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
-  const { canAct } = useCanAct();
+  const { can } = usePanelCan();
+  const canAct = can('moderation.act');
 
   const [reviews, setReviews] = useState<ReviewRow[]>([]);
   const [error, setError] = useState<string | null>(null);

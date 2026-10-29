@@ -54,11 +54,14 @@ export function AssistActiveRide({
   ctx,
   now,
   onChanged,
+  allowed = true,
 }: {
   ctx: ActiveRideContext;
   now: number;
   /** Reloads the page; the buttons stay disabled until it settles. */
   onChanged: () => Promise<void>;
+  /** Shows the advance, complete and release buttons (rides.act). */
+  allowed?: boolean;
 }) {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
@@ -346,7 +349,7 @@ export function AssistActiveRide({
         )}
       </section>
 
-      {(hasActions || ctx.delivery_proof_missing || scheduledLater) && (
+      {((allowed && hasActions) || ctx.delivery_proof_missing || scheduledLater) && (
         <section className={`${CARD} mb-6`}>
           <h2 className="mb-4 text-lg font-bold">{t('ride_assist.actions_card')}</h2>
           {scheduledLater && <p className="mb-4 text-sm text-ink-muted">{t('ride_assist.scheduled_later_note')}</p>}
@@ -361,7 +364,7 @@ export function AssistActiveRide({
               )}
             </p>
           )}
-          {hasActions && (
+          {allowed && hasActions && (
             <div className="flex flex-wrap gap-3">
               {showAdvance && (
                 <button type="button" disabled={busy} className={ACTION_BTN} onClick={() => open('advance')}>

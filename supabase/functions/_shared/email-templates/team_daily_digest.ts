@@ -3,8 +3,8 @@
 //
 // The 7:00 Havana e-mail to every panel account with the previous day's numbers
 // (docs/superpowers/specs/2026-10-11-team-daily-digest-design.md). metrics is what
-// team_daily_metrics(day) returns. Marketing never gets the Money and Pending blocks; any role
-// other than super_admin and admin gets the marketing version.
+// team_daily_metrics(day) returns. Marketing never gets the Money and Pending blocks, the operator
+// gets Pending but not Money (00668); any other role gets the marketing version.
 //
 // Not in the template registry on purpose: send-team-digest renders it and hands send-email the
 // HTML (its raw-HTML path, which the database alerts also use), so adding this e-mail needed no
@@ -133,8 +133,14 @@ export function ridesSummary(requested: number, completed: number): string {
     `${formatCount(c)} ${c === 1 ? 'completado' : 'completados'}`;
 }
 
+/** Only admins and super admins see the money block. */
 export function seesMoney(role: string): boolean {
   return role === 'super_admin' || role === 'admin';
+}
+
+/** Admins and operators see what is waiting for them; marketing does not (00668). */
+export function seesPending(role: string): boolean {
+  return seesMoney(role) || role === 'operator';
 }
 
 const TH = `padding: 6px 8px; font-family: ${FONT_STACK}; font-size: 12px; font-weight: 600; color: ${COLORS.muted}; border-bottom: 1px solid ${COLORS.border};`;
@@ -274,7 +280,9 @@ export function teamDailyDigestHtml(d: TeamDailyDigestData): string {
       ['Comisión de la plataforma', (t) => t.money.commission, formatCup],
       ['Saldo recargado', (t) => t.money.recharged, formatCup],
     ]));
+  }
 
+  if (seesPending(d.role)) {
     const p = m.pending;
     parts.push(heading('Pendiente ahora'));
     parts.push(table(['', 'Cantidad'], [

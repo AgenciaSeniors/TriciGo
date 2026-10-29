@@ -58,11 +58,12 @@ describe('team_invitation template', () => {
     expect(html).toContain('https://admin.tricigo.com/login');
   });
 
-  it('labels the three roles and leaves out an unknown expiry', () => {
-    expect(['super_admin', 'admin', 'marketing'].map(teamRoleLabel)).toEqual([
+  it('labels the four roles and leaves out an unknown expiry', () => {
+    expect(['super_admin', 'admin', 'marketing', 'operator'].map(teamRoleLabel)).toEqual([
       'Superadministrador',
       'Administrador',
       'Marketing',
+      'Operador',
     ]);
     expect(formatInvitationExpiry('nope')).toBe('');
     expect(teamInvitationHtml({ ...DATA, expires_at: 'nope' })).not.toContain('vence');
