@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Download, Route, Search } from 'lucide-react';
 import { panelReadService, type PanelRide } from '@tricigo/api';
 import { formatCUP, getErrorMessage } from '@tricigo/utils';
@@ -16,6 +17,9 @@ import { rideCancelSummary } from '@/lib/rideCancel';
 import { exportToCsv } from '@/lib/exportCsv';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useRequestGuard } from '@/hooks/useRequestGuard';
+import { canOpenPanelPath } from '@tricigo/utils/adminPanelAccess';
+import { canAssistRide, rideAssistHref } from '@/lib/rideAssist';
+import { usePanelRole } from '@/lib/panelRole';
 
 const PAGE_SIZE = 20;
 
@@ -42,6 +46,11 @@ function truncate(str: string | null | undefined, len: number) {
 
 export default function RidesPage() {
   const { t } = useTranslation('admin');
+  const router = useRouter();
+  // "Asistir" only for roles that can open the assist page: marketing reads this list but
+  // cannot (MARKETING_DENIED). The operator opens it read-only, as from the ride detail.
+  const { role } = usePanelRole();
+  const canOpenAssist = role != null && canOpenPanelPath(role, rideAssistHref('row'));
 
   const STATUS_TABS: StatusTab<StatusFilter>[] = useMemo(() => [
     { id: 'all', label: t('rides.filter_all', { defaultValue: 'Todos' }) },
@@ -442,6 +451,18 @@ export default function RidesPage() {
               }
         }
         rowHref={(r) => `/rides/${r.id}`}
+        rowActions={canOpenAssist ? [
+          {
+            label: t('ride_assist.assist_open', { defaultValue: 'Asistir' }),
+            tone: 'primary',
+            visible: (r) => canAssistRide(r.status),
+            ariaLabel: (r) => t('rides.assist_row_aria', {
+              code: r.id.slice(0, 8),
+              defaultValue: 'Asistir el viaje #{{code}}',
+            }),
+            onClick: (r) => router.push(rideAssistHref(r.id)),
+          },
+        ] : undefined}
         sort={sort}
         onSortChange={setSort}
         pagination={{

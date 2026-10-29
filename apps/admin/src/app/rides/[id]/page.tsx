@@ -13,6 +13,7 @@ import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { formatAdminDate } from '@/lib/formatDate';
 import { PAYMENT_LABEL, labelFor } from '@/lib/labels';
+import { canAssistRide, rideAssistHref } from '@/lib/rideAssist';
 import { usePanelCan } from '@/lib/usePanelCan';
 import { RideDetailReadOnly } from '@/components/panel/RideDetailReadOnly';
 import { rideTypeLabel } from '@/lib/rideType';
@@ -190,9 +191,9 @@ function AdminRideDetailPage() {
           )}
           {/* empty:hidden keeps the row from adding its margin when no button shows */}
           <div className="mt-3 flex justify-end gap-2 empty:hidden">
-            {['searching', 'accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'arrived_at_destination'].includes(ride.status) && (
+            {canAssistRide(ride.status) && (
               <Link
-                href={`/rides/${ride.id}/assist`}
+                href={rideAssistHref(ride.id)}
                 className="inline-block px-4 py-2 text-sm rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-medium"
               >
                 {t('ride_assist.assist_open', { defaultValue: 'Asistir' })}
