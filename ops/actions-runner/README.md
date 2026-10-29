@@ -26,18 +26,20 @@ código del runner, el `env:` del workflow no llega al hook; el paso 2 de
 
 | Variable | Tiene que ser |
 |---|---|
-| `GITHUB_REPOSITORY` | `Edua050923/TriciGo` (sin distinguir mayúsculas) |
+| `GITHUB_REPOSITORY` | `AgenciaSeniors/TriciGo` (sin distinguir mayúsculas) |
 | `GITHUB_EVENT_NAME` | `push` o `workflow_dispatch` |
 | `GITHUB_REF` | `refs/heads/master` |
 | `GITHUB_JOB` | `deploy` |
-| `GITHUB_WORKFLOW_REF` | `Edua050923/TriciGo/.github/workflows/deploy-web.yml@refs/heads/master` o la misma con `deploy-admin.yml` |
+| `GITHUB_WORKFLOW_REF` | `AgenciaSeniors/TriciGo/.github/workflows/deploy-web.yml@refs/heads/master` o la misma con `deploy-admin.yml` |
 
 **Si el repositorio cambia de nombre o de dueño, hay que cambiar `GATE_REPO` y
 reinstalar el hook antes del próximo deploy.** GitHub manda el nombre nuevo y el
-filtro rechaza todos los deploys con `repositorio distinto`. Pasó en octubre de
-2026, cuando el repo se mudó de `AgenciaSeniors/TriciGo` a `Edua050923/TriciGo`.
-El nombre viejo se rechaza a propósito: GitHub lo redirige, pero quien lo tenga
-ahora puede crear otro repositorio con ese nombre.
+filtro rechaza todos los deploys con `repositorio distinto`. Pasó dos veces en
+octubre de 2026: el repo se mudó de `AgenciaSeniors/TriciGo` a
+`Edua050923/TriciGo` y un día después volvió. El nombre que el repo no tiene se
+rechaza a propósito: GitHub lo redirige, pero quien lo tenga puede crear otro
+repositorio con ese nombre. Para saber el nombre actual:
+`gh api repos/AgenciaSeniors/TriciGo --jq .full_name` (sigue la redirección).
 
 `GITHUB_WORKFLOW_REF` es el archivo del que salió el trabajo **y la rama de la
 que se leyó**. Por eso un workflow modificado en otra rama no pasa, aunque se
@@ -76,10 +78,11 @@ Instalado el **2026-10-12** (11:23 UTC, servicio reiniciado con el hook en
   sin ejecutar su paso, y llegó el correo. O sea que el `env:` del workflow no
   llega al hook.
 
-Actualizado el **2026-10-29** para el nombre nuevo del repositorio, después de
-que el deploy del admin de #1175 se rechazara con `repositorio distinto`. El
-runner no hubo que volver a registrarlo: la mudanza lo conservó, aunque `.runner`
-y el nombre del servicio de systemd siguen diciendo `AgenciaSeniors/TriciGo`.
+Actualizado el **2026-10-29** para `Edua050923/TriciGo`, después de que el
+deploy del admin de #1175 se rechazara con `repositorio distinto`. Ese mismo día
+el repo volvió a `AgenciaSeniors/TriciGo` y el deploy de #1176 se rechazó igual,
+así que `GATE_REPO` volvió a `agenciaseniors/tricigo`. El runner no hubo que
+volver a registrarlo ninguna de las dos veces.
 
 ## Desde PowerShell
 
@@ -95,10 +98,10 @@ ssh root@187.77.214.236 'cd /root/actions-runner && grep -v -i token .runner; ec
 
 # 1. Bajar el hook de master. Comparar la huella que imprime con la de
 #    `git show origin/master:ops/actions-runner/job-gate.sh | sha256sum`.
-ssh root@187.77.214.236 'mkdir -p /etc/tricigo && curl -fsSL https://raw.githubusercontent.com/Edua050923/TriciGo/master/ops/actions-runner/job-gate.sh -o /etc/tricigo/runner-job-gate.sh && sha256sum /etc/tricigo/runner-job-gate.sh && chown root:root /etc/tricigo/runner-job-gate.sh && chmod 700 /etc/tricigo/runner-job-gate.sh && bash -n /etc/tricigo/runner-job-gate.sh && echo listo'
+ssh root@187.77.214.236 'mkdir -p /etc/tricigo && curl -fsSL https://raw.githubusercontent.com/AgenciaSeniors/TriciGo/master/ops/actions-runner/job-gate.sh -o /etc/tricigo/runner-job-gate.sh && sha256sum /etc/tricigo/runner-job-gate.sh && chown root:root /etc/tricigo/runner-job-gate.sh && chmod 700 /etc/tricigo/runner-job-gate.sh && bash -n /etc/tricigo/runner-job-gate.sh && echo listo'
 
 # 2. Probarlo a mano.
-ssh root@187.77.214.236 'GITHUB_REPOSITORY=Edua050923/TriciGo GITHUB_EVENT_NAME=pull_request GITHUB_REF=refs/pull/1/merge GITHUB_JOB=deploy GITHUB_WORKFLOW_REF=Edua050923/TriciGo/.github/workflows/prueba.yml@refs/pull/1/merge GITHUB_RUN_ID=0 /etc/tricigo/runner-job-gate.sh; echo salida=$?'
+ssh root@187.77.214.236 'GITHUB_REPOSITORY=AgenciaSeniors/TriciGo GITHUB_EVENT_NAME=pull_request GITHUB_REF=refs/pull/1/merge GITHUB_JOB=deploy GITHUB_WORKFLOW_REF=AgenciaSeniors/TriciGo/.github/workflows/prueba.yml@refs/pull/1/merge GITHUB_RUN_ID=0 /etc/tricigo/runner-job-gate.sh; echo salida=$?'
 
 # 3. Activarlo y reiniciar el runner.
 ssh root@187.77.214.236 'cd /root/actions-runner && (grep -q ^ACTIONS_RUNNER_HOOK_JOB_STARTED= .env || echo ACTIONS_RUNNER_HOOK_JOB_STARTED=/etc/tricigo/runner-job-gate.sh >> .env) && ./svc.sh stop && ./svc.sh start && ./svc.sh status | head -5 && grep ^ACTIONS_RUNNER_HOOK .env'
@@ -117,10 +120,9 @@ ssh root@187.77.214.236 'cd /root/actions-runner && cat .runner | grep -v -i tok
 ```
 
 Fíjate en tres cosas: que el servicio esté `active (running)`, que `.env` no
-tenga ya un `ACTIONS_RUNNER_HOOK_JOB_STARTED` y que `.runner` diga
-`"gitHubUrl"` sea la URL de un repositorio y no de una organización. Hoy dice
-`https://github.com/AgenciaSeniors/TriciGo`: es el nombre que tenía el repo
-cuando se registró el runner, y la mudanza no lo cambió.
+tenga ya un `ACTIONS_RUNNER_HOOK_JOB_STARTED` y que el `"gitHubUrl"` de `.runner`
+sea la URL de un repositorio y no de una organización
+(`https://github.com/AgenciaSeniors/TriciGo`).
 
 ## Instalar
 
@@ -132,7 +134,7 @@ scp ops/actions-runner/job-gate.sh root@187.77.214.236:/etc/tricigo/runner-job-g
 ssh root@187.77.214.236 "sed -i 's/\r\$//' /etc/tricigo/runner-job-gate.sh && chown root:root /etc/tricigo/runner-job-gate.sh && chmod 700 /etc/tricigo/runner-job-gate.sh && bash -n /etc/tricigo/runner-job-gate.sh && echo listo"
 
 # 2. Probarlo a mano en el VPS: un trabajo ajeno se rechaza, y te llega un correo.
-ssh root@187.77.214.236 'GITHUB_REPOSITORY=Edua050923/TriciGo GITHUB_EVENT_NAME=pull_request GITHUB_REF=refs/pull/1/merge GITHUB_JOB=deploy GITHUB_WORKFLOW_REF=Edua050923/TriciGo/.github/workflows/prueba.yml@refs/pull/1/merge GITHUB_RUN_ID=0 /etc/tricigo/runner-job-gate.sh; echo "salida=$?"'
+ssh root@187.77.214.236 'GITHUB_REPOSITORY=AgenciaSeniors/TriciGo GITHUB_EVENT_NAME=pull_request GITHUB_REF=refs/pull/1/merge GITHUB_JOB=deploy GITHUB_WORKFLOW_REF=AgenciaSeniors/TriciGo/.github/workflows/prueba.yml@refs/pull/1/merge GITHUB_RUN_ID=0 /etc/tricigo/runner-job-gate.sh; echo "salida=$?"'
 #    Esperado: una línea ::error::, "salida=1" y un correo "Runner del VPS: trabajo rechazado".
 
 # 3. Activarlo y reiniciar el runner (si hay un deploy corriendo, esperar a que termine).
