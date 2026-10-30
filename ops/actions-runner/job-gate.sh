@@ -26,9 +26,9 @@ export LC_ALL=C
 TAG="tricigo-runner-gate"
 CONFIG_FILE="${RUNNER_GATE_CONFIG:-/etc/tricigo/supabase-health.env}"
 
-# compared lowercase: GitHub names are case-insensitive. Moved from
-# AgenciaSeniors/TriciGo in 2026-10; the old name is refused on purpose.
-GATE_REPO="edua050923/tricigo"
+# compared lowercase: GitHub names are case-insensitive. In 2026-10 the repo spent
+# about a day as Edua050923/TriciGo and came back; that name is refused on purpose.
+GATE_REPO="agenciaseniors/tricigo"
 GATE_REF="refs/heads/master"
 GATE_JOB="deploy"
 GATE_EVENTS=" push workflow_dispatch "
