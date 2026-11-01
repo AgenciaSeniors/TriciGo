@@ -58,6 +58,7 @@ import { logger } from '@tricigo/utils';
 import { realtimeStatusLogger } from './_realtime-status';
 import { AppError, AuthError, ValidationError, ForbiddenError } from '../errors';
 import { deliveryService } from './delivery.service';
+import { serverNowMs } from '../serverClock';
 
 /** PostgREST's "column does not exist" for exactly the 00578 note columns. */
 function isMissingNotesColumn(err: { code?: string; message?: string } | null | undefined): boolean {
@@ -1541,7 +1542,9 @@ export const rideService = {
    */
   async getSearchingRides(): Promise<Ride[]> {
     const supabase = getSupabaseClient();
-    const nowIso = new Date().toISOString();
+    // The server's clock, not the phone's: a phone set an hour ahead
+    // (Cuba, 2026-11-01) filtered out every open offer. See serverClock.ts.
+    const nowIso = new Date(serverNowMs()).toISOString();
     const { data, error } = await supabase
       .from('ride_offers')
       .select('expires_at, rides!inner(*)')
