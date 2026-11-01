@@ -115,7 +115,13 @@
     "connect_to_earn": "Conéctate para empezar a ganar",
     "on_break_label": "En descanso — no recibes solicitudes",
     "heartbeat_lost_title": "Perdimos conexión con el servidor",
-    "heartbeat_lost_body": "Puede que dejes de recibir viajes. Revisa tu conexión."
+    "heartbeat_lost_body": "Puede que dejes de recibir viajes. Revisa tu conexión.",
+    "reconnected_title": "Te volvimos a conectar",
+    "reconnected_body": "Se perdió la señal un momento. Sigues recibiendo viajes.",
+    "offline_detected_title": "Estás desconectado",
+    "offline_detected_body": "Tu turno se cerró. Toca Conectarme para volver a recibir viajes.",
+    "signal_lost_title": "Te desconectamos",
+    "signal_lost_body": "Perdimos tu señal y no pudimos volver a conectarte. Toca Conectarme."
   },
 
   "trip": {

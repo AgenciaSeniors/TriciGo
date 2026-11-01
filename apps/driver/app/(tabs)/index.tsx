@@ -17,7 +17,7 @@ import Toast from 'react-native-toast-message';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from '@tricigo/i18n';
-import { driverService, getSupabaseClient, walletService, useFeatureFlag, notificationService, trackValidationEvent } from '@tricigo/api';
+import { driverService, getSupabaseClient, walletService, useFeatureFlag, notificationService, trackValidationEvent, serverNowMs } from '@tricigo/api';
 import {
   HAVANA_CENTER,
   trackEvent,
@@ -44,6 +44,7 @@ import { DriverTripView, useActiveTripMapData } from '@/components/DriverTripVie
 import { HomeBottomSheet } from '@/components/HomeBottomSheet';
 import { LocationPermissionSheet } from '@/components/LocationPermissionSheet';
 import { useDriverLocationTracking } from '@/hooks/useDriverLocation';
+import { useSystemOfflineRecovery } from '@/hooks/useSystemOfflineRecovery';
 import { useOverlayBubble } from '@/hooks/useOverlayBubble';
 import DriverOverlay, { isDriverOverlayAvailable } from '../../modules/driver-overlay';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
@@ -311,6 +312,10 @@ function NativeDriverHomeScreen() {
     setIsOnBreak(!!(profile as any).is_on_break);
   }, [profile]);
 
+  // A driver the system took offline while the app shows "En línea" is
+  // reconnected (see useSystemOfflineRecovery). The heartbeat below feeds it.
+  const offlineRecovery = useSystemOfflineRecovery(profile?.id);
+
   // HF-1: Heartbeat every 2 min while online
   useEffect(() => {
     if (!isOnline || !profile?.id) return;
@@ -329,15 +334,24 @@ function NativeDriverHomeScreen() {
       let failureDetail: string | undefined;
       try {
         const supabase = getSupabaseClient();
+        // Server time, not the phone's: a phone an hour ahead (Cuba,
+        // 2026-11-01) wrote heartbeats from the future. is_online and
+        // auto_offline_at come back so the app notices when the server took
+        // the driver offline while it still shows "En línea".
         const { data, error } = await supabase.from('driver_profiles')
-          .update({ last_heartbeat_at: new Date().toISOString() })
+          .update({ last_heartbeat_at: new Date(serverNowMs()).toISOString() })
           .eq('id', profile.id)
-          .select('id');
+          .select('id, is_online, auto_offline_at');
         if (error) {
           failed = 'error';
           failureDetail = getErrorMessage(error);
         } else if (!data || data.length === 0) {
           failed = 'zero_rows';
+        } else if (data[0]?.is_online === false) {
+          void offlineRecovery?.evaluate({
+            is_online: false,
+            auto_offline_at: (data[0]?.auto_offline_at as string | null) ?? null,
+          });
         }
       } catch (err) {
         failed = 'error';
@@ -375,7 +389,7 @@ function NativeDriverHomeScreen() {
     sendHeartbeat();
     const interval = setInterval(sendHeartbeat, 120_000);
     return () => clearInterval(interval);
-  }, [isOnline, profile?.id]);
+  }, [isOnline, profile?.id, offlineRecovery]);
 
   // BUG-249: Fetch today's earnings + ride count from rides table.
   // Previous query against ledger_entries used columns that don't exist
