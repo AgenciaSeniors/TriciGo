@@ -4,6 +4,8 @@
 // and input checks. No remote imports and no Deno, so packages/api's vitest runs them.
 // ============================================================
 
+import { cubaTimeZone } from './cuba-time.ts';
+
 /** The page on the web app behind "Dejar de recibir este resumen" (Edge Functions cannot serve HTML). */
 export const UNSUBSCRIBE_PATH = '/resumen-diario/baja';
 
@@ -44,21 +46,23 @@ export function digestSecret(env: (name: string) => string | undefined, serviceK
   return env('TEAM_DIGEST_SECRET') || serviceKey;
 }
 
-const HAVANA_DAY = new Intl.DateTimeFormat('en-US', {
-  timeZone: 'America/Havana',
-  calendar: 'gregory',
-  numberingSystem: 'latn',
-  year: 'numeric',
-  month: 'numeric',
-  day: 'numeric',
-});
+// Cuba's zone depends on the instant (cubaTimeZone), so one formatter per call.
+const havanaDay = (at: Date) =>
+  new Intl.DateTimeFormat('en-US', {
+    timeZone: cubaTimeZone(at),
+    calendar: 'gregory',
+    numberingSystem: 'latn',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  });
 
 /**
  * The Havana calendar day before `now`, as YYYY-MM-DD. Built from formatToParts, so it does not
  * depend on how a locale happens to order or punctuate a date.
  */
 export function havanaYesterday(now: Date): string {
-  const parts = HAVANA_DAY.formatToParts(now);
+  const parts = havanaDay(now).formatToParts(now);
   const part = (type: 'year' | 'month' | 'day'): number => {
     const value = Number(parts.find((p) => p.type === type)?.value);
     if (!Number.isInteger(value)) throw new Error(`havanaYesterday: no ${type} in the formatted date`);

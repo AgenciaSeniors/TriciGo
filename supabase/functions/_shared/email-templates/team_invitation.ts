@@ -9,6 +9,7 @@
 // ============================================================
 
 import { wrapHtml, COLORS, FONT_STACK, escapeHtml } from './_layout.ts';
+import { cubaTimeZone } from '../cuba-time.ts';
 
 export interface TeamInvitationData {
   invitee_name: string;
@@ -43,7 +44,7 @@ export function formatInvitationExpiry(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
   return new Intl.DateTimeFormat('es', {
-    timeZone: 'America/Havana',
+    timeZone: cubaTimeZone(date),
     day: 'numeric',
     month: 'long',
     year: 'numeric',

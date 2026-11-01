@@ -20,6 +20,7 @@
 // ============================================================
 
 import { wrapHtml, COLORS, FONT_STACK, escapeHtml, detailRow, totalRow } from './_layout.ts';
+import { cubaTimeZone } from '../cuba-time.ts';
 
 export interface GiftReceivedData {
   full_name: string;
@@ -98,7 +99,7 @@ function formatGiftDate(iso: string): string {
     return d.toLocaleDateString('es', {
       day: 'numeric', month: 'long', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
-      timeZone: 'America/Havana',
+      timeZone: cubaTimeZone(d),
     });
   } catch {
     return iso;

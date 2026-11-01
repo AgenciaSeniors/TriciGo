@@ -14,6 +14,7 @@
 // ============================================================
 
 import { wrapHtml, COLORS, FONT_STACK, escapeHtml, detailRow, WEB_ORIGIN } from './_layout.ts';
+import { cubaTimeZone } from '../cuba-time.ts';
 
 export interface DriverUnderReviewData {
   driver_id: string;
@@ -69,7 +70,7 @@ function formatSubmittedAt(iso: string): string {
     return d.toLocaleDateString('es', {
       day: 'numeric', month: 'long', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
-      timeZone: 'America/Havana',
+      timeZone: cubaTimeZone(d),
     });
   } catch {
     return iso;
