@@ -13,6 +13,7 @@ import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { supportService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import type { SupportTicket, TicketCategory } from '@tricigo/types';
+import { cubaTimeZone } from '@tricigo/utils';
 
 // Same contact details the onboarding screen already links to
 // (apps/driver/app/onboarding/pending.tsx:18).
@@ -116,7 +117,7 @@ export default function DriverHelpScreen() {
                 {new Date(item.created_at).toLocaleDateString('es-CU', {
                   day: 'numeric',
                   month: 'short',
-                  timeZone: 'America/Havana',
+                  timeZone: cubaTimeZone(item.created_at),
                 })}
               </Text>
             </View>

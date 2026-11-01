@@ -11,7 +11,7 @@ import { reviewService } from '@tricigo/api/services/review';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { cubanLight, cubanDark, colors } from '@tricigo/theme';
-import { formatRating, getErrorMessage } from '@tricigo/utils';
+import { formatRating, getErrorMessage, cubaTimeZone } from '@tricigo/utils';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { Review, ReviewTagSummaryItem } from '@tricigo/types';
 import { ReviewTagsBreakdown } from '@/components/profile/ReviewTagsBreakdown';
@@ -146,7 +146,7 @@ export default function DriverReviewsScreen() {
               day: 'numeric',
               month: 'short',
               year: 'numeric',
-              timeZone: 'America/Havana',
+              timeZone: cubaTimeZone(item.created_at),
             })}
           </Text>
           <Pressable

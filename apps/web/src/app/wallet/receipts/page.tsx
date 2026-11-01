@@ -7,6 +7,7 @@ import { walletService, getSupabaseClient } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import { WebEmptyState } from '@/components/WebEmptyState';
+import { cubaTimeZone } from '@tricigo/utils';
 
 // RECARGA V2 — Receipts history.
 //
@@ -54,7 +55,7 @@ function formatDate(iso: string): string {
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
-      timeZone: 'America/Havana',
+      timeZone: cubaTimeZone(d),
     }).format(d);
   } catch {
     return iso;

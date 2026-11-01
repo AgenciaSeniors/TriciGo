@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { adminService } from '@tricigo/api/services/admin';
-import { formatCUP, formatTriciCoin, getErrorMessage } from '@tricigo/utils';
+import { formatCUP, formatTriciCoin, getErrorMessage, cubaTimeZone } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
@@ -261,7 +261,7 @@ export default function ReportsPage() {
         t('rides.csv_col_destination', { defaultValue: 'Destino' }),
       ];
       const rows = data.map(r => [
-        new Date(r.created_at).toLocaleDateString('es-CU', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Havana' }),
+        new Date(r.created_at).toLocaleDateString('es-CU', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: cubaTimeZone(r.created_at) }),
         r.service_type, r.status,
         r.estimated_fare_cup, r.final_fare_trc,
         r.payment_method, r.pickup_address, r.dropoff_address,

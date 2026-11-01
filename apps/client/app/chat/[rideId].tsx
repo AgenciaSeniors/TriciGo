@@ -24,7 +24,7 @@ import type { ChatMessage } from '@tricigo/types';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { IconButton } from '@tricigo/ui/IconButton';
 import { QuickReplyBar } from '@tricigo/ui/QuickReplyBar';
-import { getQuickRepliesForRole, triggerHaptic } from '@tricigo/utils';
+import { getQuickRepliesForRole, triggerHaptic, cubaTimeZone } from '@tricigo/utils';
 import { colors } from '@tricigo/theme';
 import NetInfo from '@react-native-community/netinfo';
 import Toast from 'react-native-toast-message';
@@ -126,7 +126,7 @@ export default function ChatScreen() {
             {new Date(item.created_at).toLocaleTimeString([], {
               hour: '2-digit',
               minute: '2-digit',
-              timeZone: 'America/Havana',
+              timeZone: cubaTimeZone(item.created_at),
             })}
           </Text>
           {/* Delivery/read state, own messages only — the rider has no use for

@@ -10,7 +10,7 @@ import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { incidentService, trustedContactService } from '@tricigo/api';
-import { triggerHaptic, logger } from '@tricigo/utils';
+import { triggerHaptic, logger, cubaTimeZone } from '@tricigo/utils';
 import Toast from 'react-native-toast-message';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverRideStore } from '@/stores/ride.store';
@@ -262,7 +262,7 @@ export default function DriverSafetyCenterScreen() {
                 <View className="flex-1">
                   <Text variant="bodySmall" color="primary">{getReportTypeLabel(incident.type)}</Text>
                   <Text variant="caption" color="primary" className="opacity-50">
-                    {new Date(incident.created_at).toLocaleDateString('es-CU', { timeZone: 'America/Havana' })}
+                    {new Date(incident.created_at).toLocaleDateString('es-CU', { timeZone: cubaTimeZone(incident.created_at) })}
                   </Text>
                 </View>
                 <Text variant="caption" color={incident.status === 'resolved' ? 'accent' : 'secondary'}>

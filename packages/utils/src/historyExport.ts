@@ -4,6 +4,7 @@
 // ============================================================
 
 import { classifyWalletTxn, type WalletTxnView } from './ledger';
+import { cubaTimeZone } from './date';
 
 interface ExportableRide {
   id: string;
@@ -97,7 +98,7 @@ function formatDate(dateStr: string): string {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-    timeZone: 'America/Havana',
+    timeZone: cubaTimeZone(d),
   });
 }
 

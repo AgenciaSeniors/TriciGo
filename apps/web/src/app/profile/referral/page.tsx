@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient, referralService, walletService } from '@tricigo/api';
-import { getErrorMessage } from '@tricigo/utils';
+import { getErrorMessage, cubaTimeZone } from '@tricigo/utils';
 import type { Referral } from '@tricigo/types';
 
 const STATUS_BADGE: Record<Referral['status'], { bg: string; color: string; key: string; defaultLabel: string }> = {
@@ -28,7 +28,7 @@ const STATUS_BADGE: Record<Referral['status'], { bg: string; color: string; key:
 function formatShortDate(iso: string): string {
   return new Date(iso).toLocaleDateString('es-CU', {
     day: 'numeric', month: 'short', year: 'numeric',
-    timeZone: 'America/Havana',
+    timeZone: cubaTimeZone(iso),
   });
 }
 

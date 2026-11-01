@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '@tricigo/i18n';
 import { rideAssistService, rideService, type RideAssistContext } from '@tricigo/api';
 import type { ServiceTypeConfig, ServiceTypeSlug } from '@tricigo/types';
-import { formatCUP } from '@tricigo/utils';
+import { formatCUP, cubaTimeZone } from '@tricigo/utils';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { assistErrorKey } from './assistErrors';
@@ -96,7 +96,7 @@ export function AssistServiceChange({ ride, configs, proposalLine, onChanged }: 
         dropoff_lat: ride.dropoff_lat,
         dropoff_lng: ride.dropoff_lng,
         for_user_id: ride.customer_id,
-        time_zone: 'America/Havana',
+        time_zone: cubaTimeZone(),
       });
       if (seq !== latestQuote.current) return;
       setQuote({ target: quoted, fare: estimate.estimated_fare_cup });

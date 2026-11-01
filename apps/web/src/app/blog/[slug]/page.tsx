@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import { JsonLd } from '@/components/JsonLd';
 import { getPostBySlugServer, getPublishedPostsServer } from '@/lib/blog-server';
 import { sanitizeHtml } from '@/lib/sanitize';
+import { cubaTimeZone } from '@tricigo/utils';
 
 // Server-rendered article: crawlers receive the title, body and structured data
 // in the initial HTML (previously this was a 'use client' page that fetched in
@@ -18,7 +19,7 @@ function formatDate(iso: string): string {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
-    timeZone: 'America/Havana',
+    timeZone: cubaTimeZone(iso),
   });
 }
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { cubaTimeZone } from '@tricigo/utils';
 
 type Props = {
   name: string;
@@ -19,7 +20,7 @@ function formatDateLong(d: Date) {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
-    timeZone: 'America/Havana',
+    timeZone: cubaTimeZone(d),
   }).format(d);
 }
 
@@ -28,7 +29,7 @@ function formatClock(d: Date) {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
-    timeZone: 'America/Havana',
+    timeZone: cubaTimeZone(d),
   }).format(d);
 }
 
@@ -43,7 +44,7 @@ export function DashboardHero({ name }: Props) {
 
   const hour = now
     ? Number(
-        new Intl.DateTimeFormat('es', { hour: '2-digit', hour12: false, timeZone: 'America/Havana' })
+        new Intl.DateTimeFormat('es', { hour: '2-digit', hour12: false, timeZone: cubaTimeZone(now) })
           .format(now)
           .replace(/\D/g, ''),
       )

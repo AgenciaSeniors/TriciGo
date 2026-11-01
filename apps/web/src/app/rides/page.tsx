@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { rideService, getSupabaseClient } from '@tricigo/api';
-import { formatTRC, formatCUP, getRelativeDay, formatTime, riderChargedTotal, riderChargedTotalTrc, generateHistoryCSV } from '@tricigo/utils';
+import { formatTRC, formatCUP, getRelativeDay, formatTime, riderChargedTotal, riderChargedTotalTrc, generateHistoryCSV, cubaTimeZone } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import type { Ride, ServiceTypeSlug, PaymentMethod } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
@@ -353,7 +353,7 @@ export default function RidesPage() {
             <div className="rides-list">
               {scheduledRides.map((ride) => {
                 const whenLabel = ride.scheduled_at
-                  ? new Intl.DateTimeFormat('es', { timeZone: 'America/Havana', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(ride.scheduled_at))
+                  ? new Intl.DateTimeFormat('es', { timeZone: cubaTimeZone(ride.scheduled_at), dateStyle: 'medium', timeStyle: 'short' }).format(new Date(ride.scheduled_at))
                   : '';
                 return (
                   <button

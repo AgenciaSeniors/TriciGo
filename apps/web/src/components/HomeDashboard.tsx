@@ -12,7 +12,7 @@ import { useRouter } from 'next/navigation';
 import { rideService, announcementService, promotionService, partnerPlaceService, type ActivePromotion } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import type { Ride, PartnerPlace } from '@tricigo/types';
-import { announcementCtaWebHref } from '@tricigo/utils';
+import { announcementCtaWebHref, cubaTimeZone } from '@tricigo/utils';
 import type { LocationPreset } from '@tricigo/utils';
 
 /** getRideHistoryFiltered returns the raw rides row: the geography columns
@@ -36,7 +36,7 @@ function havanaHhmm(iso?: string | null): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   return new Intl.DateTimeFormat('es', {
-    hour: '2-digit', minute: '2-digit', timeZone: 'America/Havana',
+    hour: '2-digit', minute: '2-digit', timeZone: cubaTimeZone(d),
   }).format(d);
 }
 
@@ -241,7 +241,7 @@ export function HomeDashboard({ userId, onRebook, onApplyPromo }: {
                     ? `${p.discount_fixed_cup} CUP`
                     : '🎁');
               const expiry = p.valid_until
-                ? new Date(p.valid_until).toLocaleDateString('es', { day: 'numeric', month: 'short', timeZone: 'America/Havana' })
+                ? new Date(p.valid_until).toLocaleDateString('es', { day: 'numeric', month: 'short', timeZone: cubaTimeZone(p.valid_until) })
                 : null;
               return (
                 <button

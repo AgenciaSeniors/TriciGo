@@ -6,6 +6,7 @@ import { getSupabaseClient } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
 import { usePanelCan } from '@/lib/usePanelCan';
+import { cubaTimeZone } from '@tricigo/utils';
 
 // ============================================================
 // POI moderation panel (PR 3 of POI parity program)
@@ -214,7 +215,7 @@ export default function PoisSubmissionsPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-xs text-neutral-500">
-                    {new Date(s.created_at).toLocaleString('es-CU', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Havana' })}
+                    {new Date(s.created_at).toLocaleString('es-CU', { dateStyle: 'short', timeStyle: 'short', timeZone: cubaTimeZone(s.created_at) })}
                   </td>
                   <td className="px-4 py-3 text-right">
                     {s.status === 'pending' ? (

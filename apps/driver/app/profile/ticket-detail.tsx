@@ -9,6 +9,7 @@ import { colors, midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { supportService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import type { SupportTicket, TicketMessage } from '@tricigo/types';
+import { cubaTimeZone } from '@tricigo/utils';
 
 const STATUS_LABELS: Record<string, string> = {
   open: 'Abierto',
@@ -101,7 +102,7 @@ export default function DriverTicketDetailScreen() {
           {new Date(item.created_at).toLocaleTimeString('es-CU', {
             hour: '2-digit',
             minute: '2-digit',
-            timeZone: 'America/Havana',
+            timeZone: cubaTimeZone(item.created_at),
           })}
         </Text>
       </View>

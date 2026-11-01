@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { getSupabaseClient, supportService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import type { SupportTicket, TicketCategory } from '@tricigo/types';
+import { cubaTimeZone } from '@tricigo/utils';
 
 const STATUS_COLORS: Record<string, string> = {
   open: 'var(--info, #3B82F6)',
@@ -54,12 +55,16 @@ export default function SupportPage() {
     other: t('support.category_other', { defaultValue: 'Otro' }),
   };
 
-  const dateFormatter = new Intl.DateTimeFormat('es', {
-    timeZone: 'America/Havana',
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+  // The zone depends on the date (cubaTimeZone), so one formatter per date.
+  const dateFormatter = {
+    format: (d: Date) =>
+      new Intl.DateTimeFormat('es', {
+        timeZone: cubaTimeZone(d),
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      }).format(d),
+  };
 
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(({ data: { session } }) => {

@@ -16,7 +16,7 @@ import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors, midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
-import { getErrorMessage } from '@tricigo/utils';
+import { getErrorMessage, cubaTimeZone } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { ensurePickerPermission } from '@/lib/ensurePickerPermission';
@@ -324,7 +324,7 @@ export default function DocumentsScreen() {
                     <View className="items-end ml-2">
                       <StatusBadge {...badgeProps} />
                       <Text variant="badge" color="secondary" className="mt-1.5">
-                        {new Date(doc.uploaded_at).toLocaleDateString('es-CU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Havana' })}
+                        {new Date(doc.uploaded_at).toLocaleDateString('es-CU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: cubaTimeZone(doc.uploaded_at) })}
                       </Text>
                     </View>
                   </View>
@@ -379,7 +379,7 @@ export default function DocumentsScreen() {
                         </View>
                         <Text variant="caption" color="primary" className="flex-1">
                           {new Date(check.requested_at).toLocaleDateString('es-CU', {
-                            day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Havana',
+                            day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: cubaTimeZone(check.requested_at),
                           })}
                         </Text>
                         {check.face_match_score != null && (

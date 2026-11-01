@@ -11,7 +11,7 @@ import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import { useTranslation } from '@tricigo/i18n';
 import { deviceService, authService } from '@tricigo/api';
-import { getErrorMessage, triggerHaptic } from '@tricigo/utils';
+import { getErrorMessage, triggerHaptic, cubaTimeZone } from '@tricigo/utils';
 import type { KnownDevice } from '@tricigo/api';
 import { ProfileSection } from '@/components/profile/ProfileSection';
 import { useAuthStore } from '@/stores/auth.store';
@@ -34,7 +34,7 @@ function formatLastSeen(iso: string): string {
   if (Number.isNaN(d.getTime())) return iso;
   try {
     return new Intl.DateTimeFormat('es', {
-      timeZone: 'America/Havana',
+      timeZone: cubaTimeZone(d),
       day: '2-digit',
       month: 'short',
       year: 'numeric',

@@ -8,7 +8,7 @@ import { Input } from '@tricigo/ui/Input';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
-import { formatTRC, getErrorMessage } from '@tricigo/utils';
+import { formatTRC, getErrorMessage, cubaTimeZone } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useCorporateAccounts } from '@/hooks/useCorporateAccounts';
@@ -268,7 +268,7 @@ export default function CorporateProfileScreen() {
       let y = startY + 14;
       for (const item of data.items) {
         if (y > 270) { doc.addPage(); y = 20; }
-        doc.text(new Date(item.date).toLocaleDateString('es-CU', { day: '2-digit', month: 'short', timeZone: 'America/Havana' }), 16, y);
+        doc.text(new Date(item.date).toLocaleDateString('es-CU', { day: '2-digit', month: 'short', timeZone: cubaTimeZone(item.date) }), 16, y);
         doc.text(item.employee_name.substring(0, 30), 50, y);
         doc.text(item.fare_trc.toFixed(2), 160, y);
         y += 7;
@@ -1009,7 +1009,7 @@ export default function CorporateProfileScreen() {
                                   month: 'short',
                                   hour: '2-digit',
                                   minute: '2-digit',
-                                  timeZone: 'America/Havana',
+                                  timeZone: cubaTimeZone(ride.created_at),
                                 })}
                               </Text>
                               <Text variant="bodySmall" className="font-medium">{formatTRC(ride.fare_trc)}</Text>
