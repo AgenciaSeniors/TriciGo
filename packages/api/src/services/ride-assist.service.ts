@@ -6,6 +6,7 @@
 // AppError whose `code` is that string. A missing function (migration not applied) is PGRST202.
 // ============================================================
 
+import type { VehicleType } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
 import { AppError } from '../errors';
 
@@ -108,7 +109,7 @@ export interface AssistCandidate {
   driver_profile_id: string;
   full_name: string;
   phone: string | null;
-  vehicle_type: 'triciclo' | 'moto' | 'auto' | 'confort';
+  vehicle_type: VehicleType;
   vehicle_label: string;
   is_online: boolean;
   last_heartbeat_at: string | null;
@@ -163,6 +164,8 @@ export interface ActiveRideContext {
     is_online: boolean;
     last_heartbeat_at: string | null;
     vehicle_label: string | null;
+    /** The type of the vehicle in vehicle_label. Absent before 00669; null without an active vehicle. */
+    vehicle_type?: VehicleType | null;
   } | null;
   /** The ride's driver profile. The panel sends it back to the three actions as the driver it saw. */
   driver_profile_id: string | null;

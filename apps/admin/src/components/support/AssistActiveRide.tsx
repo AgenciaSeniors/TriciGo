@@ -18,6 +18,7 @@ import { formatAdminDate } from '@/lib/formatDate';
 import { rideTypeLabel } from '@/lib/rideType';
 import { assistErrorKey, serverErrorMessage } from './assistErrors';
 import { agoLabel, telLink } from './supportFormat';
+import { VehicleTypeChip } from './VehicleTypeChip';
 
 const CARD = 'rounded-xl border border-line bg-surface-elevated p-6 shadow-sm';
 const LINK_BTN =
@@ -278,7 +279,10 @@ export function AssistActiveRide({
           {driver && (
             <>
               <h2 className="mb-2 mt-6 text-lg font-bold">{t('ride_assist.driver')}</h2>
-              <p className="text-sm font-medium text-ink">{driver.full_name}</p>
+              <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-ink">
+                {driver.full_name}
+                {driver.vehicle_type && <VehicleTypeChip type={driver.vehicle_type} />}
+              </p>
               <p className="text-sm text-ink-muted">
                 {driver.phone ?? '—'}
                 {driver.vehicle_label ? ` · ${driver.vehicle_label}` : ''}

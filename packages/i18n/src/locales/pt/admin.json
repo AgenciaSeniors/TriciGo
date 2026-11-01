@@ -2604,6 +2604,8 @@
     "candidates_type": "Tipo de veículo",
     "candidates_empty": "Não há motoristas deste tipo online nem vistos nos últimos 7 dias.",
     "candidates_other_type": "São motoristas de outro tipo: para enviar a viagem a eles, primeiro troque o tipo da viagem abaixo.",
+    "vehicle_filter": "Filtrar por veículo",
+    "vehicle_all": "Todos",
     "online": "Online",
     "offline_seen": "Offline · visto há {{time}}",
     "seen_never": "sem dados",

@@ -6,17 +6,22 @@
  * screen like any offer; "Asignar directo" gives it to them at once, with a reason.
  * Support can also look at drivers of another type, to call them before changing the ride's
  * type; the actions stay off until the ride is of their type.
+ * Every row says the driver's vehicle type. A list that mixes types (a car ride takes Auto and
+ * Confort, a delivery takes any vehicle that carries cargo) can be narrowed to one of them.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MessageCircle, Phone } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
 import { rideAssistService, type AssistCandidate, type RideOfferStatus } from '@tricigo/api';
+import type { VehicleType } from '@tricigo/types';
 import { waMeLink } from '@tricigo/utils';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
+import { VEHICLE_TYPE_LABEL, labelFor } from '@/lib/labels';
 import { assistErrorKey } from './assistErrors';
 import { agoLabel, telLink } from './supportFormat';
+import { VEHICLE_TYPE_ORDER, VehicleTypeChip } from './VehicleTypeChip';
 
 export interface ServiceTypeOption {
   slug: string;
@@ -36,6 +41,11 @@ interface Props {
 const CHIP = 'rounded-full px-2 py-0.5 text-xs font-semibold';
 const LINK_BTN =
   'inline-flex items-center gap-1 rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface-sunken';
+// The tab look of FilterBar.
+const FILTER_BTN =
+  'inline-flex flex-shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-all';
+const FILTER_ON = 'border-line-strong bg-surface text-ink shadow-elev-1';
+const FILTER_OFF = 'border-transparent text-ink-muted hover:bg-surface-sunken';
 
 export function AssistCandidates({ rideId, rideServiceType, pickupAddress, typeOptions, onChanged, allowed = true }: Props) {
   const { t } = useTranslation('admin');
@@ -47,11 +57,27 @@ export function AssistCandidates({ rideId, rideServiceType, pickupAddress, typeO
   const [busyId, setBusyId] = useState<string | null>(null);
   const [assignTo, setAssignTo] = useState<AssistCandidate | null>(null);
   const [reason, setReason] = useState('');
+  const [vehicleFilter, setVehicleFilter] = useState<VehicleType | null>(null);
 
   // When the ride's type changes (support applied it, or the rider accepted), the list follows.
   useEffect(() => {
     setServiceType(rideServiceType);
   }, [rideServiceType]);
+
+  // A filter belongs to the list it was picked on.
+  useEffect(() => {
+    setVehicleFilter(null);
+  }, [serviceType]);
+
+  // How many drivers of each type the list has, in VEHICLE_TYPE_ORDER.
+  const typeCounts = useMemo(() => {
+    const counts = new Map<VehicleType, number>();
+    for (const c of rows ?? []) counts.set(c.vehicle_type, (counts.get(c.vehicle_type) ?? 0) + 1);
+    return VEHICLE_TYPE_ORDER.filter((type) => counts.has(type)).map((type) => ({ type, count: counts.get(type) ?? 0 }));
+  }, [rows]);
+  // A type that a refresh left out of the list stops filtering it.
+  const activeFilter = vehicleFilter !== null && typeCounts.some((c) => c.type === vehicleFilter) ? vehicleFilter : null;
+  const shownRows = rows === null || activeFilter === null ? rows : rows.filter((c) => c.vehicle_type === activeFilter);
 
   const otherType = serviceType !== rideServiceType;
   const options = typeOptions.some((o) => o.slug === rideServiceType)
@@ -157,9 +183,33 @@ export function AssistCandidates({ rideId, rideServiceType, pickupAddress, typeO
         <p className="text-sm text-ink-muted">{t('ride_assist.candidates_empty')}</p>
       )}
 
-      {rows !== null && rows.length > 0 && (
+      {typeCounts.length > 1 && rows !== null && (
+        <div role="group" aria-label={t('ride_assist.vehicle_filter')} className="mb-2 flex flex-wrap items-center gap-1">
+          {[{ type: null, count: rows.length }, ...typeCounts].map(({ type, count }) => {
+            const on = type === activeFilter;
+            return (
+              <button
+                key={type ?? 'all'}
+                type="button"
+                aria-pressed={on}
+                onClick={() => setVehicleFilter(type)}
+                className={`${FILTER_BTN} ${on ? FILTER_ON : FILTER_OFF}`}
+              >
+                <span className="whitespace-nowrap">
+                  {type === null ? t('ride_assist.vehicle_all') : labelFor(t, VEHICLE_TYPE_LABEL, type)}
+                </span>
+                <span className="rounded-full bg-surface-sunken px-1.5 py-0.5 font-mono text-[10px] text-ink-muted" data-tabular>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {shownRows !== null && shownRows.length > 0 && (
         <ul className="divide-y divide-line">
-          {rows.map((c) => {
+          {shownRows.map((c) => {
             const wa = waMeLink(c.phone, t('ride_assist.driver_whatsapp_text', { pickup: pickupAddress }));
             const tel = telLink(c.phone);
             const offerLapsed =
@@ -172,6 +222,7 @@ export function AssistCandidates({ rideId, rideServiceType, pickupAddress, typeO
                   <p className="text-sm font-semibold text-ink">{c.full_name}</p>
                   <p className="truncate text-xs text-ink-muted">{c.vehicle_label}</p>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <VehicleTypeChip type={c.vehicle_type} />
                     {c.is_online ? (
                       <span className={`${CHIP} bg-green-500/10 text-green-700 dark:text-green-400`}>
                         {t('ride_assist.online')}

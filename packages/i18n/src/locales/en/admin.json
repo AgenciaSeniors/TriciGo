@@ -2604,6 +2604,8 @@
     "candidates_type": "Vehicle type",
     "candidates_empty": "No drivers of this type are online or were seen in the last 7 days.",
     "candidates_other_type": "These drivers are of another type: to send them the ride, first change the ride's type below.",
+    "vehicle_filter": "Filter by vehicle",
+    "vehicle_all": "All",
     "online": "Online",
     "offline_seen": "Offline · seen {{time}} ago",
     "seen_never": "no data",
