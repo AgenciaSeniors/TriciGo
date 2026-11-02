@@ -50,7 +50,7 @@ import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
 import { formatCUP, cupToTrcCentavos, haversineDistance, jitterLocation, triggerHaptic, isCargoRide } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
-import { presenceService, trackValidationEvent, walletService } from '@tricigo/api';
+import { presenceService, serverNowMs, trackValidationEvent, walletService } from '@tricigo/api';
 import { midnightEmber } from '@tricigo/theme';
 import { useLocationStore } from '@/stores/location.store';
 import { useDriverStore } from '@/stores/driver.store';
@@ -214,7 +214,8 @@ function IncomingRideCardInner({
     const expiresAt = ride.offer_expires_at
       ? new Date(ride.offer_expires_at).getTime()
       : null;
-    return expiresAt ? Math.max(0, expiresAt - Date.now()) : OFFER_WINDOW_MS;
+    // A server timestamp, measured against the server's clock (serverClock.ts).
+    return expiresAt ? Math.max(0, expiresAt - serverNowMs()) : OFFER_WINDOW_MS;
   }, [ride.offer_expires_at]);
 
   const progressAnim = useRef(new Animated.Value(0)).current;

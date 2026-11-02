@@ -115,7 +115,13 @@
     "connect_to_earn": "Go online to start earning",
     "on_break_label": "On break — not receiving requests",
     "heartbeat_lost_title": "We lost the connection to the server",
-    "heartbeat_lost_body": "You may stop receiving rides. Check your connection."
+    "heartbeat_lost_body": "You may stop receiving rides. Check your connection.",
+    "reconnected_title": "You are back online",
+    "reconnected_body": "The signal dropped for a moment. You are still receiving rides.",
+    "offline_detected_title": "You are offline",
+    "offline_detected_body": "Your shift was closed. Tap Go online to receive rides again.",
+    "signal_lost_title": "You were taken offline",
+    "signal_lost_body": "We lost your signal and could not reconnect you. Tap Go online."
   },
 
   "trip": {

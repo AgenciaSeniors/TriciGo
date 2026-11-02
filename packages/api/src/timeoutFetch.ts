@@ -13,6 +13,9 @@
 // retries) instead of hanging. Reads/writes get a tight backstop; uploads and
 // edge functions (which can legitimately be slow over a poor link) get a
 // generous one so we never abort a real-but-slow transfer.
+import { adjustAuthResponse } from './clockSafeAuth';
+import { noteServerDate } from './serverClock';
+
 const READ_TIMEOUT_MS = 30_000;
 const LONG_TIMEOUT_MS = 120_000;
 
@@ -43,8 +46,15 @@ export function makeTimeoutFetch() {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (globalThis.fetch as any)(input, { ...init, signal: controller.signal }).finally(() =>
-      clearTimeout(timer),
-    );
+    return (globalThis.fetch as any)(input, { ...init, signal: controller.signal })
+      .then((res: Response) => {
+        // A phone clock that is wrong by an hour (Cuba, 2026-11-01) must not
+        // break sessions or ride offers: see clockSafeAuth.ts and serverClock.ts.
+        try {
+          noteServerDate(res.headers?.get?.('date'));
+        } catch { /* a response without headers: nothing to learn */ }
+        return adjustAuthResponse(String(url), res);
+      })
+      .finally(() => clearTimeout(timer));
   };
 }

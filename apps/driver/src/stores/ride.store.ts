@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import * as Notifications from 'expo-notifications';
 import type { Ride } from '@tricigo/types';
 import { logger } from '@tricigo/utils';
+import { serverNowMs } from '@tricigo/api/serverClock';
 import { decideIncomingOffer } from '@/utils/incomingOffer';
 
 /** Ride with a local timestamp for TTL expiry */
@@ -63,7 +64,8 @@ export const useDriverRideStore = create<DriverRideState>((set, get) => ({
         ride.offer_expires_at,
         cached ? { expiresAt: cached.offer_expires_at } : null,
         s.dismissedRequestIds.includes(ride.id),
-        Date.now(),
+        // Offer expiries are server timestamps: compare with the server's clock.
+        serverNowMs(),
       );
       if (action === 'ignore') return s;
       const fresh: TimestampedRide = { ...ride, _receivedAt: Date.now() };
@@ -109,9 +111,12 @@ export const useDriverRideStore = create<DriverRideState>((set, get) => ({
   removeStaleRequests: () =>
     set((s) => {
       const now = Date.now();
+      // offer_expires_at is a server timestamp: a phone an hour ahead
+      // (Cuba, 2026-11-01) dropped every offer the moment it arrived.
+      const serverNow = serverNowMs();
       const fresh = s.incomingRequests.filter((r) => {
         if (r.offer_expires_at) {
-          return new Date(r.offer_expires_at).getTime() > now;
+          return new Date(r.offer_expires_at).getTime() > serverNow;
         }
         return now - r._receivedAt < 30_000;
       });

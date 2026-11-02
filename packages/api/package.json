@@ -11,6 +11,7 @@
     "./authCallback": "./src/authCallback.ts",
     "./client": "./src/client.ts",
     "./timeoutFetch": "./src/timeoutFetch.ts",
+    "./serverClock": "./src/serverClock.ts",
     "./services/auth": "./src/services/auth.service.ts",
     "./services/wallet": "./src/services/wallet.service.ts",
     "./services/ride": "./src/services/ride.service.ts",

@@ -115,7 +115,13 @@
     "connect_to_earn": "Fique online para começar a ganhar",
     "on_break_label": "Em pausa — sem receber solicitações",
     "heartbeat_lost_title": "Perdemos a conexão com o servidor",
-    "heartbeat_lost_body": "Você pode parar de receber viagens. Verifique sua conexão."
+    "heartbeat_lost_body": "Você pode parar de receber viagens. Verifique sua conexão.",
+    "reconnected_title": "Você está online de novo",
+    "reconnected_body": "O sinal caiu por um momento. Você continua recebendo viagens.",
+    "offline_detected_title": "Você está offline",
+    "offline_detected_body": "Seu turno foi encerrado. Toque em Ficar online para voltar a receber viagens.",
+    "signal_lost_title": "Desconectamos você",
+    "signal_lost_body": "Perdemos seu sinal e não conseguimos reconectar você. Toque em Ficar online."
   },
 
   "trip": {
