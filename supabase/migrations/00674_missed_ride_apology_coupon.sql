@@ -3,8 +3,8 @@
 -- Spec: docs/superpowers/specs/2026-11-02-missed-ride-apology-coupon-design.md
 --
 -- The panel's /missed-rides page lists passengers whose request was canceled with no driver after
--- waiting support_alert_after_s, with no completed ride since. An operator (or an admin) writes
--- to each one by WhatsApp:
+-- waiting support_alert_after_s, with no ride since (completed, or disputed, which only a completed
+-- ride can become: 00634). An operator (or an admin) writes to each one by WhatsApp:
 --
 --   admin_missed_riders(view, days)       the list, for operations staff;
 --   admin_missed_ride_coupon()            the coupon in use: the newest active grant-only promotion;
@@ -15,6 +15,10 @@
 -- rides_signup_promo and the promo validator). Nobody else can use it, even typing its code: the
 -- validator and validate_promo_code refuse a grant-only promotion without a grant. The installed
 -- apps prefill it through get_my_signup_promotion, which returns it first.
+--
+-- A grant-only promotion is chosen as such when it is created and never changes
+-- (promotions_grant_only_frozen, for everyone: a deliberate change goes through a migration), and
+-- it is never first-ride-only: it is meant for people who may have ridden before.
 --
 -- tg_rides_promo_grant is SECURITY INVOKER on purpose, like tg_rides_signup_promo (00665): it
 -- tells a ride a person creates (current_user anon or authenticated) from one a SECURITY DEFINER
@@ -71,8 +75,38 @@ BEGIN
     ALTER TABLE public.promotions ADD CONSTRAINT promotions_grant_only_private
       CHECK (NOT (grant_only AND COALESCE(is_public, true)));
   END IF;
+  -- An apology coupon has to work for people who rode before: never first-ride-only.
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                  WHERE conrelid = 'public.promotions'::regclass AND conname = 'promotions_grant_only_any_ride') THEN
+    ALTER TABLE public.promotions ADD CONSTRAINT promotions_grant_only_any_ride
+      CHECK (NOT (grant_only AND COALESCE(first_ride_only, false)));
+  END IF;
 END
 $constraint$;
+
+-- grant_only is chosen once, when the promotion is created. Switching it off would turn a coupon
+-- people hold into a private code anyone can type; switching it on would take a public promotion
+-- away from everyone. Refused for everyone (admins, the service role, SQL).
+CREATE OR REPLACE FUNCTION public.tg_promotions_grant_only_frozen()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY INVOKER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+BEGIN
+  IF NEW.grant_only IS DISTINCT FROM OLD.grant_only THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0001',
+      MESSAGE = 'Un cupón de disculpa se elige al crear la promoción y no se puede cambiar.',
+      DETAIL = 'grant_only_frozen';
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+REVOKE ALL ON FUNCTION public.tg_promotions_grant_only_frozen() FROM PUBLIC, anon, authenticated;
+
+CREATE OR REPLACE TRIGGER promotions_grant_only_frozen
+  BEFORE UPDATE OF grant_only ON public.promotions
+  FOR EACH ROW EXECUTE FUNCTION public.tg_promotions_grant_only_frozen();
 
 -- One apology coupon per account. The phone rule is the reward_claims row (claim
 -- 'missed_ride_coupon', 00658), which outlives the account. granted_by and contacted_by have no
@@ -108,7 +142,8 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.missed_ride_contacts TO service_r
 
 -- Per person: the latest passenger request canceled with no driver after waiting
 -- support_alert_after_s, how many there were, and whether the person is in the segment: an active,
--- non-test, non-team, non-system account with no completed ride created after that request.
+-- non-test, non-team, non-system account with no ride taken (completed or disputed) created after
+-- that request.
 CREATE OR REPLACE FUNCTION public._missed_rider_summary(p_user_id uuid DEFAULT NULL)
  RETURNS TABLE (user_id uuid, last_failed_ride_id uuid, last_failed_at timestamptz, last_pickup text,
                 last_dropoff text, failed_requests bigint, eligible boolean)
@@ -140,7 +175,7 @@ AS $function$
           AND l.customer_id NOT IN ('00000000-0000-0000-0000-000000000001'::uuid,
                                     '00000000-0000-0000-0000-000000000099'::uuid)
           AND NOT EXISTS (SELECT 1 FROM public.rides r2
-                           WHERE r2.customer_id = l.customer_id AND r2.status = 'completed'
+                           WHERE r2.customer_id = l.customer_id AND r2.status IN ('completed', 'disputed')
                              AND r2.created_at > l.canceled_at))
     FROM last l
     JOIN cnt c ON c.customer_id = l.customer_id
@@ -265,7 +300,8 @@ BEGIN
          (g.id IS NULL AND public._reward_claim_status(pk.user_id, 'missed_ride_coupon') = 'taken'),
          (ct.first_at IS NOT NULL AND EXISTS (
             SELECT 1 FROM public.rides r3
-             WHERE r3.customer_id = pk.user_id AND r3.status = 'completed' AND r3.created_at > ct.first_at))
+             WHERE r3.customer_id = pk.user_id AND r3.status IN ('completed', 'disputed')
+               AND r3.created_at > ct.first_at))
     FROM picked pk
     JOIN public.users u ON u.id = pk.user_id
     LEFT JOIN auth.users au ON au.id = pk.user_id
@@ -448,6 +484,8 @@ BEGIN
   RETURN NEW;
 END;
 $function$;
+-- A trigger function needs no EXECUTE grant to fire (as 00665 did for tg_rides_signup_promo).
+REVOKE ALL ON FUNCTION public.tg_rides_promo_grant() FROM PUBLIC, anon, authenticated;
 
 CREATE OR REPLACE TRIGGER rides_promo_grant
   BEFORE INSERT ON public.rides
@@ -527,7 +565,7 @@ BEGIN
     'public._missed_rider_summary(uuid)', 'public._missed_ride_current_coupon()',
     'public._my_granted_promotion_id()', 'public.admin_missed_riders(text,integer)',
     'public.admin_missed_ride_coupon()', 'public.ops_contact_missed_rider(uuid,timestamptz)',
-    'public.tg_rides_promo_grant()']::regprocedure[]
+    'public.tg_rides_promo_grant()', 'public.tg_promotions_grant_only_frozen()']::regprocedure[]
   LOOP
     v_def := pg_get_functiondef(v_fn);
     IF position(chr(13) IN v_def) > 0 THEN
@@ -608,13 +646,31 @@ BEGIN
                   AND conname = 'promotions_grant_only_private' AND contype = 'c') THEN
     RAISE EXCEPTION '00674: a grant-only promotion could be public';
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.promotions'::regclass
+                  AND conname = 'promotions_grant_only_any_ride' AND contype = 'c'
+                  AND position('first_ride_only' IN pg_get_constraintdef(oid)) > 0) THEN
+    RAISE EXCEPTION '00674: a grant-only promotion could be first-ride-only';
+  END IF;
+
+  -- grant_only is frozen: an enabled BEFORE UPDATE row trigger (1 row + 2 before + 16 update),
+  -- not SECURITY DEFINER.
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger t
+                  WHERE t.tgrelid = 'public.promotions'::regclass AND t.tgname = 'promotions_grant_only_frozen'
+                    AND t.tgfoid = 'public.tg_promotions_grant_only_frozen()'::regprocedure
+                    AND t.tgenabled <> 'D' AND (t.tgtype & 19) = 19) THEN
+    RAISE EXCEPTION '00674: promotions_grant_only_frozen has to be an enabled BEFORE UPDATE row trigger';
+  END IF;
+  IF (SELECT prosecdef FROM pg_proc WHERE oid = 'public.tg_promotions_grant_only_frozen()'::regprocedure) THEN
+    RAISE EXCEPTION '00674: tg_promotions_grant_only_frozen() must not be SECURITY DEFINER';
+  END IF;
+
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.promotion_grants'::regclass AND contype = 'f'
                   AND confrelid = 'public.promotions'::regclass AND confdeltype = 'r') THEN
     RAISE EXCEPTION '00674: promotion_grants.promotion_id has to reference promotions ON DELETE RESTRICT';
   END IF;
 
   -- Only these functions call the ops helpers or the operator checks: 00668's nineteen, 00671's
-  -- eleven, 00672's thirteen, 00673's eighteen and this migration's three.
+  -- eleven, 00672's thirteen, 00673's seventeen and this migration's three.
   SELECT string_agg(p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')', ', '
                     ORDER BY p.proname) INTO v_set
   FROM pg_proc p
@@ -651,10 +707,12 @@ BEGIN
     RAISE EXCEPTION '00674: other functions call the ops checks: %', v_set;
   END IF;
 
-  -- Each ops function: SECURITY DEFINER, out of anon's reach, open to authenticated, and it logs.
+  -- Each ops function, and admin_refund_escalated_dispute as in 00673: SECURITY DEFINER, out of
+  -- anon's reach, open to authenticated, and it logs.
   FOR v_row IN
     SELECT p.oid::regprocedure AS fn, p.prosecdef, p.prosrc FROM pg_proc p
-     WHERE p.pronamespace = 'public'::regnamespace AND left(p.proname, 4) = 'ops_'
+     WHERE p.pronamespace = 'public'::regnamespace
+       AND (left(p.proname, 4) = 'ops_' OR p.proname = 'admin_refund_escalated_dispute')
   LOOP
     IF NOT v_row.prosecdef
        OR has_function_privilege('anon', v_row.fn, 'EXECUTE')

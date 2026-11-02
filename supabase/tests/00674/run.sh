@@ -38,6 +38,13 @@ NORA=a0000000-0000-4000-8000-000000000004   # no driver 1 day ago, phone never c
 TINA=a0000000-0000-4000-8000-000000000005   # no driver 1 day ago, test account
 OLGA=a0000000-0000-4000-8000-000000000006   # no driver 100 days ago
 RIDER2=a0000000-0000-4000-8000-000000000007 # never missed a driver
+# Out of the segment, each for one reason (a confirmed phone each, so the phone is not what keeps them out):
+BLOK=a0000000-0000-4000-8000-000000000008   # blocked account
+CARGO=a0000000-0000-4000-8000-000000000009  # only failed request is a delivery
+WDRV=a0000000-0000-4000-8000-000000000012   # the canceled ride had a driver
+SCHED=a0000000-0000-4000-8000-000000000013  # scheduled: waited 30 s from its time, 2 days from its creation
+DISP=a0000000-0000-4000-8000-000000000014   # a disputed ride after the failure
+SYS=00000000-0000-0000-0000-000000000099    # the system account (in the scaffold)
 DIEGO=d0000000-0000-4000-8000-000000000001; DP=dd000000-0000-4000-8000-000000000001
 PERDON=f1000000-0000-4000-8000-000000000001 # grant-only, 500 CUP, the newest
 VIEJO=f1000000-0000-4000-8000-000000000002  # grant-only, 300 CUP, a day older
@@ -77,7 +84,8 @@ LIVE_MD5="_claim_reward=d9a8726c2f105908c0df7fe8c59b2982,_reward_claim_status=73
 NEWFNS="SELECT string_agg(proname || '=' || md5(prosrc), ',' ORDER BY proname COLLATE \"C\") FROM pg_proc
         WHERE pronamespace = 'public'::regnamespace AND proname IN ('_missed_rider_summary', '_missed_ride_current_coupon',
           '_my_granted_promotion_id', 'admin_missed_riders', 'admin_missed_ride_coupon', 'ops_contact_missed_rider',
-          'tg_rides_promo_grant', 'tg_rides_validate_promo_discount', 'validate_promo_code', 'get_my_signup_promotion')"
+          'tg_rides_promo_grant', 'tg_promotions_grant_only_frozen', 'tg_rides_validate_promo_discount', 'validate_promo_code',
+          'get_my_signup_promotion')"
 marker(){ echo "SELECT (length(prosrc) - length(replace(prosrc, '$2', ''))) / length('$2') FROM pg_proc WHERE proname = '$1';"; }
 MARKERS="$(marker tg_rides_validate_promo_discount '00674: a grant-only promotion counts only') $(marker validate_promo_code '00674: a grant-only promotion is invalid') $(marker get_my_signup_promotion '00674: an apology coupon goes first')"
 
@@ -96,12 +104,17 @@ fresh(){ : > "$FRESHLOG"
     ('$OPS', 'operator', 'Oscar Operador', false), ('$ADM', 'admin', 'Adela', false), ('$MARK', 'marketing', 'Mark', false),
     ('$ANA', 'customer', 'Ana Perez', false), ('$ANA2', 'customer', 'Ana otra vez', false), ('$BETO', 'customer', 'Beto', false),
     ('$CARL', 'customer', 'Carla', false), ('$NORA', 'customer', 'Nora', false), ('$TINA', 'customer', 'Tina', true),
-    ('$OLGA', 'customer', 'Olga', false), ('$RIDER2', 'customer', 'Rider Dos', false), ('$DIEGO', 'driver', 'Diego', false);
+    ('$OLGA', 'customer', 'Olga', false), ('$RIDER2', 'customer', 'Rider Dos', false), ('$DIEGO', 'driver', 'Diego', false),
+    ('$CARGO', 'customer', 'Cora', false), ('$WDRV', 'customer', 'Dario', false), ('$SCHED', 'customer', 'Sara', false),
+    ('$DISP', 'customer', 'Dina', false);
+  INSERT INTO public.users (id, role, full_name, is_active) VALUES ('$BLOK', 'customer', 'Blanca', false);
   INSERT INTO auth.users (id, phone, phone_confirmed_at) VALUES
     ('$OPS', '5355500021', now()), ('$ADM', '5355500022', now()), ('$MARK', '5355500023', now()),
     ('$ANA', '5355500001', now()), ('$BETO', '5355500002', now()), ('$CARL', '5355500003', now()),
     ('$NORA', '5355500004', NULL), ('$TINA', '5355500005', now()), ('$OLGA', '5355500006', now()),
-    ('$RIDER2', '5355500007', now()), ('$DIEGO', '5355500008', now());
+    ('$RIDER2', '5355500007', now()), ('$DIEGO', '5355500008', now()),
+    ('$BLOK', '5355500009', now()), ('$SYS', '5355500010', now()), ('$CARGO', '5355500011', now()),
+    ('$WDRV', '5355500012', now()), ('$SCHED', '5355500013', now()), ('$DISP', '5355500014', now());
   INSERT INTO public.driver_profiles (id, user_id) VALUES ('$DP', '$DIEGO');
   INSERT INTO public.corporate_accounts (id, commission_percent) VALUES ('$CORP', 10);
   INSERT INTO public.platform_config (key, value) VALUES ('support_alert_after_s', '60');
@@ -118,10 +131,31 @@ fresh(){ : > "$FRESHLOG"
   $(missed $CARL '2 hours' '20 seconds')
   $(missed $NORA '1 day' '3 minutes')
   $(missed $TINA '1 day' '3 minutes')
-  $(missed $OLGA '100 days' '4 minutes')" >/dev/null 2>>"$FRESHLOG" \
+  $(missed $OLGA '100 days' '4 minutes')
+  -- out: the account is blocked
+  $(missed $BLOK '21 hours' '3 minutes')
+  -- out: a team account (marketing)
+  $(missed $MARK '20 hours' '3 minutes')
+  -- out: the system account
+  $(missed $SYS '22 hours' '3 minutes')
+  -- out: the only failed request is a delivery
+  INSERT INTO public.rides (customer_id, service_type, status, ride_mode, pickup_location, dropoff_location, estimated_fare_cup, created_at, canceled_at)
+    VALUES ('$CARGO', 'auto_standard', 'canceled', 'cargo', $PICK, $DROP, 4000, now() - interval '23 hours', now() - interval '23 hours' + interval '3 minutes');
+  -- out: a driver had taken the ride before it was canceled
+  INSERT INTO public.rides (customer_id, driver_id, service_type, status, pickup_location, dropoff_location, estimated_fare_cup, created_at, canceled_at)
+    VALUES ('$WDRV', '$DP', 'auto_standard', 'canceled', $PICK, $DROP, 4000, now() - interval '19 hours', now() - interval '19 hours' + interval '3 minutes');
+  -- out: scheduled, canceled 30 s after its time (the wait counts from the later of creation and schedule)
+  INSERT INTO public.rides (customer_id, service_type, status, pickup_location, dropoff_location, estimated_fare_cup, created_at, scheduled_at, canceled_at)
+    VALUES ('$SCHED', 'auto_standard', 'canceled', $PICK, $DROP, 4000, now() - interval '2 days', now() - interval '1 hour', now() - interval '1 hour' + interval '30 seconds');
+  -- out: a disputed ride (one the person took) after the failure
+  $(missed $DISP '2 days' '3 minutes')
+  INSERT INTO public.rides (customer_id, driver_id, service_type, status, pickup_location, dropoff_location, estimated_fare_cup, created_at)
+    VALUES ('$DISP', '$DP', 'auto_standard', 'disputed', $PICK, $DROP, 4000, now() - interval '1 day');" >/dev/null 2>>"$FRESHLOG" \
     || { echo "-- the seed failed:"; cat "$FRESHLOG"; return 1; }; }
-# the coupons exist only with the migration; without it this fails and the tests below are RED
-mark(){ "$BIN/psql" $CONN -d "$1" -qAt -c "UPDATE public.promotions SET grant_only = true, is_public = false WHERE id IN ('$PERDON', '$VIEJO');" >/dev/null 2>&1; }
+# the coupons exist only with the migration; without it this fails and the tests below are RED.
+# grant_only is chosen at creation (the freeze trigger refuses any later change); the seed runs
+# before the column exists, so the rehearsal marks them with the triggers off.
+mark(){ "$BIN/psql" $CONN -d "$1" -qAt -c "SET session_replication_role = replica; UPDATE public.promotions SET grant_only = true, is_public = false WHERE id IN ('$PERDON', '$VIEJO');" >/dev/null 2>&1; }
 apply_err(){ local out; if out=$("$BIN/psql" $CONN -d "$1" -qAt -v ON_ERROR_STOP=1 -1 -c "$AS_OWNER" -f "$2" 2>&1); then echo applied;
              else echo "$out" | tr -d '\r' | grep -m1 ERROR; fi; }
 
@@ -135,9 +169,9 @@ if [ "$MIG" != "none" ]; then
   mark $DB   # set between the two runs: the second one must leave it alone
   echo "== apply migration (2nd, idempotency, autocommit, as the owner, search_path = '') =="
   "$BIN/psql" $CONN -d "$DB" -qAt -v ON_ERROR_STOP=1 -c "$AS_OWNER" -f "$MIG" >/dev/null 2>&1 || { echo "migration NOT idempotent"; exit 1; }
-  val "S1 two runs: one trigger, one constraint, each patch once, and the marked coupons survive" \
-    "SELECT count(*) FROM pg_trigger WHERE tgname = 'rides_promo_grant'; SELECT count(*) FROM pg_constraint WHERE conname = 'promotions_grant_only_private'; $MARKERS SELECT count(*) FROM public.promotions WHERE grant_only;" \
-    "1;1;1;1;1;2"
+  val "S1 two runs: two triggers, two constraints, each patch once, and the marked coupons survive" \
+    "SELECT count(*) FROM pg_trigger WHERE tgname IN ('rides_promo_grant', 'promotions_grant_only_frozen'); SELECT count(*) FROM pg_constraint WHERE conname IN ('promotions_grant_only_private', 'promotions_grant_only_any_ride'); $MARKERS SELECT count(*) FROM public.promotions WHERE grant_only;" \
+    "2;2;1;1;1;2"
 else
   mark $DB   # RED: grant_only does not exist yet
 fi
@@ -156,6 +190,7 @@ err "L5 marketing does not see it" "$(tx "$(client $MARK "$LIST_PENDING")")" "fo
 err "L6 a passenger does not see it" "$(tx "$(client $RIDER2 "$LIST_PENDING")")" "forbidden"
 val "L7 an admin sees it" "$(tx "$(client $ADM "$LIST_PENDING")")" "Ana Perez,Nora,Olga"
 err "L8 an unknown view is refused" "$(tx "$(client $OPS "SELECT count(*) FROM public.admin_missed_riders('everyone', NULL);")")" "invalid_view"
+err "L9 a period under one day is refused" "$(tx "$(client $OPS "SELECT count(*) FROM public.admin_missed_riders('pending', 0);")")" "DETAIL:  invalid_days"
 
 echo "== 2. writing to someone =="
 val "C1 an operator writes to Ana: success, the newest coupon" "$(tx "$GRANT")" "true|PERDON|-"
@@ -195,6 +230,15 @@ val "C14 a completed ride after the contact shows as riding again" \
 val "C15 the coupon header shows the newest active coupon" \
   "$(tx "$(client $OPS "SELECT public.admin_missed_ride_coupon() ->> 'code';")")" "PERDON"
 err "C16 marketing does not read the coupon header" "$(tx "$(client $MARK "SELECT public.admin_missed_ride_coupon();")")" "forbidden"
+val "C17 an admin writes to Ana and gets the coupon" "$(tx "$(expect $ANA) $(client $ADM "$(contact $ANA)")")" "true|PERDON|-"
+val "C18 with PERDON out of uses the coupon header falls back to VIEJO" \
+  "$(tx "UPDATE public.promotions SET max_uses = 1, current_uses = 1 WHERE id = '$PERDON'; $(client $OPS "SELECT public.admin_missed_ride_coupon() ->> 'code';")")" "VIEJO"
+val "C19 the same phone on a new account: the contacted view shows no coupon and the phone already rewarded" \
+  "$(tx "$GRANT UPDATE auth.users SET phone = NULL WHERE id = '$ANA'; INSERT INTO auth.users (id, phone, phone_confirmed_at) VALUES ('$ANA2', '5355500001', now()); $(missed $ANA2 '2 hours' '3 minutes') $(expect $ANA2) $(client $OPS "$(contact $ANA2) SELECT full_name || '|' || coupon_status || '|' || phone_already_rewarded FROM public.admin_missed_riders('contacted', NULL) WHERE user_id = '$ANA2';")")" \
+  "true|PERDON|-;true|-|already_given;Ana otra vez|none|true"
+val "C20 a disputed ride after the contact also counts as riding again" \
+  "$(tx "$GRANT INSERT INTO public.rides (customer_id, driver_id, service_type, status, pickup_location, dropoff_location, estimated_fare_cup, created_at) VALUES ('$ANA', '$DP', 'auto_standard', 'disputed', $PICK, $DROP, 4000, now() + interval '1 minute'); $(client $OPS "SELECT rode_after_contact || '|' || in_segment FROM public.admin_missed_riders('contacted', NULL) WHERE user_id = '$ANA';")")" \
+  "true|PERDON|-;true|false"
 
 echo "== 3. the coupon on the next ride =="
 val "A1 Ana's next ride gets the coupon, before her signup promotion" \
@@ -216,6 +260,16 @@ val "A8 the apps' prefill: the coupon first, then the signup promotion once it i
   "$(tx "$(client $ANA "$MINE") $GRANT $(client $ANA "$MINE") $(client $ANA "$(ride $R1 $ANA) $MINE")")" \
   "BIENVENIDA|percentage_discount|-|MOTO;true|PERDON|-;PERDON|fixed_discount|500|PERDON;BIENVENIDA|percentage_discount|-|MOTO"
 val "A9 a ride made with no JWT is left alone" "$(tx "$GRANT $(ride $R1 $ANA) $(state $R1)")" "true|PERDON|-;none|0"
+val "A10 a paused coupon leaves the next ride to the signup promotion" \
+  "$(tx "$GRANT UPDATE public.promotions SET is_active = false WHERE id = '$PERDON'; $(client $ANA "$(ride $R1 $ANA)") $(state $R1)")" "true|PERDON|-;$BIENV|1000"
+val "A11 an admin with a grant gets no coupon on a ride, and no prefill" \
+  "$(tx "INSERT INTO public.promotion_grants (promotion_id, user_id, source, granted_by) VALUES ('$PERDON', '$ADM', 'missed_ride', '$OPS'); $(client $ADM "$(ride $R1 $ADM) SELECT count(*) FROM public.get_my_signup_promotion();") $(state $R1)")" \
+  "0;none|0"
+val "A12 a coupon out of uses leaves the next ride to the signup promotion" \
+  "$(tx "$GRANT UPDATE public.promotions SET max_uses = 1, current_uses = 1 WHERE id = '$PERDON'; $(client $ANA "$(ride $R1 $ANA)") $(state $R1)")" "true|PERDON|-;$BIENV|1000"
+val "A13 an expired coupon, or one not valid yet, is not prefilled: the signup promotion is" \
+  "$(tx "$GRANT UPDATE public.promotions SET valid_until = now() - interval '1 minute' WHERE id = '$PERDON'; $(client $ANA "$MINE") UPDATE public.promotions SET valid_until = NULL, valid_from = now() + interval '1 day' WHERE id = '$PERDON'; $(client $ANA "$MINE")")" \
+  "true|PERDON|-;BIENVENIDA|percentage_discount|-|MOTO;BIENVENIDA|percentage_discount|-|MOTO"
 
 echo "== 4. data rules =="
 err "D1 a grant-only promotion cannot be public" "$(tx "UPDATE public.promotions SET is_public = true WHERE id = '$PERDON';")" "promotions_grant_only_private"
@@ -226,6 +280,12 @@ err "D3 one coupon per account" \
 err "D4 the apps cannot read the grants" "$(tx "$(client $ANA "SELECT count(*) FROM public.promotion_grants;")")" "permission denied for table promotion_grants"
 err "D5 ... nor the contacts, not even an operator" "$(tx "$(client $OPS "SELECT count(*) FROM public.missed_ride_contacts;")")" "permission denied for table missed_ride_contacts"
 err "D6 anon cannot call the list" "$(tx "SET LOCAL ROLE anon; SELECT count(*) FROM public.admin_missed_riders('pending', NULL);")" "permission denied for function admin_missed_riders"
+err "D7 a grant-only promotion cannot be first-ride-only" "$(tx "UPDATE public.promotions SET first_ride_only = true WHERE id = '$PERDON';")" "promotions_grant_only_any_ride"
+d8_off=$(run $DB "$(tx "UPDATE public.promotions SET grant_only = false WHERE id = '$PERDON';")")
+d8_on=$(run $DB "$(tx "UPDATE public.promotions SET grant_only = true, is_public = false WHERE id = '$BIENV';")")
+if echo "$d8_off" | grep -q "DETAIL:  grant_only_frozen" && echo "$d8_on" | grep -q "DETAIL:  grant_only_frozen"; then
+  ok "D8 grant_only cannot be switched off on a coupon, nor on for a public promotion"
+else ko "D8 grant_only cannot be switched off on a coupon, nor on for a public promotion" "off [$d8_off], on [$d8_on]"; fi
 
 echo "== 5. shape =="
 val "G1 the ride trigger function is SECURITY INVOKER" "SELECT prosecdef FROM pg_proc WHERE proname = 'tg_rides_promo_grant';" "f"
@@ -238,6 +298,10 @@ val "G3 anon calls none; authenticated calls the four the panel and the apps use
                        'public.ops_contact_missed_rider(uuid,timestamptz)', 'public._my_granted_promotion_id()',
                        'public._missed_rider_summary(uuid)', 'public._missed_ride_current_coupon()']) WITH ORDINALITY AS u(f, i);" \
   "false/true,false/true,false/true,false/true,false/false,false/false"
+val "G4 no client can call the two trigger functions" \
+  "SELECT string_agg(has_function_privilege('anon', u.f, 'EXECUTE') || '/' || has_function_privilege('authenticated', u.f, 'EXECUTE'), ',' ORDER BY u.i)
+     FROM unnest(ARRAY['public.tg_rides_promo_grant()', 'public.tg_promotions_grant_only_frozen()']) WITH ORDINALITY AS u(f, i);" \
+  "false/false,false/false"
 
 if [ "$MIG" != "none" ]; then
   echo "== negative proofs: the migration refuses or catches what it must =="
@@ -283,12 +347,16 @@ if [ "$MIG" != "none" ]; then
   neg_mutant N9 "an ops function that logs nothing aborts it" \
     's/INSERT INTO public.admin_actions (admin_id/INSERT INTO public.not_admin_actions (admin_id/' \
     "is not a proper ops function"
+  neg_mutant N10 "a missing first-ride-only constraint aborts it" \
+    '/^    ALTER TABLE public.promotions ADD CONSTRAINT promotions_grant_only_any_ride$/,/^      CHECK (NOT (grant_only AND COALESCE(first_ride_only, false)));$/d' \
+    "a grant-only promotion could be first-ride-only"
   "$BIN/psql" $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS $NEG" >/dev/null 2>&1
   echo "== bodies after 00674 (copy into CLAUDE.md) =="
   "$BIN/psql" $CONN -d "$DB" -qAt -c "SELECT string_agg(proname || ' ' || md5(prosrc) || '/' || length(prosrc), E'\n' ORDER BY proname COLLATE \"C\") FROM pg_proc
            WHERE pronamespace = 'public'::regnamespace AND proname IN ('_missed_rider_summary', '_missed_ride_current_coupon',
              '_my_granted_promotion_id', 'admin_missed_riders', 'admin_missed_ride_coupon', 'ops_contact_missed_rider',
-             'tg_rides_promo_grant', 'tg_rides_validate_promo_discount', 'validate_promo_code', 'get_my_signup_promotion')" | tr -d '\r'
+             'tg_rides_promo_grant', 'tg_promotions_grant_only_frozen', 'tg_rides_validate_promo_discount', 'validate_promo_code',
+             'get_my_signup_promotion')" | tr -d '\r'
 fi
 
 echo "== result: $PASS passed, $FAIL failed =="
