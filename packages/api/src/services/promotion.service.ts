@@ -30,6 +30,11 @@ export interface Promotion {
    */
   is_public: boolean;
   /**
+   * 00674: an apology coupon. Only the person an operator gave it to can use it (promotion_grants),
+   * and it is never public. Chosen when the promotion is created.
+   */
+  grant_only?: boolean;
+  /**
    * 00642: true while a promotion marketing created or edited waits for an admin to turn it on.
    * Since 00666 marketing runs promotions with no approval, so no new promotion waits.
    */

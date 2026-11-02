@@ -11,6 +11,7 @@
     "./addressSearch": "./src/addressSearch.ts",
     "./adminPanelAccess": "./src/adminPanelAccess.ts",
     "./driverOutreach": "./src/driverOutreach.ts",
+    "./missedRideOutreach": "./src/missedRideOutreach.ts",
     "./analytics": "./src/analytics.ts",
     "./authCallback": "./src/authCallback.ts",
     "./animateCoordinate": "./src/animateCoordinate.ts",

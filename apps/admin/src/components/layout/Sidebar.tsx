@@ -42,6 +42,7 @@ import {
   Ticket,
   Rocket,
   UserRoundX,
+  PhoneMissed,
   UserCog,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -104,6 +105,7 @@ const NAV_GROUPS: NavGroup[] = [
         defaultLabel: 'Choferes sin terminar',
         icon: UserRoundX,
       },
+      { href: '/missed-rides', labelKey: 'sidebar.missed_rides', defaultLabel: 'Sin chofer', icon: PhoneMissed },
       { href: '/users', labelKey: 'sidebar.users', defaultLabel: 'Pasajeros', icon: Users },
       { href: '/wallet', labelKey: 'sidebar.wallet', defaultLabel: 'Billeteras', icon: Wallet },
       { href: '/wallet/receipts', labelKey: 'sidebar.wallet_receipts', defaultLabel: 'Comprobantes', icon: Receipt },

@@ -2,7 +2,7 @@ import { AppError } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
 
 /**
- * The refusals of the ops functions: onboarding (00672) and support, cases and moderation (00673).
+ * The refusals of the ops functions: onboarding (00672) and support, cases and moderation (00673) and missed-ride outreach (00674).
  * onboardingService and caseOpsService throw them as an AppError whose `code` is the refusal. Each
  * has an admin.json text under `ops_errors`.
  */
@@ -52,12 +52,19 @@ const CODES = new Set([
   'alert_not_found',
   'already_resolved',
   'CASES_UNAVAILABLE',
+  // 00674
+  'user_not_found',
+  'not_eligible',
+  'missed_rider_changed',
+  'no_phone',
+  'MISSED_RIDES_UNAVAILABLE',
 ]);
 
 /** Refusals that mean the row moved while it was on screen: the page should load it again. */
 const STALE_CODES = new Set([
   'ticket_changed', 'incident_changed', 'review_changed', 'lost_item_changed', 'dispute_changed',
   'already_assigned', 'already_escalated', 'escalation_closed', 'amount_changed', 'already_resolved',
+  'missed_rider_changed',
 ]);
 
 /** The admin.json key of an ops refusal, or null for any other error. */

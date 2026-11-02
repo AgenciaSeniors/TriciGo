@@ -72,6 +72,8 @@ export const OPERATOR_ROUTES: readonly string[] = [
   '/referrals',
   // 00673: a push to one person, and the push history.
   '/notifications',
+  // 00674: people whose ride found no driver.
+  '/missed-rides',
 ];
 
 /** Sub-pages of an allowed page that the operator still may not open: gifts move money. */
@@ -183,6 +185,8 @@ export type PanelCapability =
   | 'referrals.amounts'
   /** Reward or invalidate a referral: it moves money. */
   | 'referrals.rewards'
+  /** Write to people whose ride found no driver and give them the apology coupon (00674). */
+  | 'riders.outreach'
   /** The audit log and the cards that read it. */
   | 'audit.read';
 
@@ -192,7 +196,8 @@ const MARKETING_CAPABILITIES: readonly PanelCapability[] = ['tickets.act', 'prom
  * The operator role: it reads everything it opens (00668), assists, unsticks and cancels rides
  * (00671), runs driver onboarding and fleet review, including deleting an account that never
  * finished signing up (00672), and works support, cases, account blocks, moderation and a push to
- * one person (00673). Refunds stay with admins: the operator proposes one.
+ * one person (00673), and writes to people whose ride found no driver (00674).
+ * Refunds stay with admins: the operator proposes one.
  */
 const OPERATOR_CAPABILITIES: readonly PanelCapability[] = [
   'detail.full',
@@ -205,6 +210,7 @@ const OPERATOR_CAPABILITIES: readonly PanelCapability[] = [
   'accounts.delete_pending',
   'moderation.act',
   'push.one',
+  'riders.outreach',
 ];
 
 /** Whether the panel offers this capability to the role. It only shapes the UI. */

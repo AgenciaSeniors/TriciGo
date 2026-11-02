@@ -164,3 +164,26 @@ describe('promotionService.pause', () => {
     await expect(promotionService.pause('p1')).rejects.toBe(boom);
   });
 });
+
+describe('promotionService.create with an apology coupon (00674)', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('never drops grant_only on the column-missing retry', async () => {
+    const missing = { message: "Could not find the 'grant_only' column of 'promotions' in the schema cache" };
+    const single = vi.fn().mockResolvedValue({ data: null, error: missing });
+    const select = vi.fn(() => ({ single }));
+    const insert = vi.fn((_body: Record<string, unknown>) => ({ select }));
+    mockFrom.mockReturnValue({ insert });
+    Object.assign(mockSupabase, {
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'admin-1' } } }) },
+    });
+
+    const input = { code: 'PERDON', type: 'fixed_discount', grant_only: true, is_public: false };
+    await expect(promotionService.create(input as Parameters<typeof promotionService.create>[0])).rejects.toBe(missing);
+
+    expect(insert).toHaveBeenCalled();
+    for (const [body] of insert.mock.calls) expect(body).toMatchObject({ grant_only: true });
+  });
+});
