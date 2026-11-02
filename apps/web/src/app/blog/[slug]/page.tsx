@@ -5,7 +5,7 @@ import { notFound } from 'next/navigation';
 import { JsonLd } from '@/components/JsonLd';
 import { getPostBySlugServer, getPublishedPostsServer } from '@/lib/blog-server';
 import { sanitizeHtml } from '@/lib/sanitize';
-import { cubaTimeZone } from '@tricigo/utils';
+import { cubaTimeZone } from '@tricigo/utils/date';
 
 // Server-rendered article: crawlers receive the title, body and structured data
 // in the initial HTML (previously this was a 'use client' page that fetched in
