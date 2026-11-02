@@ -42,6 +42,7 @@ import {
   walletReceiptSubject,
 } from '../_shared/email-templates/wallet_receipt.ts';
 import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
+import { cubaTimeZone } from '../_shared/cuba-time.ts';
 
 // ── Constants from spec §10 ──
 const FEE_PCT = 0.03;
@@ -721,16 +722,16 @@ function formatDateLong(iso: string): string {
   // We want "Domingo 11 de mayo de 2026, 14:30" — the native
   // toLocaleDateString lowercases the weekday, so we stitch the parts
   // manually to guarantee output stability across Deno/V8 minor
-  // versions. Dates are rendered in America/Havana (local operating time).
-  const havanaDate = new Date(d.toLocaleString('en-US', { timeZone: 'America/Havana' }));
+  // versions. Dates are rendered in Cuba's clock (cubaTimeZone; local operating time).
+  const havanaDate = new Date(d.toLocaleString('en-US', { timeZone: cubaTimeZone(d) }));
   const weekday = WEEKDAY_ES[havanaDate.getDay()] ?? '';
   const datePart = d.toLocaleDateString('es', {
     day: 'numeric', month: 'long', year: 'numeric',
-    timeZone: 'America/Havana',
+    timeZone: cubaTimeZone(d),
   });
   const timePart = d.toLocaleTimeString('es', {
     hour: '2-digit', minute: '2-digit', hour12: false,
-    timeZone: 'America/Havana',
+    timeZone: cubaTimeZone(d),
   });
   return `${weekday} ${datePart}, ${timePart}`;
 }

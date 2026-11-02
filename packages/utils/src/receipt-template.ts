@@ -16,6 +16,7 @@
 // ============================================================
 
 import { escapeHtml } from './htmlSafety';
+import { cubaTimeZone } from './date';
 
 export interface BaseReceiptData {
   /** Format: 'TR-2026-A1B2C3D4' — see deriveReceiptNo() */
@@ -202,7 +203,7 @@ const fmtDate = (iso: string, locale: Locale): string =>
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-    timeZone: 'America/Havana',
+    timeZone: cubaTimeZone(iso),
   });
 
 /**

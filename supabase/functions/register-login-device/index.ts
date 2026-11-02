@@ -27,6 +27,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { getServiceKey } from '../_shared/service-key.ts';
 import { rateLimit } from '../_shared/rate-limiter.ts';
 import { fetchMailableEmail } from '../_shared/mailable-emails.ts';
+import { cubaTimeZone } from '../_shared/cuba-time.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '')
   .split(',')
@@ -158,7 +159,7 @@ Deno.serve(async (req) => {
         const date = new Date().toLocaleString('es-CU', {
           day: 'numeric', month: 'long', year: 'numeric',
           hour: '2-digit', minute: '2-digit',
-          timeZone: 'America/Havana',
+          timeZone: cubaTimeZone(),
         });
         const deviceLabel = [model, platform].filter(Boolean).join(' · ') || null;
         const osLabel = [osVersion, platform].filter(Boolean).join(' ') || platform || null;

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { deviceService, authService, type KnownDevice } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { getWebDeviceId } from '@/lib/webDevice';
+import { cubaTimeZone } from '@tricigo/utils';
 
 function formatLastSeen(iso: string): string {
   try {
@@ -14,7 +15,7 @@ function formatLastSeen(iso: string): string {
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-      timeZone: 'America/Havana',
+      timeZone: cubaTimeZone(iso),
     }).format(new Date(iso));
   } catch {
     return iso;

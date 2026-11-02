@@ -59,6 +59,7 @@ import {
   driverContractSubject,
 } from '../_shared/email-templates/driver_contract.ts';
 import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
+import { cubaTimeZone } from '../_shared/cuba-time.ts';
 
 const ADMIN_EMAIL_FALLBACK = 'soporte@tricigo.com';
 const FROM_EMAIL = 'TriciGo <contratos@tricigo.com>';
@@ -975,17 +976,17 @@ async function tryEmbedLogo(pdf: PDFDocument): Promise<PDFImage | null> {
   }
 }
 
-// ── Date formatting (America/Havana, per language) ──────────────
+// ── Date formatting (Cuba's clock, cubaTimeZone; per language) ──────────────
 
 function formatDateLong(iso: string, lang: 'es' | 'ro'): string {
   try {
     const d = new Date(iso);
     const locale = lang === 'ro' ? 'ro-RO' : 'es-CU';
     const datePart = d.toLocaleDateString(locale, {
-      day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Havana',
+      day: 'numeric', month: 'long', year: 'numeric', timeZone: cubaTimeZone(d),
     });
     const timePart = d.toLocaleTimeString(locale, {
-      hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Havana',
+      hour: '2-digit', minute: '2-digit', hour12: false, timeZone: cubaTimeZone(d),
     });
     return `${datePart}, ${timePart} (Cuba)`;
   } catch {

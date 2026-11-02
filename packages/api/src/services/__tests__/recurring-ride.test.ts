@@ -10,6 +10,7 @@ vi.mock('../../client', () => ({
 }));
 
 // Import after mock is set up
+import { cubaTimeZone } from '@tricigo/utils';
 import { recurringRideService } from '../recurring-ride.service';
 
 const MOCK_RECURRING = {
@@ -111,7 +112,8 @@ describe('recurringRideService', () => {
       expect(mockRpc).toHaveBeenCalledWith('compute_next_occurrence', {
         p_days: [1, 2, 3, 4, 5],
         p_time: '08:00',
-        p_tz: 'America/Havana',
+        // Cuba's clock: UTC-4 through 2027-11-07 (cubaTimeZone).
+        p_tz: cubaTimeZone(),
       });
       // Regression guard: the insert must use the real lat/lng numeric
       // columns, NEVER pickup_location/dropoff_location/timezone (those
@@ -207,7 +209,8 @@ describe('recurringRideService', () => {
       expect(mockRpc).toHaveBeenCalledWith('compute_next_occurrence', {
         p_days: [1, 2, 3, 4, 5],
         p_time: '08:00',
-        p_tz: 'America/Havana',
+        // Cuba's clock: UTC-4 through 2027-11-07 (cubaTimeZone).
+        p_tz: cubaTimeZone(),
       });
       expect(mockUpdate).toHaveBeenCalledWith({
         status: 'active',

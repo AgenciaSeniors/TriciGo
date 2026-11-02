@@ -1,3 +1,4 @@
+
 // ============================================================
 // TriciGo — Fare Calculator (Pure Functions)
 //
@@ -257,7 +258,7 @@ const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
  * The wall clock matchPricingRule needs ("HH:MM" and day of week, 0 = Sunday), read in an IANA
  * time zone. Without a zone it reads the device clock, which is what the rider app has always
  * done: phones in Cuba run on Havana time. Support re-quotes a ride from a browser that can be
- * anywhere, so it passes 'America/Havana', the zone the estimate snapshot uses (00299, 00628).
+ * anywhere, so it passes cubaTimeZone(), the zone the estimate snapshot uses (00299, 00628).
  */
 export function pricingClock(date: Date, timeZone?: string): { hhmm: string; day: number } {
   if (!timeZone) {

@@ -1,9 +1,33 @@
 // ============================================================
 // TriciGo — Date & Time Utilities
-// Timezone: America/Havana (Cuba Standard Time)
+// Timezone: Cuba (see cubaTimeZone)
 // ============================================================
 
-const HAVANA_TIMEZONE = 'America/Havana';
+/**
+ * Cuba kept summer time (UTC−4) from 2026-11-01 until 2027-11-07 to reduce
+ * evening blackouts. tzdata (phones, Node, browsers, Postgres) still applies
+ * the old rule and falls back to UTC−5 on 2026-11-01, so 'America/Havana'
+ * reads an hour behind until March 2027. Inside that span Cuba's clock equals
+ * America/Santo_Domingo (UTC−4 all year, no DST); outside it tzdata is right.
+ * The span runs from the old fall-back instant (2026-11-01 01:00 CDT) to the
+ * announced one (2027-11-07 01:00 CDT), which is also when tzdata falls back.
+ *
+ * Keep in sync with public.cuba_tz() (SQL) and supabase/functions/_shared/cuba-time.ts.
+ */
+export const CUBA_SUMMER_TIME_EXTENSION = {
+  startMs: Date.UTC(2026, 10, 1, 5, 0, 0),
+  endMs: Date.UTC(2027, 10, 7, 5, 0, 0),
+} as const;
+
+/** The IANA zone that shows Cuba's official clock at an instant (default: now). */
+export function cubaTimeZone(at?: Date | number | string | null): string {
+  const ms =
+    at == null ? Date.now() : at instanceof Date ? at.getTime() : typeof at === 'number' ? at : Date.parse(at);
+  if (!Number.isFinite(ms)) return 'America/Havana';
+  return ms >= CUBA_SUMMER_TIME_EXTENSION.startMs && ms < CUBA_SUMMER_TIME_EXTENSION.endMs
+    ? 'America/Santo_Domingo'
+    : 'America/Havana';
+}
 
 /**
  * Format an ISO timestamp for display in Havana timezone.
@@ -14,7 +38,7 @@ export function formatDateTime(
 ): string {
   const date = new Date(isoString);
   return date.toLocaleString('es-CU', {
-    timeZone: HAVANA_TIMEZONE,
+    timeZone: cubaTimeZone(date),
     ...options,
   });
 }
@@ -87,20 +111,20 @@ export function getRelativeDay(
   const now = new Date();
 
   // Compare calendar dates in Havana timezone (YYYY-MM-DD via en-CA)
-  const dateDay = date.toLocaleDateString('en-CA', { timeZone: HAVANA_TIMEZONE });
-  const todayDay = now.toLocaleDateString('en-CA', { timeZone: HAVANA_TIMEZONE });
+  const dateDay = date.toLocaleDateString('en-CA', { timeZone: cubaTimeZone(date) });
+  const todayDay = now.toLocaleDateString('en-CA', { timeZone: cubaTimeZone(now) });
 
   if (dateDay === todayDay) return todayLabel;
 
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayDay = yesterday.toLocaleDateString('en-CA', { timeZone: HAVANA_TIMEZONE });
+  const yesterdayDay = yesterday.toLocaleDateString('en-CA', { timeZone: cubaTimeZone(yesterday) });
   if (dateDay === yesterdayDay) return yesterdayLabel;
 
   return date.toLocaleDateString(locale, {
     day: 'numeric',
     month: 'short',
-    timeZone: HAVANA_TIMEZONE,
+    timeZone: cubaTimeZone(date),
   });
 }
 
@@ -139,7 +163,7 @@ const MONTH_NAMES_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 
 // hour/day for any user not on Cuba time; Intl with an explicit timeZone fixes it.
 function havanaParts(d: Date): { day: number; month: number; year: number; hours: number; minutes: number } {
   const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Havana',
+    timeZone: cubaTimeZone(d),
     year: 'numeric', month: 'numeric', day: 'numeric',
     hour: '2-digit', minute: '2-digit', hour12: false,
   }).formatToParts(d);
@@ -237,7 +261,7 @@ export function havanaMidnightUtc(now: Date = new Date()): Date {
   // Pull the Havana-local calendar date (handles the case where UTC and
   // Havana are on different days, e.g. UTC 02:00 = Havana 21:00 yesterday).
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: HAVANA_TIMEZONE,
+    timeZone: cubaTimeZone(now),
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -259,7 +283,7 @@ function havanaMidnightOf(year: number, month: number, day: number): Date {
   const utcNoon = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
   const havanaHourAtUtcNoon = parseInt(
     new Intl.DateTimeFormat('en-US', {
-      timeZone: HAVANA_TIMEZONE,
+      timeZone: cubaTimeZone(utcNoon),
       hour: 'numeric',
       hourCycle: 'h23',
     }).format(utcNoon),
@@ -298,7 +322,7 @@ export function havanaDayRangeUtc(ymd: string): { start: Date; end: Date } {
  */
 function havanaWallClock(instant: Date): { y: number; mo: number; d: number; h: number; mi: number } {
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: HAVANA_TIMEZONE,
+    timeZone: cubaTimeZone(instant),
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

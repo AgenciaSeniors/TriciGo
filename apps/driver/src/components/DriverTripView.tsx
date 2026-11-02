@@ -29,6 +29,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { DraggableSheet } from '@tricigo/ui/DraggableSheet';
 import {
+  cubaTimeZone,
   formatCUP,
   formatTRC,
   formatDistance,
@@ -1195,7 +1196,7 @@ export function DriverTripView() {
             variant="bodySmall"
             style={{ marginLeft: 8, color: midnightEmber.state.info }}
           >
-            {t('home.scheduled_at', { time: new Date(activeTrip.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'America/Havana' }) })}
+            {t('home.scheduled_at', { time: new Date(activeTrip.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: cubaTimeZone(activeTrip.scheduled_at) }) })}
           </Text>
         </View>
       )}

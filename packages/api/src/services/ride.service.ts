@@ -29,6 +29,7 @@ import type {
 } from '@tricigo/types';
 import type { PackageCategory, PaymentMethod, RideStatus, ServiceTypeSlug, VehicleType } from '@tricigo/types';
 import {
+  cubaTimeZone,
   haversineDistance,
   estimateRoadDistance,
   estimateDuration,
@@ -307,7 +308,7 @@ export const rideService = {
      * experiment ride.
      */
     for_user_id?: string;
-    /** IANA zone for the time band. Default: the device's. Support passes 'America/Havana'. */
+    /** IANA zone for the time band. Default: Cuba's official clock (cubaTimeZone). */
     time_zone?: string;
   }): Promise<FareEstimate> {
     // Validate ride distance is within reasonable bounds (50km max)
@@ -398,7 +399,12 @@ export const rideService = {
     const pricingRules = rulesResult.data;
 
     // Find matching time-based rule (using pure function)
-    const { hhmm: currentHour, day: currentDay } = pricingClock(new Date(), params.time_zone);
+    // The time band follows Cuba's official clock read on the server's time,
+    // not the phone's clock or zone: phones disagree with Cuba on both since
+    // 2026-11-01 (see cubaTimeZone, serverClock.ts), and the server picks the
+    // band for the snapshot the same way.
+    const pricingAt = new Date(serverNowMs());
+    const { hhmm: currentHour, day: currentDay } = pricingClock(pricingAt, params.time_zone ?? cubaTimeZone(pricingAt));
 
     let baseFare = svcConfig.base_fare_cup;
     let perKmRate = svcConfig.per_km_rate_cup;

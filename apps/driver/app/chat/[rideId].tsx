@@ -15,7 +15,7 @@ import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
 import { rideService, blockService, incidentService, chatService } from '@tricigo/api';
-import { getQuickRepliesForRole } from '@tricigo/utils';
+import { getQuickRepliesForRole, cubaTimeZone } from '@tricigo/utils';
 import Toast from 'react-native-toast-message';
 import { useAuthStore } from '@/stores/auth.store';
 import { useChatStore } from '@/stores/chat.store';
@@ -125,7 +125,7 @@ export default function ChatScreen() {
     return (
       <ChatBubble
         message={msg.body}
-        timestamp={new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'America/Havana' })}
+        timestamp={new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: cubaTimeZone(msg.created_at) })}
         isOwn={msg.sender_id === userId}
         // Was hardcoded false, which made ChatBubble's double check
         // unreachable and the single check meaningless. read_at (00516) is the

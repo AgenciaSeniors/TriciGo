@@ -11,7 +11,7 @@ import { colors } from '@tricigo/theme';
 import { rideService } from '@tricigo/api/services/ride';
 import { disputeService, lostItemService, blockService } from '@tricigo/api';
 import { locationService } from '@tricigo/api/services/location';
-import { formatCUP, getErrorMessage } from '@tricigo/utils';
+import { formatCUP, getErrorMessage, cubaTimeZone } from '@tricigo/utils';
 import type { RideWithDriver, RidePricingSnapshot, RideLocationEvent, RideDispute, LostItem } from '@tricigo/types';
 import { RideMapView } from '@/components/RideMapView';
 import { TintedCard } from '@/components/TintedCard';
@@ -380,24 +380,24 @@ export default function TripDetailScreen() {
         <Card theme="light" variant="filled" padding="md" className="bg-white">
           <View className="flex-row justify-between mb-1">
             <Text variant="caption" color="primary" className="opacity-50">{t('trip.created')}</Text>
-            <Text variant="caption" color="primary">{new Date(ride.created_at).toLocaleString('es-CU', { timeZone: 'America/Havana' })}</Text>
+            <Text variant="caption" color="primary">{new Date(ride.created_at).toLocaleString('es-CU', { timeZone: cubaTimeZone(ride.created_at) })}</Text>
           </View>
           {ride.accepted_at && (
             <View className="flex-row justify-between mb-1">
               <Text variant="caption" color="primary" className="opacity-50">{t('trip.accepted')}</Text>
-              <Text variant="caption" color="primary">{new Date(ride.accepted_at).toLocaleString('es-CU', { timeZone: 'America/Havana' })}</Text>
+              <Text variant="caption" color="primary">{new Date(ride.accepted_at).toLocaleString('es-CU', { timeZone: cubaTimeZone(ride.accepted_at) })}</Text>
             </View>
           )}
           {ride.completed_at && (
             <View className="flex-row justify-between mb-1">
               <Text variant="caption" color="primary" className="opacity-50">{t('trip.completed_at')}</Text>
-              <Text variant="caption" color="primary">{new Date(ride.completed_at).toLocaleString('es-CU', { timeZone: 'America/Havana' })}</Text>
+              <Text variant="caption" color="primary">{new Date(ride.completed_at).toLocaleString('es-CU', { timeZone: cubaTimeZone(ride.completed_at) })}</Text>
             </View>
           )}
           {ride.canceled_at && (
             <View className="flex-row justify-between mb-1">
               <Text variant="caption" color="primary" className="opacity-50">{t('trip.canceled_at')}</Text>
-              <Text variant="caption" color="primary">{new Date(ride.canceled_at).toLocaleString('es-CU', { timeZone: 'America/Havana' })}</Text>
+              <Text variant="caption" color="primary">{new Date(ride.canceled_at).toLocaleString('es-CU', { timeZone: cubaTimeZone(ride.canceled_at) })}</Text>
             </View>
           )}
         </Card>

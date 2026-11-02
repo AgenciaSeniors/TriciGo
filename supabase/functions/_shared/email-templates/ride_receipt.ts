@@ -17,6 +17,7 @@
 // ============================================================
 
 import { wrapHtml, COLORS, FONT_STACK, escapeHtml, detailRow, totalRow } from './_layout.ts';
+import { cubaTimeZone } from '../cuba-time.ts';
 
 export interface RideReceiptData {
   /** ISO timestamps; we format only `completed_at` for display. */
@@ -141,7 +142,7 @@ function formatRideDate(iso: string): string {
     return d.toLocaleDateString('es', {
       day: 'numeric', month: 'long', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
-      timeZone: 'America/Havana',
+      timeZone: cubaTimeZone(d),
     });
   } catch {
     return iso;

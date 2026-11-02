@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
-import { formatCUP, classifyWalletTxn, walletTxnIcon } from '@tricigo/utils';
+import { formatCUP, classifyWalletTxn, walletTxnIcon, cubaTimeZone } from '@tricigo/utils';
 import { midnightEmber } from '@tricigo/theme';
 import type { LedgerTransaction } from '@tricigo/types';
 
@@ -167,7 +167,7 @@ export function RecentActivitySection({
                       variant="badge"
                       style={{ color: midnightEmber.screen.text.secondary }}
                     >
-                      {new Date(tx.created_at).toLocaleDateString('es', { timeZone: 'America/Havana' })}
+                      {new Date(tx.created_at).toLocaleDateString('es', { timeZone: cubaTimeZone(tx.created_at) })}
                     </Text>
                   </View>
                   <Text

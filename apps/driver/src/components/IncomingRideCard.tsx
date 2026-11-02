@@ -48,7 +48,7 @@ import React, { useMemo, useRef, useCallback, useState, useEffect } from 'react'
 import { View, Animated, Pressable, Text as RNText, Easing, ActivityIndicator } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
-import { formatCUP, cupToTrcCentavos, haversineDistance, jitterLocation, triggerHaptic, isCargoRide } from '@tricigo/utils';
+import { formatCUP, cupToTrcCentavos, haversineDistance, jitterLocation, triggerHaptic, isCargoRide, cubaTimeZone } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { presenceService, serverNowMs, trackValidationEvent, walletService } from '@tricigo/api';
 import { midnightEmber } from '@tricigo/theme';
@@ -645,7 +645,7 @@ function IncomingRideCardInner({
                 time: new Date(ride.scheduled_at).toLocaleTimeString([], {
                   hour: '2-digit',
                   minute: '2-digit',
-                  timeZone: 'America/Havana',
+                  timeZone: cubaTimeZone(ride.scheduled_at),
                 }),
                 defaultValue: 'Programado: {{time}}',
               })}

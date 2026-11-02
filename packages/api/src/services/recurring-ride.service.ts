@@ -1,5 +1,6 @@
 import type { RecurringRide, PaymentMethod, ServiceTypeSlug } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
+import { cubaTimeZone } from '@tricigo/utils';
 
 const MAX_RECURRING = 10;
 
@@ -50,7 +51,7 @@ export const recurringRideService = {
       {
         p_days: params.days_of_week,
         p_time: params.time_of_day,
-        p_tz: 'America/Havana',
+        p_tz: cubaTimeZone(),
       },
     );
     if (rpcError) throw rpcError;
@@ -105,7 +106,7 @@ export const recurringRideService = {
 
       const { data: rpcResult, error: rpcError } = await supabase.rpc(
         'compute_next_occurrence',
-        { p_days: days, p_time: time, p_tz: 'America/Havana' },
+        { p_days: days, p_time: time, p_tz: cubaTimeZone() },
       );
       if (rpcError) throw rpcError;
       nextOccurrence = rpcResult;
@@ -154,7 +155,7 @@ export const recurringRideService = {
       {
         p_days: current.days_of_week,
         p_time: current.time_of_day,
-        p_tz: 'America/Havana',
+        p_tz: cubaTimeZone(),
       },
     );
     if (rpcError) throw rpcError;

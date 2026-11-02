@@ -13,7 +13,7 @@ import { EmptyState } from '@tricigo/ui/EmptyState';
 import { cubanLight, cubanDark } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { referralService, walletService } from '@tricigo/api';
-import { formatTriciCoinName } from '@tricigo/utils';
+import { formatTriciCoinName, cubaTimeZone } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import type { Referral } from '@tricigo/types';
 
@@ -116,7 +116,7 @@ export default function DriverReferralScreen() {
                 day: 'numeric',
                 month: 'short',
                 year: 'numeric',
-                timeZone: 'America/Havana',
+                timeZone: cubaTimeZone(item.created_at),
               })}
               {' \u00b7 '}
               {t('profile.referral_bonus', { amount: formatTriciCoinName(item.bonus_amount) })}

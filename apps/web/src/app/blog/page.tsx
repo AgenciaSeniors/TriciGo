@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { getPublishedPostsServer } from '@/lib/blog-server';
+import { cubaTimeZone } from '@tricigo/utils';
 
 // Server-rendered so crawlers get the full post list (titles, excerpts, links)
 // in the initial HTML. ISR: revalidated hourly, matching the /blog Cache-Control
@@ -12,7 +13,7 @@ function formatDate(iso: string): string {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
-    timeZone: 'America/Havana',
+    timeZone: cubaTimeZone(iso),
   });
 }
 

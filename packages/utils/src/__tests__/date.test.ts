@@ -9,7 +9,52 @@ import {
   havanaDayRangeUtc,
   havanaLocalToUtcIso,
   utcIsoToHavanaLocal,
+  cubaTimeZone,
+  formatDateTime,
 } from '../date';
+
+// ============================================================
+// cubaTimeZone — Cuba kept summer time (UTC-4) from 2026-11-01 to 2027-11-07,
+// while tzdata (phones, Node, Postgres) still falls back to UTC-5 that day.
+// ============================================================
+describe('cubaTimeZone', () => {
+  const hour = (iso: string) =>
+    new Intl.DateTimeFormat('en-US', { timeZone: cubaTimeZone(iso), hour: '2-digit', hourCycle: 'h23' }).format(new Date(iso));
+
+  it('stays on UTC-4 through the winter of 2026-2027', () => {
+    expect(hour('2026-11-01T12:00:00Z')).toBe('08');
+    expect(hour('2027-01-15T12:00:00Z')).toBe('08');
+    expect(hour('2027-03-13T12:00:00Z')).toBe('08');
+  });
+
+  it('is UTC-4 right after the old fall-back instant, and still UTC-4 just before it', () => {
+    expect(hour('2026-11-01T04:59:00Z')).toBe('00');
+    expect(hour('2026-11-01T05:00:00Z')).toBe('01');
+  });
+
+  it('follows tzdata outside the extension', () => {
+    expect(cubaTimeZone('2026-01-15T12:00:00Z')).toBe('America/Havana');
+    expect(hour('2026-01-15T12:00:00Z')).toBe('07');
+    expect(hour('2026-07-15T12:00:00Z')).toBe('08');
+    expect(hour('2027-11-08T12:00:00Z')).toBe('07');
+  });
+
+  it('falls back to 2027-11-07 01:00 CDT', () => {
+    expect(hour('2027-11-07T04:59:00Z')).toBe('00');
+    expect(hour('2027-11-07T05:00:00Z')).toBe('00');
+  });
+
+  it('accepts a Date, a number and no argument, and an unreadable value means tzdata', () => {
+    expect(cubaTimeZone(new Date('2027-01-15T12:00:00Z'))).toBe(cubaTimeZone('2027-01-15T12:00:00Z'));
+    expect(cubaTimeZone(Date.parse('2027-01-15T12:00:00Z'))).toBe(cubaTimeZone('2027-01-15T12:00:00Z'));
+    expect(typeof cubaTimeZone()).toBe('string');
+    expect(cubaTimeZone('not a date')).toBe('America/Havana');
+  });
+
+  it('formatDateTime shows Cuban wall time in the extension', () => {
+    expect(formatDateTime('2026-12-01T16:00:00Z', { hour: '2-digit', minute: '2-digit', hour12: false })).toBe('12:00');
+  });
+});
 
 // ============================================================
 // formatDuration
@@ -236,20 +281,26 @@ describe('havanaDayRangeUtc', () => {
   });
 
   it('rolls over month and year boundaries', () => {
+    // Winter 2026-2027 stays on UTC-4 (Cuba kept summer time).
     const { start, end } = havanaDayRangeUtc('2026-12-31');
-    expect(start.toISOString()).toBe('2026-12-31T05:00:00.000Z');
-    expect(end.toISOString()).toBe('2027-01-01T05:00:00.000Z');
+    expect(start.toISOString()).toBe('2026-12-31T04:00:00.000Z');
+    expect(end.toISOString()).toBe('2027-01-01T04:00:00.000Z');
   });
 
-  it('handles the fall-back day with the documented 1h transition caveat', () => {
-    // 2026-11-01 is the 1st Sunday of November (Cuba falls back CDT->CST).
+  it('2026-11-01 is a normal UTC-4 day: Cuba did not fall back', () => {
+    const { start, end } = havanaDayRangeUtc('2026-11-01');
+    expect(start.toISOString()).toBe('2026-11-01T04:00:00.000Z');
+    expect(end.toISOString()).toBe('2026-11-02T04:00:00.000Z');
+  });
+
+  it('handles the fall-back day (2027-11-07) with the documented 1h transition caveat', () => {
     // The offset probe at 12:00 UTC lands AFTER the 01:00 transition, so the
     // day start resolves to the CST interpretation (05:00Z) - 1h after the
     // true local midnight. Same caveat havanaMidnightUtc documents; harmless
     // for since-midnight filters.
-    const { start, end } = havanaDayRangeUtc('2026-11-01');
-    expect(start.toISOString()).toBe('2026-11-01T05:00:00.000Z');
-    expect(end.toISOString()).toBe('2026-11-02T05:00:00.000Z');
+    const { start, end } = havanaDayRangeUtc('2027-11-07');
+    expect(start.toISOString()).toBe('2027-11-07T05:00:00.000Z');
+    expect(end.toISOString()).toBe('2027-11-08T05:00:00.000Z');
   });
 
   it('throws on malformed input', () => {
@@ -271,16 +322,22 @@ describe('havanaLocalToUtcIso', () => {
     expect(havanaLocalToUtcIso('2026-01-15T22:30')).toBe('2026-01-16T03:30:00.000Z');
   });
 
-  it('uses the offset in force on each side of the November change', () => {
+  it('keeps UTC-4 across 2026-11-01: Cuba kept summer time until 2027-11-07', () => {
     expect(havanaLocalToUtcIso('2026-10-31T10:00')).toBe('2026-10-31T14:00:00.000Z');
-    expect(havanaLocalToUtcIso('2026-11-02T10:00')).toBe('2026-11-02T15:00:00.000Z');
+    expect(havanaLocalToUtcIso('2026-11-02T10:00')).toBe('2026-11-02T14:00:00.000Z');
+    expect(havanaLocalToUtcIso('2027-01-15T10:00')).toBe('2027-01-15T14:00:00.000Z');
+  });
+
+  it('uses the offset in force on each side of the November 2027 change', () => {
+    expect(havanaLocalToUtcIso('2027-11-06T10:00')).toBe('2027-11-06T14:00:00.000Z');
+    expect(havanaLocalToUtcIso('2027-11-08T10:00')).toBe('2027-11-08T15:00:00.000Z');
   });
 
   it('uses the offset in force right after each change, even when the first guess is on the other side', () => {
     // March: 00:00 CST jumps to 01:00 CDT. November: 01:00 CDT falls back to 00:00 CST.
     expect(havanaLocalToUtcIso('2026-03-08T02:00')).toBe('2026-03-08T06:00:00.000Z');
-    expect(havanaLocalToUtcIso('2026-11-01T02:00')).toBe('2026-11-01T07:00:00.000Z');
-    expect(havanaLocalToUtcIso('2026-11-01T01:30')).toBe('2026-11-01T06:30:00.000Z');
+    expect(havanaLocalToUtcIso('2027-11-07T02:00')).toBe('2027-11-07T07:00:00.000Z');
+    expect(havanaLocalToUtcIso('2027-11-07T01:30')).toBe('2027-11-07T06:30:00.000Z');
   });
 
   it('moves a time inside the spring gap (Havana 00:00–00:59 on the March change day) forward an hour', () => {
@@ -294,7 +351,7 @@ describe('havanaLocalToUtcIso', () => {
 
   it('reads a time in the repeated November hour as the first one, still on summer time', () => {
     // 01:00 CDT falls back to 00:00 CST: 00:30 happens at 04:30Z and again at 05:30Z.
-    expect(havanaLocalToUtcIso('2026-11-01T00:30')).toBe('2026-11-01T04:30:00.000Z');
+    expect(havanaLocalToUtcIso('2027-11-07T00:30')).toBe('2027-11-07T04:30:00.000Z');
   });
 
   it('rejects a date or time that does not exist instead of rolling it over', () => {

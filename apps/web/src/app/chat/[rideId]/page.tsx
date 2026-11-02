@@ -19,7 +19,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { getSupabaseClient, rideService, chatService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
-import { getQuickRepliesForRole } from '@tricigo/utils';
+import { getQuickRepliesForRole, cubaTimeZone } from '@tricigo/utils';
 import { useChat } from '@/hooks/useChat';
 
 const MAX_CHARS = 500;
@@ -238,7 +238,7 @@ export default function ChatPage() {
                   }}>
                     {isPending
                       ? t('web.message_pending', { defaultValue: 'Pendiente · sin red' })
-                      : new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'America/Havana' })}
+                      : new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: cubaTimeZone(msg.created_at) })}
                     {/* Read state, own messages only — a check mark on the
                         driver's own line would mean nothing to the rider.
                         ✓ sent · ✓✓ the driver opened the chat (read_at, 00516).

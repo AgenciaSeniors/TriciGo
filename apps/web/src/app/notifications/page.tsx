@@ -8,6 +8,7 @@ import { useTranslation } from '@tricigo/i18n';
 import type { AppNotification } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import { WebEmptyState } from '@/components/WebEmptyState';
+import { cubaTimeZone } from '@tricigo/utils';
 
 // Keyed by the real notification categories send-push writes to
 // notifications.type (ride, ride_offer, announcement, blog, promo…) PLUS the
@@ -135,7 +136,7 @@ function useFormatTime(t: (key: string, options?: Record<string, unknown>) => st
     if (diffHours < 24) return t('notifications.time_hours_ago', { count: diffHours });
     if (diffDays < 7) return t('notifications.time_days_ago', { count: diffDays });
     // Pin to Havana TZ like the date-group header (server rows are UTC).
-    return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'America/Havana' });
+    return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: cubaTimeZone(date) });
   };
 }
 
@@ -143,7 +144,7 @@ function useFormatTime(t: (key: string, options?: Record<string, unknown>) => st
  *  UTC and grouping by the BROWSER's day shifted late-night notifications
  *  into the wrong "Hoy/Ayer" bucket for anyone outside Havana's timezone. */
 function havanaDayKey(d: Date): string {
-  return d.toLocaleDateString('en-CA', { timeZone: 'America/Havana' });
+  return d.toLocaleDateString('en-CA', { timeZone: cubaTimeZone(d) });
 }
 
 function useFormatDateGroup(t: (key: string) => string) {
@@ -156,7 +157,7 @@ function useFormatDateGroup(t: (key: string) => string) {
 
     if (notifKey === todayKey) return t('notifications.date_today');
     if (notifKey === yesterdayKey) return t('notifications.date_yesterday');
-    return date.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Havana' });
+    return date.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', timeZone: cubaTimeZone(date) });
   };
 }
 

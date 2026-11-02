@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from '@tricigo/i18n';
 import { driverService, getSupabaseClient, walletService, useFeatureFlag, notificationService, trackValidationEvent, serverNowMs } from '@tricigo/api';
 import {
+  cubaTimeZone,
   HAVANA_CENTER,
   trackEvent,
   haversineDistance,
@@ -475,7 +476,7 @@ function NativeDriverHomeScreen() {
         } catch { /* keep 0.15 */ }
         const havanaOffsetHrs = (() => {
           const fmt = new Intl.DateTimeFormat('en-US', {
-            timeZone: 'America/Havana',
+            timeZone: cubaTimeZone(),
             timeZoneName: 'shortOffset',
           });
           const parts = fmt.formatToParts(new Date());

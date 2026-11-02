@@ -9,7 +9,7 @@ import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { customerService, incidentService, rideService, trustedContactService } from '@tricigo/api';
 import { useTokens } from '@/hooks/useTokens';
-import { getErrorMessage, logger } from '@tricigo/utils';
+import { getErrorMessage, logger, cubaTimeZone } from '@tricigo/utils';
 import Toast from 'react-native-toast-message';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { useAuthStore } from '@/stores/auth.store';
@@ -293,7 +293,7 @@ export default function SafetyCenterScreen() {
                 <View className="flex-1">
                   <Text variant="bodySmall" style={{ color: tokens.ink.primary }}>{getReportTypeLabel(incident.type)}</Text>
                   <Text variant="caption" style={{ color: tokens.ink.secondary }}>
-                    {new Date(incident.created_at).toLocaleDateString('es-CU', { timeZone: 'America/Havana' })}
+                    {new Date(incident.created_at).toLocaleDateString('es-CU', { timeZone: cubaTimeZone(incident.created_at) })}
                   </Text>
                 </View>
                 <Text variant="caption" color={incident.status === 'resolved' ? 'accent' : 'secondary'}>

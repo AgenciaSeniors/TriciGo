@@ -7,7 +7,7 @@ import { Card } from '@tricigo/ui/Card';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { driverService } from '@tricigo/api';
-import { formatCUP, getErrorMessage } from '@tricigo/utils';
+import { formatCUP, getErrorMessage, cubaTimeZone } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
@@ -71,7 +71,7 @@ export default function PenaltiesScreen() {
               year: 'numeric',
               hour: '2-digit',
               minute: '2-digit',
-              timeZone: 'America/Havana',
+              timeZone: cubaTimeZone(item.created_at),
             })}
           </Text>
         </View>

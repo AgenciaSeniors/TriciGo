@@ -57,6 +57,7 @@ vi.mock('../client', () => ({
 
 // Mock utilities used by ride service
 vi.mock('@tricigo/utils', () => ({
+  cubaTimeZone: vi.fn().mockReturnValue('America/Santo_Domingo'),
   haversineDistance: vi.fn().mockReturnValue(3000),
   estimateRoadDistance: vi.fn().mockReturnValue(3900),
   estimateDuration: vi.fn().mockReturnValue(600),

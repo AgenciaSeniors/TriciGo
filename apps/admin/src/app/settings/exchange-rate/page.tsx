@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
 import { useTranslation } from '@tricigo/i18n';
 import type { ExchangeRate } from '@tricigo/types';
+import { cubaTimeZone } from '@tricigo/utils';
 
 export default function ExchangeRatePage() {
   const { t } = useTranslation('admin');
@@ -75,7 +76,7 @@ export default function ExchangeRatePage() {
 
   function formatDate(iso: string) {
     return new Date(iso).toLocaleString('es-CU', {
-      timeZone: 'America/Havana',
+      timeZone: cubaTimeZone(iso),
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',

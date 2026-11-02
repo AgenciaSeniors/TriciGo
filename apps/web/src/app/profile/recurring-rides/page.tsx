@@ -9,6 +9,7 @@ import type { RecurringRide, ServiceTypeSlug, PaymentMethod } from '@tricigo/typ
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import { WebEmptyState } from '@/components/WebEmptyState';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
+import { cubaTimeZone } from '@tricigo/utils';
 
 // Mirrors the mobile CreateRecurringRideSheet: the recurring booking only
 // offers the 3 base ride services (no confort/mensajería) and the 2
@@ -32,7 +33,7 @@ function formatNextOccurrence(dateStr: string | null): string {
   return new Date(dateStr).toLocaleDateString('es-CU', {
     weekday: 'short', month: 'short', day: 'numeric',
     hour: '2-digit', minute: '2-digit',
-    timeZone: 'America/Havana',
+    timeZone: cubaTimeZone(dateStr),
   });
 }
 

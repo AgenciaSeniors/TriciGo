@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslation } from '@tricigo/i18n';
 import { AppError, getSupabaseClient, corporateService, paymentService, invoiceService } from '@tricigo/api';
-import { getErrorMessage, formatTRC } from '@tricigo/utils';
+import { getErrorMessage, formatTRC, cubaTimeZone } from '@tricigo/utils';
 import type { CorporateAccount, CorporateEmployeeRole, CorporateEmployeeWithUser, EmployeeReport, CorporateBillingSummary, CorporateRide } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import CorporateRequestForm from './CorporateRequestForm';
@@ -389,7 +389,7 @@ export default function CorporatePage() {
       doc.setFontSize(12);
       doc.text(`Período: ${data.period}`, 130, 40);
       doc.setFontSize(9);
-      doc.text(`Generada: ${new Date(data.generated_at).toLocaleDateString('es-CU', { timeZone: 'America/Havana' })}`, 130, 46);
+      doc.text(`Generada: ${new Date(data.generated_at).toLocaleDateString('es-CU', { timeZone: cubaTimeZone(data.generated_at) })}`, 130, 46);
 
       // Table header
       const startY = 62;
@@ -410,7 +410,7 @@ export default function CorporatePage() {
           doc.addPage();
           rowY = 20;
         }
-        doc.text(new Date(item.date).toLocaleDateString('es-CU', { day: '2-digit', month: 'short', timeZone: 'America/Havana' }), 16, rowY);
+        doc.text(new Date(item.date).toLocaleDateString('es-CU', { day: '2-digit', month: 'short', timeZone: cubaTimeZone(item.date) }), 16, rowY);
         doc.text(item.employee_name.substring(0, 30), 50, rowY);
         doc.text(item.employee_phone, 110, rowY);
         doc.text(Math.round(item.fare_trc).toLocaleString('es-CU'), 160, rowY);
@@ -732,7 +732,7 @@ export default function CorporatePage() {
                                 {billingRides.map((ride) => (
                                   <div key={ride.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.4rem 0', borderBottom: '1px solid var(--border-light)' }}>
                                     <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                                      {new Intl.DateTimeFormat('es', { timeZone: 'America/Havana', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(ride.created_at))}
+                                      {new Intl.DateTimeFormat('es', { timeZone: cubaTimeZone(ride.created_at), day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(ride.created_at))}
                                     </span>
                                     <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }}>{formatTRC(ride.fare_trc)}</span>
                                   </div>

@@ -6,6 +6,7 @@ import { adminService } from '@tricigo/api/services/admin';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
+import { cubaTimeZone } from '@tricigo/utils';
 
 interface WeatherStatus {
   condition: string;
@@ -106,7 +107,7 @@ export default function WeatherPage() {
 
       {lastUpdated && (
         <p className="text-xs text-ink-subtle mb-4">
-          {t('weather.last_updated', { defaultValue: 'Última actualización' })}: {lastUpdated.toLocaleTimeString('es-CU', { timeZone: 'America/Havana' })}
+          {t('weather.last_updated', { defaultValue: 'Última actualización' })}: {lastUpdated.toLocaleTimeString('es-CU', { timeZone: cubaTimeZone(lastUpdated) })}
         </p>
       )}
 
@@ -135,7 +136,7 @@ export default function WeatherPage() {
               </p>
               {weather.lastCheck && (
                 <p className="text-xs text-ink-subtle mt-1">
-                  {t('weather.last_check', { defaultValue: 'Último chequeo' })}: {new Date(weather.lastCheck).toLocaleTimeString('es-CU', { timeZone: 'America/Havana' })}
+                  {t('weather.last_check', { defaultValue: 'Último chequeo' })}: {new Date(weather.lastCheck).toLocaleTimeString('es-CU', { timeZone: cubaTimeZone(weather.lastCheck) })}
                 </p>
               )}
             </div>

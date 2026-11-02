@@ -19,6 +19,7 @@
 
 import { calculateBaseFare, calculateCargoFare, applySurge, matchPricingRule } from './fare-calculator.ts';
 import type { PricingRuleMatch } from './fare-calculator.ts';
+import { cubaTimeZone } from './cuba-time.ts';
 
 export interface ServiceTypeConfigRow {
   slug: string;
@@ -42,18 +43,18 @@ export interface OwnFareInputs {
   at?: Date;
 }
 
-/** Current time in America/Havana as "HH:MM" (24h) and day-of-week (0=Sun). */
+/** Cuba's clock (cubaTimeZone) as "HH:MM" (24h) and day-of-week (0=Sun). */
 export function havanaBand(at: Date = new Date()): { hour: string; day: number } {
   // hour:minute in Havana
   const hm = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'America/Havana',
+    timeZone: cubaTimeZone(at),
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
   }).format(at); // "HH:MM"
   // day-of-week in Havana
   const weekday = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Havana',
+    timeZone: cubaTimeZone(at),
     weekday: 'short',
   }).format(at); // "Sun".."Sat"
   const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
