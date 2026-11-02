@@ -28,6 +28,7 @@ type FormState = {
   notify_on_publish: boolean;
   first_ride_only: boolean;
   is_public: boolean;
+  grant_only: boolean;
 };
 
 const emptyForm: FormState = {
@@ -45,6 +46,7 @@ const emptyForm: FormState = {
   notify_on_publish: true,
   first_ride_only: false,
   is_public: true,
+  grant_only: false,
 };
 
 const PAGE_SIZE = 20;
@@ -245,10 +247,10 @@ export default function PromotionsAdminPage() {
         title_es: form.title_es.trim() || null,
         body_es: form.body_es.trim() || null,
         image_url: form.image_url.trim() || null,
-        // A private code is never broadcast, so the publish push is forced off.
-        notify_on_publish: form.is_public ? form.notify_on_publish : false,
-        first_ride_only: form.first_ride_only,
-        is_public: form.is_public,
+        // An apology coupon is always private and valid beyond the first ride (00674).
+        notify_on_publish: form.is_public && !form.grant_only ? form.notify_on_publish : false,
+        first_ride_only: form.grant_only ? false : form.first_ride_only,
+        is_public: form.grant_only ? false : form.is_public,
       };
       // 00666: marketing sends is_active like an admin; the server no longer keeps its saves off.
       const payload = { ...base, is_active: form.is_active };
@@ -268,7 +270,13 @@ export default function PromotionsAdminPage() {
           notified_at: prev?.notified_at ?? null,
         });
       } else {
-        const created = await promotionService.create({ ...payload, notified_at: null });
+        // grant_only is chosen once at creation. Ordinary promotions omit it so they
+        // still save before 00674; updates never carry this immutable flag.
+        const created = await promotionService.create({
+          ...payload,
+          ...(form.grant_only ? { grant_only: true } : {}),
+          notified_at: null,
+        });
         if (payload.is_active && !created.is_active) {
           // A server still on 00642 saves marketing's promotions switched off, without an error.
           // Say so, and send no publish push: maybeNotifyOnPublish skips an inactive promotion.
@@ -320,6 +328,7 @@ export default function PromotionsAdminPage() {
       first_ride_only: p.first_ride_only ?? false,
       // Pre-00519 rows have no column → they are public marketing codes.
       is_public: p.is_public ?? true,
+      grant_only: p.grant_only ?? false,
     });
     setEditingId(p.id);
     setShowForm(true);
@@ -448,6 +457,11 @@ export default function PromotionsAdminPage() {
               {p.is_public === false && (
                 <span className="shrink-0 rounded-full bg-surface-sunken px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-ink-muted">
                   {t('promotions.badge_private', { defaultValue: 'Privado' })}
+                </span>
+              )}
+              {p.grant_only && (
+                <span className="shrink-0 rounded-full bg-primary-500/10 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-primary-700 dark:text-primary-400">
+                  {t('promotions.badge_grant_only', { defaultValue: 'Disculpa' })}
                 </span>
               )}
             </span>
@@ -705,8 +719,9 @@ export default function PromotionsAdminPage() {
                 <input
                   type="checkbox"
                   checked={form.first_ride_only}
+                  disabled={form.grant_only}
                   onChange={(e) => setForm({ ...form, first_ride_only: e.target.checked })}
-                  className="h-4 w-4 rounded border-line"
+                  className="h-4 w-4 rounded border-line disabled:opacity-50"
                 />
                 {/* The old copy ended in "(requiere mig 00482)" — an internal note
                     that leaked into the panel. 00482 has been live for a while
@@ -716,13 +731,38 @@ export default function PromotionsAdminPage() {
                 {t('promotions.first_ride_only_help', { defaultValue: 'Solo lo pueden usar personas que todavía no completaron ningún viaje' })}
               </label>
             </Field>
+            <Field label={t('promotions.field_grant_only', { defaultValue: 'Cupón de disculpa' })}>
+              <label className={`inline-flex items-center gap-2 text-[13px] ${editingId ? 'text-ink-subtle' : 'text-ink'}`}>
+                <input
+                  type="checkbox"
+                  checked={form.grant_only}
+                  disabled={!!editingId}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      grant_only: e.target.checked,
+                      is_public: e.target.checked ? false : form.is_public,
+                      first_ride_only: e.target.checked ? false : form.first_ride_only,
+                      notify_on_publish: e.target.checked ? false : form.notify_on_publish,
+                    })
+                  }
+                  className="h-4 w-4 rounded border-line disabled:opacity-50"
+                />
+                {editingId
+                  ? t('promotions.grant_only_locked', { defaultValue: 'Se elige al crear la promoción' })
+                  : t('promotions.grant_only_help', {
+                      defaultValue: 'Solo lo usa quien lo recibe de soporte desde Sin chofer. No se publica.',
+                    })}
+              </label>
+            </Field>
             <Field label={t('promotions.field_visibility', { defaultValue: 'Visibilidad' })}>
               <label className="inline-flex items-center gap-2 text-[13px] text-ink">
                 <input
                   type="checkbox"
                   checked={!form.is_public}
+                  disabled={form.grant_only}
                   onChange={(e) => setForm({ ...form, is_public: !e.target.checked })}
-                  className="h-4 w-4 rounded border-line"
+                  className="h-4 w-4 rounded border-line disabled:opacity-50"
                 />
                 {t('promotions.private_help', { defaultValue: 'Código privado (influencer / partner)' })}
               </label>

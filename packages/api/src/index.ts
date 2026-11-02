@@ -152,6 +152,10 @@ export { onboardingService, ONBOARDING_UNAVAILABLE } from './services/onboarding
 export type { DriverDecision, ReviewDecision, OutreachChannelCode } from './services/onboarding.service';
 export { caseOpsService, CASES_UNAVAILABLE } from './services/case-ops.service';
 export type { DisputeEscalation, IncidentDecision, RefundResolution, NoRefundResolution } from './services/case-ops.service';
+export { missedRideService, MISSED_RIDES_UNAVAILABLE } from './services/missed-ride.service';
+export type {
+  MissedRider, MissedRideCoupon, MissedRiderContact, MissedRiderView, MissedRiderCouponStatus, MissedRideCouponReason,
+} from './services/missed-ride.service';
 export { invoiceService } from './services/invoice.service';
 export { trustedContactService } from './services/trusted-contact.service';
 export { disputeService } from './services/dispute.service';

@@ -21,7 +21,7 @@ const CAPABILITY_SET = {
   'fleets.review': true, 'corporate.clients': true, 'users.block': true, 'accounts.delete_pending': true,
   'moderation.act': true, 'pois.act': true, 'money.act': true, 'push.one': true, 'push.broadcast': true,
   'reviews.feature': true, 'promotions.write': true, 'promotions.approve': true, 'referrals.amounts': true,
-  'referrals.rewards': true, 'audit.read': true,
+  'referrals.rewards': true, 'riders.outreach': true, 'audit.read': true,
 } satisfies Record<PanelCapability, true>;
 const ALL_CAPABILITIES = Object.keys(CAPABILITY_SET) as PanelCapability[];
 
@@ -88,9 +88,15 @@ describe('canOpenPanelPath', () => {
     expect(OPERATOR_ROUTES).toEqual([
       '/', '/reports', '/launch-pulse', '/live-map', '/rides', '/support', '/incidents', '/disputes',
       '/lost-found', '/drivers', '/incomplete-drivers', '/businesses', '/users', '/reviews', '/fraud',
-      '/cancellations', '/wallet', '/promotions', '/referrals', '/notifications',
+      '/cancellations', '/wallet', '/promotions', '/referrals', '/notifications', '/missed-rides',
     ]);
-    expect(OPERATOR_ROUTES).toHaveLength(20);
+    expect(OPERATOR_ROUTES).toHaveLength(21);
+  });
+
+  it('keeps marketing out of the missed-ride page (it lists phones)', () => {
+    expect(canOpenPanelPath('marketing', '/missed-rides')).toBe(false);
+    expect(panelCan('marketing', 'riders.outreach')).toBe(false);
+    expect(canOpenPanelPath('operator', '/missed-rides')).toBe(true);
   });
 
   it('keeps the operator out of gifts, settings, team, audit, earnings and marketing pages', () => {
@@ -234,10 +240,10 @@ describe('panelCan', () => {
     expect(granted).toEqual(['tickets.act', 'promotions.write', 'referrals.amounts']);
   });
 
-  it('gives the operator the detail pages, live rides, onboarding, support, cases, blocks, moderation and one-person pushes (deliveries 1 to 4)', () => {
+  it('gives the operator the detail pages, live rides, onboarding, support, cases, blocks, moderation, one-person pushes and missed-ride outreach (deliveries 1 to 4, 00674)', () => {
     const granted = ALL_CAPABILITIES.filter((cap) => panelCan('operator', cap));
     expect(granted).toEqual(['detail.full', 'rides.act', 'tickets.act', 'cases.act', 'drivers.review',
-      'fleets.review', 'users.block', 'accounts.delete_pending', 'moderation.act', 'push.one']);
+      'fleets.review', 'users.block', 'accounts.delete_pending', 'moderation.act', 'push.one', 'riders.outreach']);
   });
 
   it('never gives the operator money, broadcasts, featured reviews, promotions, referral rewards or the audit log', () => {

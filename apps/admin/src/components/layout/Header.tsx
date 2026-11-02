@@ -39,6 +39,7 @@ const BREADCRUMB_LABELS: Record<string, string> = {
   'live-map': 'Mapa en vivo',
   'launch-pulse': 'Pulso del lanzamiento',
   'incomplete-drivers': 'Choferes sin terminar',
+  'missed-rides': 'Sin chofer',
   businesses: 'Aliados',
   quests: 'Misiones',
   audit: 'Auditoría',
