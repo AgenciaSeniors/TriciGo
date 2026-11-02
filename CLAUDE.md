@@ -2726,6 +2726,7 @@ El operador asiste viajes en búsqueda, destraba viajes con conductor y cancela,
   - todas las transiciones quedaron como `admin` a su nombre, y cada acción en `admin_actions`;
   - en un viaje suyo, las cuatro acciones dieron `self_ride`;
   - `_ops_allow` le dio 42501, un UPDATE directo cambió 0 filas, marketing recibió `forbidden` y un super_admin canceló como antes.
+- **Estado: aplicada en prod el 2026-11-02** por MCP (`20261102043311`). Se aplicó leyendo el archivo del commit `f0fe442c` con `net.http_get` y ejecutándolo solo si su md5 era el del repo (`bcb1f185…`), como la 00668. Verificado por objeto: los 13 cuerpos tienen el md5 del ensayo, sin `\r`; `_ops_allow` no lo ejecuta ningún cliente; las funciones abiertas siguen sin EXECUTE para `anon`. Probado después en un bloque revertido: la operadora asignó, liberó y canceló; su propio viaje dio `self_ride`; marketing y un pasajero recibieron `forbidden`; `_ops_allow` le dio 42501. Los crons siguieron sin errores.
 
 ### Equipo del panel: invitaciones (00661)
 
