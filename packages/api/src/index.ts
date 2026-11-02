@@ -148,6 +148,8 @@ export {
 export { paymentService } from './services/payment.service';
 export { corporateService } from './services/corporate.service';
 export { fleetService } from './services/fleet.service';
+export { onboardingService, ONBOARDING_UNAVAILABLE } from './services/onboarding.service';
+export type { DriverDecision, ReviewDecision, OutreachChannelCode } from './services/onboarding.service';
 export { invoiceService } from './services/invoice.service';
 export { trustedContactService } from './services/trusted-contact.service';
 export { disputeService } from './services/dispute.service';

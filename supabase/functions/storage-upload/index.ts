@@ -42,6 +42,7 @@ import {
   storageUpsert,
   type FleetDocLookups,
 } from '../_shared/fleet-docs.ts';
+import { isAdminRole, isOpsRole } from '../_shared/panel-roles.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '').split(',').filter(Boolean);
 const MAX_BYTES = 15 * 1024 * 1024; // 15 MB — generous cap for ID/vehicle/avatar photos.
@@ -172,11 +173,18 @@ Deno.serve(async (req: Request) => {
     }
 
     // ─── 3. Per-bucket authorization (mirrors each bucket's RLS WITH CHECK) ───
-    const isAdmin = async (): Promise<boolean> => {
-      const { data, error } = await admin.from('users').select('role').eq('id', user.id).maybeSingle();
-      if (error) throw new UploadError(503, 'db_error', error.message);
-      return !!data && ['admin', 'super_admin'].includes(data.role as string);
+    let callerRole: Promise<string | null> | null = null;
+    const role = (): Promise<string | null> => {
+      callerRole ??= (async () => {
+        const { data, error } = await admin.from('users').select('role').eq('id', user.id).maybeSingle();
+        if (error) throw new UploadError(503, 'db_error', error.message);
+        return (data?.role as string | undefined) ?? null;
+      })();
+      return callerRole;
     };
+    const isAdmin = async (): Promise<boolean> => isAdminRole(await role());
+    // 00672: operators upload a driver's documents for them; ops_add_driver_document records them.
+    const isOps = async (): Promise<boolean> => isOpsRole(await role());
     // The caller owns driverId iff it's their own driver_profiles row.
     const ownsDriverProfile = async (driverId: string): Promise<boolean> => {
       if (!driverId) return false;
@@ -244,7 +252,8 @@ Deno.serve(async (req: Request) => {
       // RLS only ever covered 'driver-docs'; the EF also allows 'selfie-checks'
       // (closing the long-standing gap where selfie uploads had no INSERT policy).
       if ((segs[0] === 'driver-docs' || segs[0] === 'selfie-checks') && segs.length >= 3) {
-        authorized = (await ownsDriverProfile(segs[1])) || (await isAdmin());
+        authorized = (await ownsDriverProfile(segs[1]))
+          || (segs[0] === 'driver-docs' ? await isOps() : await isAdmin());
       } else if (segs[0] === FLEET_DOCS_PREFIX && segs.length >= 4) {
         // fleet-docs/{corporateAccountId}/{fleetMemberId}/{file} — corporate
         // fleet member license uploads (fleet.service.uploadMemberLicense).

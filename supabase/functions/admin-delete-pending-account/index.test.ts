@@ -12,6 +12,8 @@ const db = vi.hoisted(() => ({
   driverProfiles: {} as Record<string, { id: string; status: string }>,
   objects: {} as Record<string, Set<string>>,
   failList: {} as Record<string, { message: string } | 'throw'>,
+  callerRole: 'admin',
+  targetRole: 'driver',
 }));
 
 const ADMIN = '00000000-0000-4000-8000-0000000000a1';
@@ -49,7 +51,7 @@ vi.mock('https://esm.sh/@supabase/supabase-js@2.108.2', () => ({
         neq: () => q,
         maybeSingle: async () => {
           db.calls.push(`select ${table}`);
-          if (table === 'users' && filters.id === ADMIN) return { data: { role: 'admin' }, error: null };
+          if (table === 'users' && filters.id === ADMIN) return { data: { role: db.callerRole }, error: null };
           if (table === 'users' && filters.id === TARGET) {
             return {
               data: {
@@ -57,7 +59,7 @@ vi.mock('https://esm.sh/@supabase/supabase-js@2.108.2', () => ({
                 full_name: 'Conductor Pendiente',
                 phone: '+5355550199',
                 email: null,
-                role: 'driver',
+                role: db.targetRole,
                 is_active: true,
                 total_rides: 0,
                 created_at: '2026-10-01T00:00:00Z',
@@ -140,6 +142,8 @@ beforeEach(() => {
   db.driverProfiles = {};
   db.objects = {};
   db.failList = {};
+  db.callerRole = 'admin';
+  db.targetRole = 'driver';
 });
 
 afterEach(() => {
@@ -225,5 +229,35 @@ describe('admin-delete-pending-account: the driver documents', () => {
     const log = errors.mock.calls.map((args) => args.join(' ')).join('\n');
     expect(log).toContain(DP);
     expect(log).toContain('storage unavailable');
+  });
+});
+
+describe('admin-delete-pending-account: who may delete (00672)', () => {
+  it('lets an operator delete an account that never finished signing up', async () => {
+    db.callerRole = 'operator';
+
+    const res = await call({ user_id: TARGET, confirm: true });
+
+    expect(res.status).toBe(200);
+    expect(db.deleted).toEqual([TARGET]);
+  });
+
+  it('refuses marketing and a passenger', async () => {
+    for (const role of ['marketing', 'customer']) {
+      db.callerRole = role;
+      const res = await call({ user_id: TARGET, confirm: true });
+      expect(res.status).toBe(403);
+    }
+    expect(db.deleted).toEqual([]);
+  });
+
+  it('never deletes a team member, whatever their panel role', async () => {
+    for (const role of ['admin', 'super_admin', 'marketing', 'operator']) {
+      db.targetRole = role;
+      const res = await call({ user_id: TARGET });
+      const body = await res.json();
+      expect(body.deletable).toBe(false);
+      expect(body.blockers).toContain('is_staff');
+    }
   });
 });

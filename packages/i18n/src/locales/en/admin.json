@@ -2963,5 +2963,24 @@
     "title": "Product failures",
     "versions_empty": "Fills in once the app version that reports opens is released.",
     "versions_title": "App versions in use"
+  },
+  "ops_errors": {
+    "forbidden": "You don't have permission to do this.",
+    "self_action": "You can't do this on your own account, driver profile or fleet.",
+    "target_is_staff": "This account belongs to a team member: an admin handles it.",
+    "driver_changed": "The driver's status changed while you were reviewing. Reload the page and try again.",
+    "invalid_transition": "That action doesn't match the driver's current status.",
+    "reason_required": "Write the reason.",
+    "driver_has_no_active_vehicle": "Can't approve: the driver has no registered vehicle. They must finish registering the vehicle first.",
+    "driver_not_found": "We couldn't find this driver.",
+    "document_not_found": "We couldn't find this document. Reload the page.",
+    "invalid_document_type": "That document type doesn't exist.",
+    "invalid_path": "The document couldn't be saved. Upload it again.",
+    "invalid_channel": "That contact channel doesn't exist.",
+    "account_not_found": "We couldn't find this account.",
+    "not_a_fleet": "This account is not a fleet: an admin reviews it.",
+    "account_changed": "The account changed while you were reviewing. Reload the page and try again.",
+    "member_not_found": "We couldn't find this fleet driver. Reload the page.",
+    "ONBOARDING_UNAVAILABLE": "This action isn't available on the server yet. Tell the tech team."
   }
 }

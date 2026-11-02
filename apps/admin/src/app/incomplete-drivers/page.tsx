@@ -14,6 +14,7 @@ import { useToast } from '@/components/ui/AdminToast';
 import { exportToCsv } from '@/lib/exportCsv';
 import { formatAdminDate, formatAdminDateShort } from '@/lib/formatDate';
 import { usePanelCan } from '@/lib/usePanelCan';
+import { opsErrorMessage } from '@/lib/opsErrors';
 
 // Drivers stuck in pending_verification (they started the signup and never
 // sent it), with what each one still has to upload, so the team can write to
@@ -137,7 +138,7 @@ function ContactDialog({
       await driverOutreachService.logContact(row.driver_profile_id, channel, note);
       onSaved(row);
     } catch (err) {
-      setError(getErrorMessage(err));
+      setError(opsErrorMessage(err, t));
       setSaving(false);
     }
   };

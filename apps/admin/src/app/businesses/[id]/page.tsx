@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { corporateService, fleetService, walletService } from '@tricigo/api';
+import { corporateService, fleetService, onboardingService, walletService } from '@tricigo/api';
 import { formatTriciCoin, getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
 import { useAdminUser } from '@/lib/useAdminUser';
 import { usePanelCan } from '@/lib/usePanelCan';
+import { opsErrorMessage } from '@/lib/opsErrors';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { formatAdminDate } from '@/lib/formatDate';
 import { FleetReview } from '@/components/FleetReview';
@@ -80,27 +81,31 @@ export default function BusinessDetailPage() {
   useEffect(() => { fetchData(); }, [id]);
 
   async function handleApprove() {
-    if (!id || !adminUserId) return;
+    if (!id || !adminUserId || !account) return;
     setActionLoading(true);
     try {
-      await corporateService.approveAccount(id, adminUserId);
+      // A fleet request goes through ops_review_fleet_account (00672), which operators share;
+      // a corporate client stays with corporateService (admins).
+      if (hasFleet) await onboardingService.reviewFleetAccount(id, 'approved', account.status);
+      else await corporateService.approveAccount(id, adminUserId);
       await fetchData();
       showToast('success', t('businesses.approved_success', { defaultValue: 'Empresa aprobada' }));
     } catch (err) {
-      showToast('error', getErrorMessage(err));
+      showToast('error', opsErrorMessage(err, t));
     } finally { setActionLoading(false); }
   }
 
   async function handleReject() {
-    if (!id || !adminUserId) return;
+    if (!id || !adminUserId || !account) return;
     setActionLoading(true);
     try {
-      await corporateService.rejectAccount(id, adminUserId, rejectReason);
+      if (hasFleet) await onboardingService.reviewFleetAccount(id, 'rejected', account.status, rejectReason);
+      else await corporateService.rejectAccount(id, adminUserId, rejectReason);
       setShowRejectModal(false);
       await fetchData();
       showToast('success', t('businesses.rejected_success', { defaultValue: 'Empresa rechazada' }));
     } catch (err) {
-      showToast('error', getErrorMessage(err));
+      showToast('error', opsErrorMessage(err, t));
     } finally { setActionLoading(false); }
   }
 
@@ -326,10 +331,10 @@ export default function BusinessDetailPage() {
       {/* Fleet review: an account with a driver_fleets row, or one an admin
           flagged. A fleet request sent from the app is only flagged once
           approved, and its drivers have to be reviewed before that. */}
-      {(account.is_fleet_owner || hasFleet) && adminUserId && (
+      {(account.is_fleet_owner || hasFleet) && (
         <div className="bg-surface-elevated border-line rounded-xl p-5">
           <h3 className="text-sm font-medium text-ink-muted mb-3">Flota — conductores</h3>
-          <FleetReview corporateAccountId={account.id} adminUserId={adminUserId} canReview={can('fleets.review')} />
+          <FleetReview corporateAccountId={account.id} canReview={can('fleets.review')} />
         </div>
       )}
 

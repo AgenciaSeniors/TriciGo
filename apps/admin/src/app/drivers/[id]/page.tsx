@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { adminService, reviewService, DOC_REJECTION_PRESETS } from '@tricigo/api';
+import { adminService, onboardingService, reviewService, DOC_REJECTION_PRESETS } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdjustWalletModal, type WalletAccountType } from '@/components/ui/AdjustWalletModal';
@@ -18,10 +18,10 @@ import type {
   SelfieCheck,
   ReviewTagSummaryItem,
 } from '@tricigo/types';
-import { useAdminUser } from '@/lib/useAdminUser';
 import { formatAdminDate } from '@/lib/formatDate';
 import { DOC_TYPE_LABEL, VEHICLE_TYPE_LABEL, labelFor } from '@/lib/labels';
 import { usePanelCan } from '@/lib/usePanelCan';
+import { opsErrorMessage } from '@/lib/opsErrors';
 import { DriverDetailReadOnly } from '@/components/panel/DriverDetailReadOnly';
 import {
   ArrowLeft,
@@ -100,7 +100,6 @@ function AdminDriverDetailPage() {
   const canMoney = can('money.act');
   const canDeletePending = can('accounts.delete_pending');
   const { showToast } = useToast();
-  const { userId: adminUserId } = useAdminUser();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
 
@@ -245,7 +244,7 @@ function AdminDriverDetailPage() {
       await refreshDriver();
       showToast('success', t('drivers.doc_uploaded_admin', { defaultValue: 'Foto subida correctamente' }));
     } catch (err) {
-      showToast('error', getErrorMessage(err));
+      showToast('error', opsErrorMessage(err, t));
     } finally {
       setUploadingDocType(null);
       pendingUploadDocTypeRef.current = null;
@@ -261,7 +260,6 @@ function AdminDriverDetailPage() {
     try {
       await adminService.verifyDocument(
         documentId,
-        adminUserId,
         isVerified,
         docNotes[documentId]?.trim() || undefined,
         reasonCodes,
@@ -282,7 +280,7 @@ function AdminDriverDetailPage() {
         : t('drivers.doc_rejected', { defaultValue: 'Documento rechazado' })
       );
     } catch (err) {
-      showToast('error', getErrorMessage(err));
+      showToast('error', opsErrorMessage(err, t));
     } finally {
       setVerifyingDoc(null);
     }
@@ -362,16 +360,11 @@ function AdminDriverDetailPage() {
     setActionLoading(true);
     setActionsMenuOpen(false);
     try {
-      await adminService.approveDriver(id, adminUserId);
+      await onboardingService.setDriverStatus(id, 'approved', driver.profile.status);
       await refreshDriver();
       showToast('success', t('drivers.approved_success', { defaultValue: 'Conductor aprobado' }));
     } catch (err) {
-      const msg = getErrorMessage(err);
-      showToast('error', /driver_has_no_active_vehicle/.test(msg)
-        ? t('drivers.approve_needs_vehicle', {
-            defaultValue: 'No se puede aprobar: el conductor no tiene un vehículo registrado. Debe completar el registro del vehículo primero.',
-          })
-        : msg);
+      showToast('error', opsErrorMessage(err, t));
     } finally {
       setActionLoading(false);
     }
@@ -381,11 +374,12 @@ function AdminDriverDetailPage() {
     if (!id || !reason.trim() || !showReasonModal) return;
     setActionLoading(true);
     try {
-      if (showReasonModal === 'reject') {
-        await adminService.rejectDriver(id, adminUserId, reason);
-      } else {
-        await adminService.suspendDriver(id, adminUserId, reason);
-      }
+      await onboardingService.setDriverStatus(
+        id,
+        showReasonModal === 'reject' ? 'rejected' : 'suspended',
+        driver?.profile.status ?? '',
+        reason,
+      );
       await refreshDriver();
       setShowReasonModal(null);
       setReason('');
@@ -394,7 +388,7 @@ function AdminDriverDetailPage() {
         : t('drivers.suspended_success', { defaultValue: 'Conductor suspendido' })
       );
     } catch (err) {
-      showToast('error', getErrorMessage(err));
+      showToast('error', opsErrorMessage(err, t));
     } finally {
       setActionLoading(false);
     }

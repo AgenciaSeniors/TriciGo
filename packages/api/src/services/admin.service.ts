@@ -89,6 +89,7 @@ export interface AdminRideMessage {
 }
 import { exchangeRateService } from './exchange-rate.service';
 import { notificationService } from './notification.service';
+import { onboardingService } from './onboarding.service';
 import { buildRejectionMessage } from './_driverDocRejectionPresets';
 import { applyRideListFilters, escapeLikePattern, type RideListFilters } from './_search';
 import { AppError } from '../errors';
@@ -156,29 +157,6 @@ async function withUsdAnchors(updates: Record<string, unknown>): Promise<Record<
   }
   return out;
 }
-
-/**
- * Spanish labels for driver document types, used in the push body
- * sent to the driver after admin verifies or rejects a document.
- * Kept here (not in i18n) because the message is composed
- * server-side from the admin app where we don't know the driver's
- * UI locale — but the driver's TriciGo app is es-CU first anyway.
- *
- * Covers the 4 onboarding doc types in use today. `selfie` stays
- * in the map for backward compat in case CC-04 is reverted and a
- * biometric provider is wired in.
- *
- * Mirrored in supabase/functions/_shared/driverDocRejectionPresets.ts
- * (DOC_TYPE_LABELS_ES) for the email rendered by the
- * notify-document-rejection EF. Keep both in sync.
- */
-const DRIVER_DOC_LABELS_ES: Record<string, string> = {
-  national_id: 'Cédula',
-  drivers_license: 'Licencia de conducción',
-  vehicle_registration: 'Registro del vehículo',
-  vehicle_photo: 'Foto del vehículo',
-  selfie: 'Selfie',
-};
 
 /** driver_id → active vehicle (type + plate) for getOnlineFleet enrichment.
     Module-level so it survives the 30s poll + realtime refetch churn of the
@@ -461,50 +439,16 @@ export const adminService = {
   },
 
   /**
-   * Upload a driver document on behalf of a driver (admin action).
-   * Used when a driver can't upload due to poor connectivity — the
-   * admin receives the file out-of-band and uploads it server-side.
-   * The storage-upload EF accepts admin JWTs via isAdmin() and
-   * bypasses Storage RLS using the service-role key.
+   * Upload a driver document on behalf of a driver (admin and operator action), when the driver
+   * cannot upload it themselves. storage-upload stores the file and ops_add_driver_document
+   * records it unverified (00672).
    */
   async uploadDriverDocumentAsAdmin(
     driverId: string,
     documentType: string,
     file: File,
   ): Promise<DriverDocument> {
-    const supabase = getSupabaseClient();
-
-    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-    const fileName = `${documentType}_${Date.now()}.${ext}`;
-    const storagePath = `driver-docs/${driverId}/${documentType}/${fileName}`;
-
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('bucket', 'driver-documents');
-    formData.append('path', storagePath);
-    formData.append('upsert', 'true');
-    formData.append('contentType', file.type || 'image/jpeg');
-
-    const { data, error } = await supabase.functions.invoke('storage-upload', {
-      body: formData,
-    });
-    if (error) throw error;
-    const errBody = (data as { error?: string } | null)?.error;
-    if (errBody) throw new Error(String(errBody));
-
-    const { data: doc, error: dbErr } = await supabase
-      .from('driver_documents')
-      .insert({
-        driver_id: driverId,
-        document_type: documentType,
-        storage_path: storagePath,
-        file_name: fileName,
-        mime_type: file.type || 'image/jpeg',
-      })
-      .select()
-      .single();
-    if (dbErr) throw dbErr;
-    return doc as DriverDocument;
+    return onboardingService.addDocument(driverId, documentType, file);
   },
 
   /**
@@ -555,165 +499,6 @@ export const adminService = {
     const payload = data as { ok?: boolean; error?: string } | null;
     if (payload?.error) throw new Error(payload.error);
     return this.getDriverContract(driverId);
-  },
-
-  /**
-   * Approve a driver.
-   */
-  async approveDriver(
-    driverId: string,
-    adminId: string,
-  ): Promise<void> {
-    const supabase = getSupabaseClient();
-
-    // 00495: a driver cannot be approved without a registered active vehicle.
-    // Onboarding persists the vehicle only at the final review Submit, so an
-    // admin could otherwise approve from the documents alone and leave an
-    // "approved" driver with no vehicle (shown as a car on the map). The DB
-    // trigger enforces this authoritatively; this pre-check surfaces a clean
-    // error to the admin UI instead of the raw trigger exception.
-    //
-    // Only throw when the query SUCCEEDED and returned no row — same fix as
-    // driverService.setOnlineStatus: ignoring `error` turned any transient
-    // failure of this SELECT into a bogus "this driver has no vehicle" for a
-    // driver who has one. Falling through is safe here (safer than on the
-    // online path, in fact): the trigger's approval guard is deliberately
-    // placed ABOVE the is_admin() bypass (00495:39-45), so it gates admin
-    // callers too and raises the same error code.
-    const { data: activeVehicle, error: vehicleErr } = await supabase
-      .from('vehicles')
-      .select('id')
-      .eq('driver_id', driverId)
-      .eq('is_active', true)
-      .limit(1)
-      .maybeSingle();
-    if (vehicleErr) {
-      logger.warn('[approveDriver] vehicle pre-check failed; deferring to DB trigger', {
-        driverId,
-        code: vehicleErr.code,
-        message: vehicleErr.message,
-      });
-    } else if (!activeVehicle) {
-      throw new Error('driver_has_no_active_vehicle');
-    }
-
-    const { error } = await supabase
-      .from('driver_profiles')
-      .update({
-        status: 'approved' as DriverStatus,
-        approved_at: new Date().toISOString(),
-      })
-      .eq('id', driverId);
-    if (error) throw error;
-
-    // Log admin action
-    await supabase.from('admin_actions').insert({
-      admin_id: adminId,
-      action: 'approve_driver',
-      target_type: 'driver_profile',
-      target_id: driverId,
-    });
-
-    // Notify driver
-    const { data: profile } = await supabase
-      .from('driver_profiles')
-      .select('user_id')
-      .eq('id', driverId)
-      .single();
-    if (profile?.user_id) {
-      await notificationService.sendToUser(
-        profile.user_id,
-        'Cuenta aprobada',
-        '¡Tu cuenta de conductor ha sido aprobada. Ya puedes recibir viajes!',
-        adminId,
-        { type: 'driver_status', status: 'approved' },
-      ).catch(err => console.warn('[Admin] Failed to notify driver:', err));
-    }
-  },
-
-  /**
-   * Reject a driver with reason.
-   */
-  async rejectDriver(
-    driverId: string,
-    adminId: string,
-    reason: string,
-  ): Promise<void> {
-    const supabase = getSupabaseClient();
-    const { error } = await supabase
-      .from('driver_profiles')
-      .update({ status: 'rejected' as DriverStatus })
-      .eq('id', driverId);
-    if (error) throw error;
-
-    await supabase.from('admin_actions').insert({
-      admin_id: adminId,
-      action: 'reject_driver',
-      target_type: 'driver_profile',
-      target_id: driverId,
-      reason,
-    });
-
-    // Notify driver
-    const { data: rejProfile } = await supabase
-      .from('driver_profiles')
-      .select('user_id')
-      .eq('id', driverId)
-      .single();
-    if (rejProfile?.user_id) {
-      await notificationService.sendToUser(
-        rejProfile.user_id,
-        'Solicitud rechazada',
-        'Tu solicitud de conductor no fue aprobada. Revisa tus documentos.',
-        adminId,
-        { type: 'driver_status', status: 'rejected', reason },
-      ).catch(err => console.warn('[Admin] Failed to notify driver:', err));
-    }
-  },
-
-  /**
-   * Suspend a driver.
-   */
-  async suspendDriver(
-    driverId: string,
-    adminId: string,
-    reason: string,
-  ): Promise<void> {
-    const supabase = getSupabaseClient();
-    const { error } = await supabase
-      .from('driver_profiles')
-      .update({
-        status: 'suspended' as DriverStatus,
-        is_online: false,
-        suspended_at: new Date().toISOString(),
-        suspended_reason: reason,
-      })
-      .eq('id', driverId);
-    if (error) throw error;
-
-    await supabase.from('admin_actions').insert({
-      admin_id: adminId,
-      action: 'suspend_driver',
-      target_type: 'driver_profile',
-      target_id: driverId,
-      reason,
-    });
-
-    // Notify driver
-    const { data: susProfile } = await supabase
-      .from('driver_profiles')
-      .select('user_id')
-      .eq('id', driverId)
-      .single();
-    if (susProfile?.user_id) {
-      await notificationService.sendToUser(
-        susProfile.user_id,
-        'Cuenta suspendida',
-        'Tu cuenta ha sido suspendida. Contacta soporte para más información.',
-        adminId,
-        { type: 'driver_status', status: 'suspended', reason },
-      ).catch(err => console.warn('[Admin] Failed to notify driver:', err));
-    }
   },
 
   /**
@@ -2136,128 +1921,38 @@ export const adminService = {
   /**
    * Verify or reject an individual driver document.
    *
-   * Rejection composition: the admin UI picks one or more chip
-   * codes from `DOC_REJECTION_PRESETS` (multi-select) plus an
-   * optional free-text note. We compose them into a single
-   * human-readable sentence (see buildRejectionMessage) so the
-   * existing driver screen at apps/driver/app/profile/documents.tsx
-   * renders it tal cual without any client-side changes.
+   * Rejection composition: the UI picks one or more chip codes from `DOC_REJECTION_PRESETS`
+   * (multi-select) plus an optional free-text note. We compose them into a single human-readable
+   * sentence (see buildRejectionMessage) so the driver screen at
+   * apps/driver/app/profile/documents.tsx renders it as is.
    *
-   * After the UPDATE we:
-   *   1) Push to the driver (category `driver_approval`) so they
-   *      don't have to manually refresh "Mis documentos" — same
-   *      best-effort pattern as approveDriver/rejectDriver.
-   *   2) On rejection only, invoke `notify-document-rejection` EF
-   *      to send an email through send-email. The EF gates on
-   *      admin/super_admin role and holds the SERVICE_ROLE secret
-   *      that send-email requires (BUG-191 / 2026-05-12 hardening
-   *      means we can't call send-email directly from the client).
-   *      Best-effort: a mail failure never reverts the verdict.
+   * ops_review_driver_document (00672) stores the verdict, logs it, pushes to the driver (unless
+   * they turned approval notices off) and, on rejection, has notify-document-rejection send the
+   * e-mail. Admins and operators share it.
    */
   async verifyDocument(
     documentId: string,
-    adminId: string,
     isVerified: boolean,
     notes?: string,
     reasonCodes?: string[],
   ): Promise<void> {
-    // Server-side guard: rejection requires SOMETHING — a chip code,
-    // a free-text note, or both. The UI forces ≥1 chip but a direct
-    // service caller could leave both empty and that would write
-    // `rejection_reason=NULL`, which is indistinguishable from
-    // "pending" in the driver's badge logic (`!is_verified &&
-    // !!rejection_reason`).
+    // Rejection requires SOMETHING — a chip code, a free-text note, or both. The UI forces ≥1
+    // chip, but a direct caller could leave both empty and write `rejection_reason=NULL`, which
+    // the driver's badge reads as "pending" (`!is_verified && !!rejection_reason`).
     const trimmedNotes = notes?.trim();
     const codes = reasonCodes?.filter((c) => c && c.length > 0) ?? [];
     if (!isVerified && codes.length === 0 && !trimmedNotes) {
       throw new Error('Rejection reason is required');
     }
-
-    // Compose the user-facing message that lands in
-    // `rejection_reason` (also used in the push body and the email).
     const composedNote = isVerified
       ? trimmedNotes ?? null
       : buildRejectionMessage(codes, trimmedNotes);
 
-
-    const supabase = getSupabaseClient();
-    const { error } = await supabase
-      .from('driver_documents')
-      .update({
-        is_verified: isVerified,
-        verified_by: adminId,
-        verified_at: new Date().toISOString(),
-        verification_notes: composedNote,
-        rejection_reason: isVerified ? null : composedNote,
-      })
-      .eq('id', documentId);
-    if (error) throw error;
-
-    // Log admin action
-    await supabase.from('admin_actions').insert({
-      admin_id: adminId,
-      action: isVerified ? 'verify_document' : 'reject_document',
-      target_type: 'driver_document',
-      target_id: documentId,
-      reason: composedNote,
+    await onboardingService.reviewDocument(documentId, isVerified, {
+      message: composedNote,
+      reasonCodes: codes,
+      note: trimmedNotes ?? null,
     });
-
-    // ── Notify the driver. Resolve user_id + document_type from the
-    // updated row. Best-effort: if anything fails we swallow it.
-    try {
-      const { data: doc } = await supabase
-        .from('driver_documents')
-        .select('document_type, driver_profiles!inner(user_id)')
-        .eq('id', documentId)
-        .single();
-      const userId = (doc?.driver_profiles as { user_id?: string } | null)?.user_id;
-      if (!userId) return;
-
-      const label = DRIVER_DOC_LABELS_ES[doc!.document_type] ?? 'Documento';
-      const title = isVerified
-        ? `✅ ${label} verificado`
-        : `⚠️ ${label} rechazado`;
-      const body = isVerified
-        ? `Tu ${label.toLowerCase()} fue aprobado.`
-        : `Tu ${label.toLowerCase()} fue rechazado: ${composedNote}`;
-
-      await notificationService.sendToUser(
-        userId,
-        title,
-        body,
-        adminId,
-        {
-          type: 'driver_document',
-          document_id: documentId,
-          action: isVerified ? 'verified' : 'rejected',
-          cta: '/profile/documents',
-        },
-        'driver_approval',
-      );
-    } catch (err) {
-      console.warn('[verifyDocument] notify driver (push) failed:', err);
-    }
-
-    // ── Email on rejection only (no email for verification — less noise).
-    if (!isVerified) {
-      try {
-        const { error: emailErr } = await supabase.functions.invoke(
-          'notify-document-rejection',
-          {
-            body: {
-              documentId,
-              reasonCodes: codes,
-              note: trimmedNotes ?? '',
-            },
-          },
-        );
-        if (emailErr) {
-          console.warn('[verifyDocument] email EF reported error:', emailErr);
-        }
-      } catch (err) {
-        console.warn('[verifyDocument] email EF invoke threw:', err);
-      }
-    }
   },
 
   /**

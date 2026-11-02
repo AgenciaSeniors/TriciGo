@@ -12,6 +12,7 @@
 // ============================================================
 
 import { getSupabaseClient } from '../client';
+import { onboardingService } from './onboarding.service';
 
 export interface LaunchPulseWeek {
   /** Monday of the week, Havana time (YYYY-MM-DD). */
@@ -113,17 +114,10 @@ export const driverOutreachService = {
   },
 
   /**
-   * Records that the team contacted a driver. Throws when nothing was written:
-   * an INSERT that RLS rejects is an error, but checking the returned row also
-   * covers any path where PostgREST answers OK without storing it.
+   * Records that the team contacted a driver, through ops_log_driver_outreach (00672), which
+   * admins and operators share. Refusals throw an AppError with the server's code.
    */
   async logContact(driverProfileId: string, channel: OutreachChannel, note?: string | null): Promise<void> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from('driver_outreach_log')
-      .insert({ driver_profile_id: driverProfileId, channel, note: note?.trim() || null })
-      .select('id');
-    if (error) throw error;
-    if (!data || data.length === 0) throw new Error('No se pudo registrar el contacto.');
+    await onboardingService.logOutreach(driverProfileId, channel, note);
   },
 };

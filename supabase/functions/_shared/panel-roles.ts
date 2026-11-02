@@ -15,7 +15,7 @@
 // The panel roles here are not a copy of PANEL_ROLES in packages/utils/src/adminPanelAccess.ts
 // (Deno cannot import it). isPanelStaffRole opens bulk e-mail and campaigns, including their
 // pushes, which the operator does not get (spec docs/superpowers/specs/2026-10-25-operator-role-design.md
-// section 6). The operator never joins isPanelStaffRole; a later delivery adds a separate isOpsRole (spec §6).
+// section 6). The operator never joins isPanelStaffRole; isOpsRole (00672) is its separate gate.
 // ============================================================
 
 /** The push categories marketing's pages send. */
@@ -28,6 +28,19 @@ export function isAdminRole(role: unknown): boolean {
 /** Roles that may call the panel's broadcast functions at all. */
 export function isPanelStaffRole(role: unknown): boolean {
   return isAdminRole(role) || role === 'marketing';
+}
+
+/**
+ * Operations staff (00672): the admins and the operator. Driver onboarding (documents, contracts,
+ * deleting an account that never finished signing up) accepts them; money and broadcasts do not.
+ */
+export function isOpsRole(role: unknown): boolean {
+  return isAdminRole(role) || role === 'operator';
+}
+
+/** The four roles of the panel's team: an account with one of them is never a driver applicant. */
+export function isPanelRole(role: unknown): boolean {
+  return isAdminRole(role) || role === 'marketing' || role === 'operator';
 }
 
 /**

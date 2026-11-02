@@ -22,7 +22,7 @@ vi.mock('../../client', () => ({
   getSupabaseClient: () => mockSupabase,
 }));
 
-// Mock notification service (used by approve/reject/suspend)
+// Mock notification service (sendToUser is still used by other admin methods)
 vi.mock('../notification.service', () => ({
   notificationService: {
     sendToUser: vi.fn().mockResolvedValue(undefined),
@@ -357,146 +357,45 @@ describe('adminService', () => {
     });
   });
 
-  describe('approveDriver', () => {
-    it('updates driver status to approved and logs admin action', async () => {
-      // 00491: approval first pre-checks an active vehicle.
-      const vehicleChain = createMockQueryChain({ data: { id: 'v-1' }, error: null });
-      const updateChain = createMockQueryChain({ data: null, error: null });
-      const insertChain = createMockQueryChain({ data: null, error: null });
+  describe('verifyDocument (00672: ops_review_driver_document)', () => {
+    it('verifies through the ops function', async () => {
+      mockRpc.mockResolvedValueOnce({ data: { success: true, is_verified: true }, error: null });
 
-      mockFrom
-        .mockReturnValueOnce(vehicleChain)  // vehicles pre-check
-        .mockReturnValueOnce(updateChain)   // driver_profiles.update
-        .mockReturnValueOnce(insertChain);  // admin_actions.insert
-      // 4th call (driver_profiles.select for notification) uses default chain
+      await adminService.verifyDocument('doc-1', true);
 
-      await adminService.approveDriver('d-1', 'admin-1');
-
-      expect(mockFrom).toHaveBeenNthCalledWith(1, 'vehicles');
-      expect(mockFrom).toHaveBeenNthCalledWith(2, 'driver_profiles');
-      expect(updateChain.update).toHaveBeenCalledWith(expect.objectContaining({
-        status: 'approved',
-        approved_at: expect.any(String),
-      }));
-      expect(updateChain.eq).toHaveBeenCalledWith('id', 'd-1');
-      expect(mockFrom).toHaveBeenNthCalledWith(3, 'admin_actions');
-      expect(insertChain.insert).toHaveBeenCalledWith({
-        admin_id: 'admin-1',
-        action: 'approve_driver',
-        target_type: 'driver_profile',
-        target_id: 'd-1',
+      expect(mockRpc).toHaveBeenCalledWith('ops_review_driver_document', {
+        p_document_id: 'doc-1',
+        p_verified: true,
+        p_message: null,
+        p_reason_codes: [],
+        p_note: null,
       });
+      expect(mockFrom).not.toHaveBeenCalled();
+      expect(mockInvoke).not.toHaveBeenCalled();
     });
 
-    it('throws driver_has_no_active_vehicle when the driver has no active vehicle (00495)', async () => {
-      const vehicleChain = createMockQueryChain({ data: null, error: null }); // no vehicle
-      mockFrom.mockReturnValueOnce(vehicleChain);
+    it('rejects with the composed message, the codes and the note', async () => {
+      mockRpc.mockResolvedValueOnce({ data: { success: true, is_verified: false }, error: null });
 
-      await expect(adminService.approveDriver('d-1', 'admin-1')).rejects.toThrow(/driver_has_no_active_vehicle/);
+      await adminService.verifyDocument('doc-1', false, '  Se ve movida ', ['blurry', '']);
+
+      const args = mockRpc.mock.calls[0]![1];
+      expect(args.p_reason_codes).toEqual(['blurry']);
+      expect(args.p_note).toBe('Se ve movida');
+      expect(args.p_message).toContain('Se ve movida');
     });
 
-    // Same regression as driverService.setOnlineStatus: ignoring the query
-    // error turned a transient failure into a bogus "this driver has no
-    // vehicle". The 00495 approval guard sits ABOVE the is_admin() bypass, so
-    // falling through to the trigger is safe for admin callers too.
-    it('falls through to the update when the vehicle pre-check query FAILS', async () => {
-      const vehicleChain = createMockQueryChain({
-        data: null,
-        error: { message: 'TypeError: Network request failed', code: '' },
-      });
-      const updateChain = createMockQueryChain({ data: null, error: null });
-      const insertChain = createMockQueryChain({ data: null, error: null });
-      mockFrom
-        .mockReturnValueOnce(vehicleChain)
-        .mockReturnValueOnce(updateChain)
-        .mockReturnValueOnce(insertChain);
-
-      await adminService.approveDriver('d-1', 'admin-1');
-
-      expect(mockFrom).toHaveBeenNthCalledWith(2, 'driver_profiles');
-      expect(updateChain.update).toHaveBeenCalledWith(expect.objectContaining({
-        status: 'approved',
-      }));
+    it('refuses a rejection with no reason before calling the server', async () => {
+      await expect(adminService.verifyDocument('doc-1', false, '  ', [])).rejects.toThrow('Rejection reason is required');
+      expect(mockRpc).not.toHaveBeenCalled();
     });
 
-    it('throws if update fails', async () => {
-      // 00491: mock an active vehicle so the flow reaches the update.
-      const vehicleChain = createMockQueryChain({ data: { id: 'v-1' }, error: null });
-      const chain = createMockQueryChain({ data: null, error: { message: 'Update failed', code: '42P01' } });
-      mockFrom.mockReturnValueOnce(vehicleChain).mockReturnValueOnce(chain);
-
-      await expect(adminService.approveDriver('d-1', 'admin-1')).rejects.toEqual({ message: 'Update failed', code: '42P01' });
+    it("throws the server's refusal with its code", async () => {
+      mockRpc.mockResolvedValueOnce({ data: { error: 'self_action' }, error: null });
+      await expect(adminService.verifyDocument('doc-1', true)).rejects.toMatchObject({ code: 'self_action' });
     });
   });
 
-  describe('rejectDriver', () => {
-    it('updates driver status to rejected and logs admin action with reason', async () => {
-      const updateChain = createMockQueryChain({ data: null, error: null });
-      const insertChain = createMockQueryChain({ data: null, error: null });
-
-      mockFrom
-        .mockReturnValueOnce(updateChain)
-        .mockReturnValueOnce(insertChain);
-
-      await adminService.rejectDriver('d-1', 'admin-1', 'Invalid documents');
-
-      expect(mockFrom).toHaveBeenNthCalledWith(1, 'driver_profiles');
-      expect(updateChain.update).toHaveBeenCalledWith({ status: 'rejected' });
-      expect(updateChain.eq).toHaveBeenCalledWith('id', 'd-1');
-      expect(mockFrom).toHaveBeenNthCalledWith(2, 'admin_actions');
-      expect(insertChain.insert).toHaveBeenCalledWith({
-        admin_id: 'admin-1',
-        action: 'reject_driver',
-        target_type: 'driver_profile',
-        target_id: 'd-1',
-        reason: 'Invalid documents',
-      });
-    });
-
-    it('throws if update fails', async () => {
-      const chain = createMockQueryChain({ data: null, error: { message: 'Update failed', code: '42P01' } });
-      mockFrom.mockReturnValueOnce(chain);
-
-      await expect(adminService.rejectDriver('d-1', 'admin-1', 'Bad docs')).rejects.toEqual({ message: 'Update failed', code: '42P01' });
-    });
-  });
-
-  describe('suspendDriver', () => {
-    it('updates driver to suspended with reason and logs admin action', async () => {
-      const updateChain = createMockQueryChain({ data: null, error: null });
-      const insertChain = createMockQueryChain({ data: null, error: null });
-
-      mockFrom
-        .mockReturnValueOnce(updateChain)
-        .mockReturnValueOnce(insertChain);
-
-      await adminService.suspendDriver('d-1', 'admin-1', 'Fraud detected');
-
-      expect(mockFrom).toHaveBeenNthCalledWith(1, 'driver_profiles');
-      expect(updateChain.update).toHaveBeenCalledWith(expect.objectContaining({
-        status: 'suspended',
-        is_online: false,
-        suspended_at: expect.any(String),
-        suspended_reason: 'Fraud detected',
-      }));
-      expect(updateChain.eq).toHaveBeenCalledWith('id', 'd-1');
-      expect(mockFrom).toHaveBeenNthCalledWith(2, 'admin_actions');
-      expect(insertChain.insert).toHaveBeenCalledWith({
-        admin_id: 'admin-1',
-        action: 'suspend_driver',
-        target_type: 'driver_profile',
-        target_id: 'd-1',
-        reason: 'Fraud detected',
-      });
-    });
-
-    it('throws if update fails', async () => {
-      const chain = createMockQueryChain({ data: null, error: { message: 'Update failed', code: '42P01' } });
-      mockFrom.mockReturnValueOnce(chain);
-
-      await expect(adminService.suspendDriver('d-1', 'admin-1', 'Fraud')).rejects.toEqual({ message: 'Update failed', code: '42P01' });
-    });
-  });
 
   // ==================== Users ====================
   describe('getUsers', () => {

@@ -13,11 +13,12 @@ import { fleetService } from '@tricigo/api';
 import { getSupabaseClient } from '@tricigo/api';
 import { FLEET_MEMBER_REVIEWED_FIELDS } from '@tricigo/types';
 import type { DriverFleet, FleetMember, FleetMemberReviewedField, FleetMemberStatus } from '@tricigo/types';
+import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
+import { opsErrorMessage } from '@/lib/opsErrors';
 
 interface Props {
   corporateAccountId: string;
-  adminUserId: string;
   /** Shows approve and reject (fleets.review). Without it the list is read-only (00668). */
   canReview?: boolean;
 }
@@ -65,7 +66,8 @@ function changeNotice(shown: FleetMember, current: FleetMember): string {
     : 'Cambió mientras la revisabas: estos son los datos actuales.';
 }
 
-export function FleetReview({ corporateAccountId, adminUserId, canReview = true }: Props) {
+export function FleetReview({ corporateAccountId, canReview = true }: Props) {
+  const { t } = useTranslation('admin');
   const { showToast } = useToast();
   const [fleet, setFleet] = useState<DriverFleet | null>(null);
   const [members, setMembers] = useState<FleetMember[]>([]);
@@ -136,13 +138,13 @@ export function FleetReview({ corporateAccountId, adminUserId, canReview = true 
   const approve = async (m: FleetMember) => {
     setBusy(m.id, true);
     try {
-      await fleetService.approveMember(m, adminUserId);
+      await fleetService.approveMember(m);
       forgetChanged(m.id);
       showToast('success', 'Conductor aprobado');
       await fetchData();
     } catch (e) {
       if (invitationChanged(e)) await reloadChanged(m);
-      else showToast('error', e instanceof Error ? e.message : 'Error al aprobar');
+      else showToast('error', opsErrorMessage(e, t));
     } finally {
       setBusy(m.id, false);
     }
@@ -152,7 +154,7 @@ export function FleetReview({ corporateAccountId, adminUserId, canReview = true 
     if (!rejectReason.trim()) return;
     setBusy(m.id, true);
     try {
-      await fleetService.rejectMember(m, adminUserId, rejectReason.trim());
+      await fleetService.rejectMember(m, rejectReason.trim());
       forgetChanged(m.id);
       showToast('success', 'Conductor rechazado');
       setRejecting(null);
@@ -163,7 +165,7 @@ export function FleetReview({ corporateAccountId, adminUserId, canReview = true 
         setRejecting(null);
         await reloadChanged(m);
       } else {
-        showToast('error', e instanceof Error ? e.message : 'Error al rechazar');
+        showToast('error', opsErrorMessage(e, t));
       }
     } finally {
       setBusy(m.id, false);
