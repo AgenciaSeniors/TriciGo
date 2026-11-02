@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { getPublishedPostsServer } from '@/lib/blog-server';
-import { cubaTimeZone } from '@tricigo/utils';
+import { cubaTimeZone } from '@tricigo/utils/date';
 
 // Server-rendered so crawlers get the full post list (titles, excerpts, links)
 // in the initial HTML. ISR: revalidated hourly, matching the /blog Cache-Control
