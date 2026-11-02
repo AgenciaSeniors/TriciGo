@@ -39,7 +39,7 @@ One shared "apology" promotion, created by an admin or marketing in Promociones 
   - `UNIQUE (user_id, source)`: one apology coupon per account. The phone rule is the claim below.
 - `missed_ride_contacts` (lock table, same grants): `id uuid PK`, `user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE`, `contacted_by uuid NOT NULL`, `contacted_at timestamptz NOT NULL DEFAULT now()`, `last_failed_ride_id uuid`, `grant_id uuid REFERENCES promotion_grants(id) ON DELETE SET NULL`. Index on `(user_id, contacted_at DESC)`.
 - `granted_by` and `contacted_by` have no foreign key, like `ride_dispute_escalations` (00673), so deleting a team account is never blocked. `user_id` cascades: a deleted account loses its grant, and its phone keeps the `reward_claims` row, so it cannot get a second coupon.
-- `promotion_is_referenced` also counts `promotion_grants`, so a promotion someone holds can only be paused, never deleted (marketing gets the existing friendly message; for an admin the foreign key refuses).
+- A promotion someone holds cannot be deleted: `ON DELETE RESTRICT` refuses (23503). It is retired by pausing it. `promotion_is_referenced` is not patched, so marketing sees the database error instead of the 00666 message; deleting a held coupon is rare enough.
 
 ### 2. Who counts as "no driver"
 
@@ -47,15 +47,19 @@ A failed request is a ride with `status = 'canceled'`, `driver_id IS NULL`, `COA
 
 A person is in the segment when their latest failed request has no completed ride (as customer) after it, their account is active, it is not a test account, not a team account (`admin`, `super_admin`, `marketing`, `operator`) and not a system account (`…0001`, `…0099`). Drivers who also ride as passengers count.
 
-### 3. The list: `ops_missed_riders(p_view text, p_days int)`
+### 3. The list: `admin_missed_riders(p_view text, p_days int)`
+
+Read functions of the panel are named `admin_*`; the 00673 self-check requires every `ops_*` function to write `admin_actions`, and a list writes nothing. The segment and the last failure come from one helper, `_missed_rider_summary(p_user_id uuid DEFAULT NULL)` (SECURITY DEFINER, no EXECUTE for clients), that the contact function also uses.
 
 SECURITY DEFINER, `search_path = public, pg_catalog`, EXECUTE for `authenticated` and `service_role`. A caller who is not ops staff gets `42501` with a Spanish MESSAGE and DETAIL `forbidden` (a set-returning function cannot answer with an `{error}` object).
 
 - `p_view = 'pending'`: people in the segment never contacted, whose latest failure is within `p_days` (NULL = everything), newest first.
 - `p_view = 'contacted'`: everyone with a contact row whose latest contact is within `p_days`, newest contact first, whether or not they are still in the segment. This is where results show.
-- Columns: `user_id`, `full_name`, `phone` (the confirmed phone from `auth.users`, digits without `+`, or NULL), `failed_requests` (in the window), `last_failed_at`, `last_failed_ride_id`, `last_pickup`, `last_dropoff`, `last_contacted_at`, `last_contacted_by` (name), `contacts` (count), `coupon_status` (`none`, `granted`, `used`, `unusable`), `coupon_code`, `phone_already_rewarded` (the phone holds an apology claim from another account), `rode_after_contact` (a completed ride after the first contact).
+- Columns: `user_id`, `full_name`, `phone` (the confirmed phone from `auth.users`, digits without `+`, or NULL), `failed_requests` (all time), `in_segment`, `last_failed_at`, `last_failed_ride_id`, `last_pickup`, `last_dropoff`, `last_contacted_at`, `last_contacted_by` (name), `contacts` (count), `coupon_status` (`none`, `granted`, `used`, `unusable`), `coupon_code`, `phone_already_rewarded` (the phone holds an apology claim from another account), `rode_after_contact` (a completed ride after the first contact).
 - `coupon_status`: `used` when `promotion_uses` has the grant's promotion for that user; `unusable` when the promotion is paused, expired or out of uses; otherwise `granted`.
 - At most 500 rows.
+
+The coupon in use comes from `_missed_ride_current_coupon()` (the newest active grant-only promotion inside its dates with uses left). `admin_missed_ride_coupon()` (ops staff, SECURITY DEFINER) returns it as jsonb for the page header, so the header and the grant always pick the same one.
 
 ### 4. Contacting someone: `ops_contact_missed_rider(p_user_id uuid, p_expected_last_failed_at timestamptz)`
 
@@ -65,7 +69,7 @@ SECURITY DEFINER, same grants. In order:
 2. Lock the target's `users` row (`FOR NO KEY UPDATE`, the team-function order) so two operators clicking at once give one coupon.
 3. The target is in the segment (§2) right now (`not_eligible` otherwise), so someone in "Contactados" who rode since cannot be written to again from this page. Its latest failure time equals `p_expected_last_failed_at` (`missed_rider_changed` otherwise, and the panel reloads).
 4. A confirmed phone exists (`no_phone` otherwise; nothing is recorded).
-5. Coupon, when the person has no grant yet: take the newest promotion with `grant_only`, active, inside its dates and with uses left. None → no coupon, reason `no_coupon_available`. Otherwise `_claim_reward(user, 'missed_ride_coupon', NULL, NULL)`: `claimed` → insert the grant; `taken` → no coupon, reason `already_given` (the phone got one before, from any account).
+5. Coupon, when the person has no grant yet: `_missed_ride_current_coupon()`. None → no coupon, reason `no_coupon_available`. Otherwise `_claim_reward(user, 'missed_ride_coupon', NULL, NULL)`: `claimed` → insert the grant; `taken` → no coupon, reason `already_given` (the phone got one before, from any account). A person who already has a grant gets it back when it still works, or reason `coupon_used` / `coupon_unusable`.
 6. Insert the contact row (with the grant, new or existing) and one `admin_actions` row (`missed_rider_contacted`, target `user`, new values: grant id, promotion code, failed ride id).
 7. Return `{success, phone, first_name, last_failed_at, coupon: {code, type, discount_percent, discount_fixed_cup, valid_until} | null, coupon_reason}`. A person who already holds a usable grant gets that coupon back, so a second message mentions it.
 
@@ -73,7 +77,7 @@ Refusals are `{error, …}` objects, as in 00671–00673.
 
 ### 5. Applying the coupon on the next ride
 
-- `_my_granted_promotion_id()`: SECURITY DEFINER, no arguments, the `promotion_id` of `auth.uid()`'s grant. EXECUTE for `authenticated` and `service_role`.
+- `_my_granted_promotion_id()`: SECURITY DEFINER, no arguments, the `promotion_id` of `auth.uid()`'s grant, only while the validator would accept it now (active, dates, uses, not used by this account, the phone's `promo:<id>` claim free, `first_ride_only`). EXECUTE for `authenticated` and `service_role`. Returning a used coupon would make the trigger attach it, the validator drop it, and the signup promotion (whose trigger sees a code already set) never apply again.
 - `tg_rides_promo_grant()`: SECURITY INVOKER, trigger `rides_promo_grant` BEFORE INSERT on `rides`. Its name sorts after `rides_normalize_scheduling` and before `rides_signup_promo` and `rides_validate_promo_discount`. It sets `NEW.promo_code_id` to the granted promotion under the same five conditions as `tg_rides_signup_promo` (client insert, own ride, no typed code, passenger ride, not paid by a company, caller not an admin). It never raises. The migration checks the trigger order and aborts if it is wrong.
 - Validator patch (in place, from md5 `cad4cf62…`): a `grant_only` promotion is dropped, like an invalid one, when the customer has no grant for it. Everything else (once per phone through `promo:<id>`, uses, dates, partner discounts) stays as it is, so a used coupon cannot be used again and a canceled ride gives it back.
 - `validate_promo_code` patch (from md5 `95280581…`): a `grant_only` promotion answers `invalid` to anyone without a grant, so the code reveals nothing.
@@ -81,13 +85,13 @@ Refusals are `{error, …}` objects, as in 00671–00673.
 
 ### 6. Panel
 
-- **Promociones:** the create form gains the "Cupón de disculpa" checkbox ("Solo lo usa quien lo recibe de soporte. No se publica."), which also sends `is_public = false`. The list shows a "Cupón de disculpa" badge. `promotionService` accepts `grantOnly`. The checkbox only exists on create.
+- **Promociones:** the create form gains the "Cupón de disculpa" checkbox ("Solo lo usa quien lo recibe de soporte desde Sin chofer. No se publica."), which also sends `is_public = false`. The list shows a "Disculpa" badge. `Promotion` gains `grant_only`, sent only on create and only when set; `promotionService.create` never strips it on its column-missing retry. The checkbox can't be changed after creation.
 - **New page `/missed-rides`** ("Sin chofer" in the menu), for ops staff: new capability `riders.outreach` (admins have it implicitly; added to `OPERATOR_CAPABILITIES`) and `/missed-rides` added to `OPERATOR_ROUTES`. Marketing does not get it.
   - Header: the coupon in use (code, amount, expiry, uses left), or "No hay cupón de disculpa activo: créalo en Promociones" with a link.
   - Tabs "Por contactar" and "Contactados", filter 30 / 90 días / todo.
   - Each row: name, phone, failed requests, last failure (Havana time, with pickup and drop-off), status. "Escribir por WhatsApp" opens the tab on the click itself (so the browser does not block it), calls `ops_contact_missed_rider` and then loads `https://wa.me/<phone>?text=<message>`; on a refusal it closes the tab and shows the reason. Without a confirmed phone the button is disabled and says why.
 - `missedRideService` (`packages/api`) wraps the two functions through `callOpsRpc` and maps refusals to `AppError` with the server's code; texts in `ops_errors.*` (es/en/pt).
-- The message is built by a pure function in `@tricigo/utils` (`missedRideApologyMessage`), with tuteo, the first name only, the date in Havana time and the discount formatted with `formatCUP` or as a percentage; `whatsappLink(phone, text)` builds the URL. Both have unit tests. Message:
+- The message is built by a pure function in `@tricigo/utils` (`missedRideApologyMessage`), with tuteo, the first name only, the date in Cuba's clock (`cubaTimeZone`) and the discount formatted with `formatCUP` or as a percentage, with unit tests. The URL is the existing `waMeLink` (`driverOutreach.ts`, used by `/incomplete-drivers`). Message:
   > Hola, {nombre}. Te escribimos de TriciGo. El {fecha} pediste un viaje y no conseguimos conductor. Lo sentimos mucho. Te dejamos {500 CUP / un 25 %} de descuento en tu próximo viaje. Ya está cargado en tu cuenta, no tienes que escribir ningún código.{ Vale hasta el {fecha}.}
 
   Without a coupon, the message stops after "Lo sentimos mucho." and ends with "Esperamos verte pronto en TriciGo."
@@ -102,7 +106,7 @@ Refusals are `{error, …}` objects, as in 00671–00673.
 
 - Rehearsal `supabase/tests/00674/run.sh` with the live bodies of the three patched functions, `tg_rides_signup_promo`, `_claim_reward` and the promotions guard. RED without the migration; GREEN applied twice and from a CRLF copy, with a negative proof of every self-check (trigger order, md5 guards, grants on the new tables, the full list of functions allowed to call `is_ops_staff`). Cases:
   - the segment: 60 s threshold, passenger rides only, completed ride after the failure, test, team and blocked accounts;
-  - contacting gives one coupon; a second contact gives none and returns the same coupon; two sessions at once give one grant;
+  - contacting gives one coupon; a second contact gives none and returns the same coupon; a second grant row for the same account is refused by the unique key (the function also locks the person's `users` row);
   - same phone on a new account after deleting the first: no second coupon (`already_given`);
   - no active coupon, no phone, `self_action`, `forbidden` for a passenger and for marketing, `missed_rider_changed`;
   - the next ride gets the discount; a typed code wins; delivery and company rides do not get it; a canceled ride gives it back; a used coupon does not apply again;
@@ -110,7 +114,7 @@ Refusals are `{error, …}` objects, as in 00671–00673.
   - `get_my_signup_promotion` returns the coupon first, and nothing once used;
   - a grant-only promotion cannot be public; a held promotion cannot be deleted.
 - Prod rehearsal in a block that rolls back, with the demo passenger as the person, the test passenger as operator and a coupon created in the block.
-- Vitest: the message and the link, `missedRideService`, `promotionService` with `grantOnly`, `panelCan` for the new capability.
+- Vitest: the message and the link, `missedRideService`, `promotionService.create` keeping `grant_only`, `panelCan` for the new capability.
 
 ## Rollout (each step with the owner's OK)
 
