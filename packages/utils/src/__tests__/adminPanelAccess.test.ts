@@ -233,9 +233,9 @@ describe('panelCan', () => {
     expect(granted).toEqual(['tickets.act', 'promotions.write', 'referrals.amounts']);
   });
 
-  it('gives the operator the full detail pages and no action yet (delivery 1)', () => {
+  it('gives the operator the full detail pages and the live rides (deliveries 1 and 3)', () => {
     const granted = ALL_CAPABILITIES.filter((cap) => panelCan('operator', cap));
-    expect(granted).toEqual(['detail.full']);
+    expect(granted).toEqual(['detail.full', 'rides.act']);
   });
 
   it('never gives the operator money, promotions, referral rewards or the audit log', () => {
