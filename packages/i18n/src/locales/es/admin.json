@@ -2963,5 +2963,24 @@
     "title": "Fallas del producto",
     "versions_empty": "Se llena cuando salga la versión de la app que reporta aperturas.",
     "versions_title": "Versiones de la app en uso"
+  },
+  "ops_errors": {
+    "forbidden": "No tienes permiso para esto.",
+    "self_action": "No puedes hacer esto sobre tu propia cuenta, tu perfil de conductor o tu flota.",
+    "target_is_staff": "Esta cuenta es de alguien del equipo: la gestiona un administrador.",
+    "driver_changed": "El estado del conductor cambió mientras lo revisabas. Recarga la página y vuelve a intentarlo.",
+    "invalid_transition": "Esa acción no corresponde al estado actual del conductor.",
+    "reason_required": "Escribe el motivo.",
+    "driver_has_no_active_vehicle": "No se puede aprobar: el conductor no tiene un vehículo registrado. Debe completar el registro del vehículo primero.",
+    "driver_not_found": "No encontramos a este conductor.",
+    "document_not_found": "No encontramos este documento. Recarga la página.",
+    "invalid_document_type": "Ese tipo de documento no existe.",
+    "invalid_path": "No se pudo guardar el documento. Vuelve a subirlo.",
+    "invalid_channel": "Ese canal de contacto no existe.",
+    "account_not_found": "No encontramos esta cuenta.",
+    "not_a_fleet": "Esta cuenta no es una flota: la revisa un administrador.",
+    "account_changed": "La cuenta cambió mientras la revisabas. Recarga la página y vuelve a intentarlo.",
+    "member_not_found": "No encontramos a este conductor de la flota. Recarga la página.",
+    "ONBOARDING_UNAVAILABLE": "Esta acción todavía no está disponible en el servidor. Avisa al equipo técnico."
   }
 }

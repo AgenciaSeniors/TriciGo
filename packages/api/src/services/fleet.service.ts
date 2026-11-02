@@ -14,9 +14,8 @@ import type {
   FleetWithMembers,
   ReviewedFleetMember,
 } from '@tricigo/types';
-import { FLEET_MEMBER_REVIEWED_FIELDS } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
-import { AppError, AuthError } from '../errors';
+import { onboardingService } from './onboarding.service';
 
 type OwnerAccount = Pick<CorporateAccount, 'id' | 'name' | 'status' | 'commission_percent' | 'suspended_reason'>;
 
@@ -33,61 +32,6 @@ const OWNER_STATUS_RANK: Record<CorporateAccountStatus, number> = {
   suspended: 2,
   rejected: 3,
 };
-
-/**
- * Whether the client holds a session. Without one supabase-js sends the
- * publishable key as the bearer, RLS hides every fleet_members row and an
- * update matches nothing, which would read as a changed invitation. The admin
- * panel copies its cookie session into this client on a best-effort basis
- * (useAdminUser), so the case is real. Same rule as driver.service: when the
- * SDK cannot even answer, let the request go and surface the real error.
- */
-async function hasSession(supabase: ReturnType<typeof getSupabaseClient>): Promise<boolean> {
-  try {
-    const { data } = await supabase.auth.getSession();
-    return Boolean(data?.session);
-  } catch {
-    return true;
-  }
-}
-
-/**
- * Records an admin decision on a fleet invitation only while the row is still
- * what the admin reviewed: pending_review, with every reviewed column equal to
- * the value shown. The owner may edit a pending invitation, so matching on the
- * id alone would record the decision against data the admin never saw. A NULL
- * is matched with is(), because eq(column, null) compares against the text
- * "null". When the update waits on the row lock, READ COMMITTED re-checks this
- * WHERE on the version the owner committed, so a concurrent edit also leaves it
- * matching nothing (supabase/tests/fleet-review/run.sh). Throws AuthError
- * without a session, and AppError FLEET_MEMBER_CHANGED when nothing matched:
- * the invitation changed, was reviewed or was removed since it was loaded (or
- * the caller is no longer an admin, since RLS hides the row from anyone else).
- */
-async function reviewShownMember(
-  shown: ReviewedFleetMember,
-  decision: { status: 'approved' | 'rejected'; reviewed_by: string; rejected_reason?: string },
-  failure: string,
-): Promise<void> {
-  const supabase = getSupabaseClient();
-  if (!(await hasSession(supabase))) throw new AuthError(`${failure}: no auth session`);
-
-  let update = supabase
-    .from('fleet_members')
-    .update({ ...decision, reviewed_at: new Date().toISOString() })
-    .eq('id', shown.id)
-    .eq('status', 'pending_review');
-  for (const field of FLEET_MEMBER_REVIEWED_FIELDS) {
-    const value = shown[field];
-    update = value === null ? update.is(field, null) : update.eq(field, value);
-  }
-
-  const { data, error } = await update.select('id');
-  if (error) throw new Error(`${failure}: ${error.message}`);
-  if (!data || data.length === 0) {
-    throw new AppError(`${failure}: fleet member ${shown.id} changed since it was loaded`, 'FLEET_MEMBER_CHANGED', 409);
-  }
-}
 
 export const fleetService = {
   /**
@@ -360,26 +304,22 @@ export const fleetService = {
   },
 
   /**
-   * Admin: approve a fleet invitation as the admin saw it. Approves nothing
-   * and throws AppError FLEET_MEMBER_CHANGED when the invitation changed, was
-   * reviewed or was removed since it was loaded. If an active account has
-   * already confirmed the phone shown by OTP, the database links it in this
-   * same update and the row ends up 'active' (00598).
+   * Approve a fleet invitation as the reviewer saw it, through ops_review_fleet_member (00672),
+   * which admins and operators share. Approves nothing and throws AppError FLEET_MEMBER_CHANGED
+   * when the invitation changed, was reviewed or was removed since it was loaded. If an active
+   * account has already confirmed the phone shown by OTP, the database links it in this same
+   * update and the row ends up 'active' (00598).
    */
-  async approveMember(shown: ReviewedFleetMember, adminId: string): Promise<void> {
-    await reviewShownMember(shown, { status: 'approved', reviewed_by: adminId }, 'Approve member failed');
+  async approveMember(shown: ReviewedFleetMember): Promise<void> {
+    await onboardingService.reviewFleetMember(shown, 'approved');
   },
 
   /**
-   * Admin: reject a fleet invitation as the admin saw it, with a reason for
-   * the owner. Throws AppError FLEET_MEMBER_CHANGED like approveMember.
+   * Reject a fleet invitation as the reviewer saw it, with a reason for the owner. Throws AppError
+   * FLEET_MEMBER_CHANGED like approveMember.
    */
-  async rejectMember(shown: ReviewedFleetMember, adminId: string, reason: string): Promise<void> {
-    await reviewShownMember(
-      shown,
-      { status: 'rejected', reviewed_by: adminId, rejected_reason: reason },
-      'Reject member failed',
-    );
+  async rejectMember(shown: ReviewedFleetMember, reason: string): Promise<void> {
+    await onboardingService.reviewFleetMember(shown, 'rejected', reason);
   },
 
   /**

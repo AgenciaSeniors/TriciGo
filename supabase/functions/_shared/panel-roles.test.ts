@@ -4,11 +4,27 @@ import {
   MARKETING_PUSH_DATA_KEYS,
   canSendPush,
   isAdminRole,
+  isOpsRole,
+  isPanelRole,
   isPanelStaffRole,
   marketingPushData,
 } from './panel-roles';
 
 describe('panel roles', () => {
+  it('counts the operator as operations staff, with the admins, and nobody else (00672)', () => {
+    for (const role of ['admin', 'super_admin', 'operator']) expect(isOpsRole(role)).toBe(true);
+    for (const role of ['marketing', 'customer', 'driver', '', null, undefined]) expect(isOpsRole(role)).toBe(false);
+  });
+
+  it('knows the four panel roles', () => {
+    for (const role of ['admin', 'super_admin', 'marketing', 'operator']) expect(isPanelRole(role)).toBe(true);
+    for (const role of ['customer', 'driver', '', null, undefined]) expect(isPanelRole(role)).toBe(false);
+  });
+
+  it('never opens bulk e-mail or campaigns to the operator', () => {
+    expect(isPanelStaffRole('operator')).toBe(false);
+  });
+
   it('knows the admin roles', () => {
     expect(isAdminRole('admin')).toBe(true);
     expect(isAdminRole('super_admin')).toBe(true);

@@ -181,10 +181,17 @@ export type PanelCapability =
 const MARKETING_CAPABILITIES: readonly PanelCapability[] = ['tickets.act', 'promotions.write', 'referrals.amounts'];
 
 /**
- * The operator role: it reads everything it opens (00668) and assists, unsticks and cancels rides
- * (00671). Each later delivery adds the capabilities its server functions open.
+ * The operator role: it reads everything it opens (00668), assists, unsticks and cancels rides
+ * (00671), and runs driver onboarding and fleet review, including deleting an account that never
+ * finished signing up (00672). The last delivery adds the capabilities its server functions open.
  */
-const OPERATOR_CAPABILITIES: readonly PanelCapability[] = ['detail.full', 'rides.act'];
+const OPERATOR_CAPABILITIES: readonly PanelCapability[] = [
+  'detail.full',
+  'rides.act',
+  'drivers.review',
+  'fleets.review',
+  'accounts.delete_pending',
+];
 
 /** Whether the panel offers this capability to the role. It only shapes the UI. */
 export function panelCan(role: PanelRole | null | undefined, cap: PanelCapability): boolean {

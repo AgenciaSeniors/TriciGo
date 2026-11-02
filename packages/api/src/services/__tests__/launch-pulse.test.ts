@@ -10,13 +10,6 @@ vi.mock('../../client', () => ({
 
 import { launchPulseService, driverOutreachService } from '../launch-pulse.service';
 
-function mockInsertChain(result: { data: unknown; error: unknown }) {
-  const select = vi.fn().mockResolvedValue(result);
-  const insert = vi.fn(() => ({ select }));
-  mockFrom.mockReturnValueOnce({ insert });
-  return { insert, select };
-}
-
 describe('launchPulseService.getPulse', () => {
   beforeEach(() => vi.resetAllMocks());
 
@@ -65,29 +58,31 @@ describe('driverOutreachService.getIncompleteSignups', () => {
 describe('driverOutreachService.logContact', () => {
   beforeEach(() => vi.resetAllMocks());
 
-  it('stores the channel and the trimmed note, never who or when', async () => {
-    const { insert } = mockInsertChain({ data: [{ id: 'o1' }], error: null });
+  it('logs through ops_log_driver_outreach with the trimmed note, never who or when (00672)', async () => {
+    mockRpc.mockResolvedValueOnce({ data: { success: true, id: 'o1' }, error: null });
 
     await driverOutreachService.logContact('dp1', 'whatsapp', '  Le escribí  ');
 
-    expect(mockFrom).toHaveBeenCalledWith('driver_outreach_log');
-    expect(insert).toHaveBeenCalledWith({ driver_profile_id: 'dp1', channel: 'whatsapp', note: 'Le escribí' });
+    expect(mockFrom).not.toHaveBeenCalled();
+    expect(mockRpc).toHaveBeenCalledWith('ops_log_driver_outreach', {
+      p_driver_profile_id: 'dp1', p_channel: 'whatsapp', p_note: 'Le escribí',
+    });
   });
 
   it('sends an empty note as null', async () => {
-    const { insert } = mockInsertChain({ data: [{ id: 'o1' }], error: null });
+    mockRpc.mockResolvedValueOnce({ data: { success: true, id: 'o1' }, error: null });
     await driverOutreachService.logContact('dp1', 'llamada', '   ');
-    expect(insert).toHaveBeenCalledWith({ driver_profile_id: 'dp1', channel: 'llamada', note: null });
+    expect(mockRpc.mock.calls[0]![1]).toMatchObject({ p_note: null });
   });
 
-  it('throws when nothing was stored', async () => {
-    mockInsertChain({ data: [], error: null });
-    await expect(driverOutreachService.logContact('dp1', 'whatsapp')).rejects.toThrow('No se pudo registrar');
+  it("throws the server's refusal with its code", async () => {
+    mockRpc.mockResolvedValueOnce({ data: { error: 'forbidden' }, error: null });
+    await expect(driverOutreachService.logContact('dp1', 'whatsapp')).rejects.toMatchObject({ code: 'forbidden' });
   });
 
-  it('throws the database error (e.g. RLS for a non-admin)', async () => {
-    const err = { code: '42501', message: 'new row violates row-level security policy' };
-    mockInsertChain({ data: null, error: err });
+  it('throws the database error', async () => {
+    const err = { code: '57014', message: 'canceling statement due to statement timeout' };
+    mockRpc.mockResolvedValueOnce({ data: null, error: err });
     await expect(driverOutreachService.logContact('dp1', 'whatsapp')).rejects.toEqual(err);
   });
 });

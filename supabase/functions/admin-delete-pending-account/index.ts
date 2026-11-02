@@ -9,13 +9,13 @@
 //
 // This is a sibling of `delete-account` (the user's OWN self-service delete):
 //   • delete-account  → target is ALWAYS the authenticated caller; never a body id.
-//   • this function    → target comes from the body, and the caller must be a
-//     platform admin/super_admin. To make that safe, deletion is gated behind a
+//   • this function    → target comes from the body, and the caller must be
+//     operations staff (admin, super_admin or, since 00672, operator). To make that safe, deletion is gated behind a
 //     strict "is this account really disposable?" check and REFUSED otherwise.
 //
 // Auth: verify_jwt = false at the gateway (like delete-account / storage-upload)
 // — we do our OWN Bearer-token auth inside via auth.getUser, then require the
-// caller's users.role ∈ {admin, super_admin}.
+// caller's users.role ∈ {admin, super_admin, operator} (isOpsRole).
 //
 // Request (POST JSON):
 //   { user_id: string, confirm?: boolean, reason?: string }
@@ -29,7 +29,7 @@
 //   • system_account : the system / anonymous users (never deletable)
 //   • self           : an admin cannot delete their own account here (use the
 //                      normal self-delete flow — avoids losing the acting admin)
-//   • is_staff       : role ∈ {admin, super_admin}
+//   • is_staff       : a team member (admin, super_admin, marketing, operator)
 //   • has_balance    : any wallet_account with balance ≠ 0 or held_balance ≠ 0
 //   • has_rides      : any ride (as customer OR as driver) not 'canceled'
 // A pending driver profile, canceled-only rides, and an incomplete profile are
@@ -53,6 +53,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { getServiceKey } from '../_shared/service-key.ts';
 import { prepareAccountDeletion } from '../_shared/account-deletion.ts';
 import { cleanUpAccountStorage, logAccountStorageCleanup } from '../_shared/account-storage-cleanup.ts';
+import { isOpsRole, isPanelRole } from '../_shared/panel-roles.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '').split(',').filter(Boolean);
 
@@ -112,7 +113,7 @@ Deno.serve(async (req: Request) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  // ─── 2. Authorize: caller must be a platform admin ───
+  // ─── 2. Authorize: caller must be operations staff ───
   const { data: callerRow, error: callerRowErr } = await admin
     .from('users')
     .select('role')
@@ -122,7 +123,7 @@ Deno.serve(async (req: Request) => {
     console.error('[admin-delete-pending-account] caller role lookup failed:', callerRowErr.message);
     return jsonResponse(req, { error: 'db_error' }, 503);
   }
-  if (!callerRow || !['admin', 'super_admin'].includes(callerRow.role as string)) {
+  if (!callerRow || !isOpsRole(callerRow.role)) {
     return jsonResponse(req, { error: 'forbidden' }, 403);
   }
 
@@ -196,7 +197,7 @@ Deno.serve(async (req: Request) => {
     const blockers: string[] = [];
     if (SYSTEM_USER_IDS.has(userId)) blockers.push('system_account');
     if (userId === caller.id) blockers.push('self');
-    if (['admin', 'super_admin'].includes(target.role as string)) blockers.push('is_staff');
+    if (isPanelRole(target.role)) blockers.push('is_staff');
     if (walletBalanceTotal !== 0 || walletHeldTotal !== 0) blockers.push('has_balance');
     if ((ridesAsCustomer ?? 0) > 0 || ridesAsDriver > 0) blockers.push('has_rides');
 

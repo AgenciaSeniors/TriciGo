@@ -59,6 +59,7 @@ import {
   driverContractSubject,
 } from '../_shared/email-templates/driver_contract.ts';
 import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
+import { isAdminRole, isOpsRole, isPanelRole } from '../_shared/panel-roles.ts';
 import { cubaTimeZone } from '../_shared/cuba-time.ts';
 
 const ADMIN_EMAIL_FALLBACK = 'soporte@tricigo.com';
@@ -126,6 +127,7 @@ interface UserRow {
   full_name: string | null;
   email: string | null;
   phone: string | null;
+  role: string | null;
 }
 
 interface VehicleRow {
@@ -167,11 +169,14 @@ Deno.serve(async (req) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // ── Auth: service_role (trigger) OR admin user JWT (admin panel) ──
+    // ── Auth: service_role (trigger) OR an ops staff JWT (admin panel: admin, super_admin or,
+    //    since 00672, operator) ──
     const apiKeyHeader = req.headers.get('apikey') ?? '';
     const authHeader = req.headers.get('Authorization') ?? '';
     const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
     const isInternal = isServiceKeyToken(apiKeyHeader) || isServiceKeyToken(bearer);
+    let callerId: string | null = null;
+    let callerRole = '';
 
     if (!isInternal) {
       if (!bearer) return jsonResponse(req, { error: 'unauthorized' }, 401);
@@ -186,10 +191,11 @@ Deno.serve(async (req) => {
         .select('role')
         .eq('id', user.id)
         .single();
-      const role = (roleRow as { role?: string } | null)?.role ?? '';
-      if (role !== 'admin' && role !== 'super_admin') {
+      callerRole = (roleRow as { role?: string } | null)?.role ?? '';
+      if (!isOpsRole(callerRole)) {
         return jsonResponse(req, { error: 'forbidden_admin_only' }, 403);
       }
+      callerId = user.id;
     }
 
     const body = (await req.json()) as RequestBody;
@@ -206,11 +212,20 @@ Deno.serve(async (req) => {
 
     const { data: u, error: uErr } = await admin
       .from('users')
-      .select('id, full_name, email, phone')
+      .select('id, full_name, email, phone, role')
       .eq('id', driver.user_id)
       .single();
     if (uErr || !u) return jsonResponse(req, { error: 'user_not_found' }, 404);
     const user = u as UserRow;
+
+    // 00672: nobody generates their own contract from the panel, and an operator acts only on
+    // passengers and drivers (ops_set_driver_status follows the same rules).
+    if (callerId !== null) {
+      if (driver.user_id === callerId) return jsonResponse(req, { error: 'self_action' }, 403);
+      if (!isAdminRole(callerRole) && isPanelRole(user.role)) {
+        return jsonResponse(req, { error: 'target_is_staff' }, 403);
+      }
+    }
 
     // Driver email: prefer public.users.email, fall back to auth.users
     // (phone-signup drivers often only have it there — same pattern as
