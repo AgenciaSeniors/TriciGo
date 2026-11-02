@@ -774,9 +774,12 @@ export const notificationService = {
         },
       });
       if (error) throw error;
-      const res = (data ?? {}) as { sent?: number; failed?: number };
+      const res = (data ?? {}) as { sent?: number; failed?: number; logged?: boolean };
       sent = res.sent ?? 0;
       failed = res.failed ?? 0;
+      // 00673: for an operator send-push writes the history row itself (notification_log is
+      // admin-only to write).
+      if (res.logged) return { successCount: sent, errorCount: failed };
     }
 
     const { error: logError } = await supabase.from('notification_log').insert({

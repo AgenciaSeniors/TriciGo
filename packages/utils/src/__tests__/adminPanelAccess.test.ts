@@ -19,8 +19,9 @@ import {
 const CAPABILITY_SET = {
   'detail.full': true, 'rides.act': true, 'tickets.act': true, 'cases.act': true, 'drivers.review': true,
   'fleets.review': true, 'corporate.clients': true, 'users.block': true, 'accounts.delete_pending': true,
-  'moderation.act': true, 'pois.act': true, 'money.act': true, 'promotions.write': true,
-  'promotions.approve': true, 'referrals.amounts': true, 'referrals.rewards': true, 'audit.read': true,
+  'moderation.act': true, 'pois.act': true, 'money.act': true, 'push.one': true, 'push.broadcast': true,
+  'reviews.feature': true, 'promotions.write': true, 'promotions.approve': true, 'referrals.amounts': true,
+  'referrals.rewards': true, 'audit.read': true,
 } satisfies Record<PanelCapability, true>;
 const ALL_CAPABILITIES = Object.keys(CAPABILITY_SET) as PanelCapability[];
 
@@ -87,14 +88,14 @@ describe('canOpenPanelPath', () => {
     expect(OPERATOR_ROUTES).toEqual([
       '/', '/reports', '/launch-pulse', '/live-map', '/rides', '/support', '/incidents', '/disputes',
       '/lost-found', '/drivers', '/incomplete-drivers', '/businesses', '/users', '/reviews', '/fraud',
-      '/cancellations', '/wallet', '/promotions', '/referrals',
+      '/cancellations', '/wallet', '/promotions', '/referrals', '/notifications',
     ]);
-    expect(OPERATOR_ROUTES).toHaveLength(19);
+    expect(OPERATOR_ROUTES).toHaveLength(20);
   });
 
   it('keeps the operator out of gifts, settings, team, audit, earnings and marketing pages', () => {
     for (const path of ['/wallet/gifts', '/wallet/gifts/x', '/settings', '/settings/pricing', '/equipo',
-      '/audit', '/earnings', '/notifications', '/pois', '/campaigns', '/announcements', '/blog',
+      '/audit', '/earnings', '/pois', '/campaigns', '/announcements', '/blog',
       '/content', '/segments', '/funnel', '/code-performance', '/validation', '/partners', '/quests',
       '/competitors', '/preview']) {
       expect(canOpenPanelPath('operator', path)).toBe(false);
@@ -233,14 +234,15 @@ describe('panelCan', () => {
     expect(granted).toEqual(['tickets.act', 'promotions.write', 'referrals.amounts']);
   });
 
-  it('gives the operator the full detail pages, the live rides and driver onboarding (deliveries 1 to 3)', () => {
+  it('gives the operator the detail pages, live rides, onboarding, support, cases, blocks, moderation and one-person pushes (deliveries 1 to 4)', () => {
     const granted = ALL_CAPABILITIES.filter((cap) => panelCan('operator', cap));
-    expect(granted).toEqual(['detail.full', 'rides.act', 'drivers.review', 'fleets.review', 'accounts.delete_pending']);
+    expect(granted).toEqual(['detail.full', 'rides.act', 'tickets.act', 'cases.act', 'drivers.review',
+      'fleets.review', 'users.block', 'accounts.delete_pending', 'moderation.act', 'push.one']);
   });
 
-  it('never gives the operator money, promotions, referral rewards or the audit log', () => {
-    for (const cap of ['money.act', 'promotions.write', 'promotions.approve', 'referrals.amounts',
-      'referrals.rewards', 'audit.read', 'corporate.clients', 'pois.act'] as PanelCapability[]) {
+  it('never gives the operator money, broadcasts, featured reviews, promotions, referral rewards or the audit log', () => {
+    for (const cap of ['money.act', 'push.broadcast', 'reviews.feature', 'promotions.write', 'promotions.approve',
+      'referrals.amounts', 'referrals.rewards', 'audit.read', 'corporate.clients', 'pois.act'] as PanelCapability[]) {
       expect(panelCan('operator', cap)).toBe(false);
     }
   });

@@ -12,6 +12,7 @@ import { FLEET_MEMBER_REVIEWED_FIELDS } from '@tricigo/types';
 import type { DriverDocument, DriverStatus, ReviewedFleetMember } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
 import { AppError } from '../errors';
+import { callOpsRpc, trimmedText } from './_ops-rpc';
 
 /** An ops function the database does not have yet (00672 not applied). */
 export const ONBOARDING_UNAVAILABLE = 'ONBOARDING_UNAVAILABLE';
@@ -20,36 +21,8 @@ export type DriverDecision = Extract<DriverStatus, 'approved' | 'rejected' | 'su
 export type ReviewDecision = 'approved' | 'rejected';
 export type OutreachChannelCode = 'whatsapp' | 'llamada' | 'sms' | 'otro';
 
-interface RpcError {
-  code?: string;
-  message?: string;
-}
-
-function isMissingRpc(error: RpcError | null | undefined): boolean {
-  return !!error && (error.code === 'PGRST202'
-    || /could not find the function|not found in the schema cache/i.test(error.message ?? ''));
-}
-
-function trimmed(value: string | null | undefined): string | null {
-  const t = value?.trim();
-  return t ? t : null;
-}
-
-/** Calls an ops function; `{ error: code }` becomes an AppError with that code. */
-async function callOps(rpc: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase.rpc(rpc, args);
-  if (error) {
-    if (isMissingRpc(error)) throw new AppError(`${rpc} is not deployed yet`, ONBOARDING_UNAVAILABLE, 503);
-    throw error;
-  }
-  const result = (data ?? {}) as Record<string, unknown>;
-  const code = result.error;
-  if (typeof code === 'string' && code) {
-    throw new AppError(`${rpc} refused: ${code}`, code, 409, result);
-  }
-  return result;
-}
+const trimmed = trimmedText;
+const callOps = (rpc: string, args: Record<string, unknown>) => callOpsRpc(rpc, args, ONBOARDING_UNAVAILABLE);
 
 export const onboardingService = {
   /**

@@ -1,14 +1,14 @@
 // ============================================================
-// Panel roles for Edge Functions (00642, marketing role).
+// Panel roles for Edge Functions (00642, marketing role; 00672 and 00673, operator role).
 //
 // Admins and super_admins may call the panel's broadcast functions for anything. Marketing may
 // send bulk campaign e-mail, and pushes only in the categories its pages use (campaign,
 // announcement, promo, blog). Any other category (ride, system, safety, payment…) is refused,
 // and so is an uncategorized push, such as the system notices sendToUser sends.
 //
-// The server checks the category, not the number of recipients. The panel's Notificaciones
-// page pushes to one user with category 'announcement', which this gate allows. Keeping that
-// page admin-only is the panel's job (menu + middleware), not the server's.
+// For marketing the server checks the category, not the number of recipients: the panel keeps the
+// Notificaciones page from it (menu + middleware). The operator opens that page (00673) and may
+// send only its one-user 'announcement', which the server checks: one category, one recipient.
 //
 // Spec: docs/superpowers/specs/2026-10-08-marketing-role-design.md
 // Pure module: no remote imports, so packages/api's vitest runs it unmodified.
@@ -45,10 +45,15 @@ export function isPanelRole(role: unknown): boolean {
 
 /**
  * Admins send any category. Marketing sends only its content categories, never an uncategorized
- * push. Recipients are not checked: a one-user push in a content category is allowed.
+ * push, to any number of people. The operator (00673) sends only an 'announcement', to exactly one
+ * person: the Notificaciones page's one-user push. `recipientIds` is the request's user list.
  */
-export function canSendPush(role: unknown, category: string | null | undefined): boolean {
+export function canSendPush(role: unknown, category: string | null | undefined,
+                            recipientIds?: readonly string[]): boolean {
   if (isAdminRole(role)) return true;
+  if (role === 'operator') {
+    return category === 'announcement' && recipientIds?.length === 1;
+  }
   return role === 'marketing' && typeof category === 'string' && MARKETING_PUSH_CATEGORIES.has(category);
 }
 
@@ -69,4 +74,15 @@ export function marketingPushData(data: unknown): Record<string, string> {
     if (typeof value === 'string') kept[key] = value;
   }
   return kept;
+}
+
+/**
+ * The `data` a push may carry, by the caller's role: everything for admins and internal calls
+ * (null role), marketing's content keys only, and nothing for the operator (00673), whose push is
+ * a plain message to one person.
+ */
+export function pushDataForRole<T>(role: unknown, data: T): T | Record<string, string> {
+  if (role === null || role === undefined || isAdminRole(role)) return data;
+  if (role === 'operator') return {};
+  return marketingPushData(data);
 }

@@ -150,6 +150,8 @@ export { corporateService } from './services/corporate.service';
 export { fleetService } from './services/fleet.service';
 export { onboardingService, ONBOARDING_UNAVAILABLE } from './services/onboarding.service';
 export type { DriverDecision, ReviewDecision, OutreachChannelCode } from './services/onboarding.service';
+export { caseOpsService, CASES_UNAVAILABLE } from './services/case-ops.service';
+export type { DisputeEscalation, IncidentDecision, RefundResolution, NoRefundResolution } from './services/case-ops.service';
 export { invoiceService } from './services/invoice.service';
 export { trustedContactService } from './services/trusted-contact.service';
 export { disputeService } from './services/dispute.service';

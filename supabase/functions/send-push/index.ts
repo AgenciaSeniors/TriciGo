@@ -12,12 +12,13 @@
 // rider could call it to phish drivers or admins via the inbox
 // (notifications table). Now requires service_role OR admin role.
 // 00642: marketing may call it too, only for the content categories its pages send
-// (campaign, announcement, promo, blog). See _shared/panel-roles.ts.
+// (campaign, announcement, promo, blog). 00673: the operator may send one 'announcement' to one
+// person, with no data, and this function writes its notification_log row. See _shared/panel-roles.ts.
 // ============================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
-import { canSendPush, isAdminRole, isPanelStaffRole, marketingPushData } from '../_shared/panel-roles.ts';
+import { canSendPush, isOpsRole, isPanelStaffRole, pushDataForRole } from '../_shared/panel-roles.ts';
 
 // ── CORS: restrict to allowed origins ──
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
@@ -183,8 +184,9 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const apiKey = req.headers.get('apikey') ?? '';
     const isInternalCall = isServiceKeyToken(apiKey);
-    // null for internal calls (service key); otherwise the caller's users.role.
+    // null for internal calls (service key); otherwise the caller's users.role and id.
     let callerRole: string | null = null;
+    let callerId: string | null = null;
 
     // Rate limit: 30 requests per IP per minute, for everyone EXCEPT internal
     // calls. Every database trigger (one push per ride offer, offline notices,
@@ -227,7 +229,10 @@ Deno.serve(async (req) => {
         .eq('id', user.id)
         .single();
       callerRole = (roleRow?.role as string | undefined) ?? null;
-      if (!isPanelStaffRole(callerRole)) {
+      callerId = user.id;
+      // The operator (00673) is not panel staff (no campaigns or bulk e-mail): it gets in for the
+      // one-person announcement only, checked below.
+      if (!isPanelStaffRole(callerRole) && !isOpsRole(callerRole)) {
         return new Response(
           JSON.stringify({ error: 'Forbidden: admin role required' }),
           { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
@@ -275,7 +280,7 @@ Deno.serve(async (req) => {
     // promo, blog). Any other category is refused, and so is an uncategorized push (sendToUser's
     // system notices). Recipients are not checked: the Notificaciones page's one-user push is an
     // 'announcement' and passes here; the panel keeps that page admin-only (menu + middleware).
-    if (!isInternalCall && !canSendPush(callerRole, category)) {
+    if (!isInternalCall && !canSendPush(callerRole, category, targetIds)) {
       return new Response(
         JSON.stringify({ error: 'Forbidden: this push category needs an admin' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
@@ -284,8 +289,29 @@ Deno.serve(async (req) => {
 
     // 00642: a marketing push keeps only the data keys the panel's content pushes send
     // (deep_link, content_type, content_id). The apps react to other keys on receipt (event,
-    // ride_id…) and navigate on them when tapped. Admins and internal calls keep their data as is.
-    const data = !isInternalCall && !isAdminRole(callerRole) ? marketingPushData(requestData) : requestData;
+    // ride_id…) and navigate on them when tapped. 00673: an operator push carries none. Admins and
+    // internal calls keep their data as is.
+    const data = isInternalCall ? requestData : pushDataForRole(callerRole, requestData);
+
+    // 00673: the history row of an operator's push. The panel writes it for admins, but
+    // notification_log is admin-only to write, so for the operator this function does, whatever
+    // the delivery: the answer says logged: true and the panel does not write it again.
+    const logOperatorPush = async (sentCount: number): Promise<{ logged?: true }> => {
+      if (isInternalCall || callerRole !== 'operator' || !callerId) return {};
+      const { error: logErr } = await supabase.from('notification_log').insert({
+        title,
+        body,
+        target_type: 'user',
+        target_user_id: targetIds[0],
+        sent_by: callerId,
+        sent_count: sentCount,
+      });
+      if (logErr) {
+        console.warn('[send-push] Failed to write the operator push to notification_log:', logErr.message);
+        return {};
+      }
+      return { logged: true };
+    };
 
     // Honor the user's category preferences. `deliverIds` is used for
     // everything downstream — tokens AND the inbox row — because opting
@@ -299,7 +325,7 @@ Deno.serve(async (req) => {
         `${category ? ' category=' + category : ''} opted_out=${optedOutCount} (all recipients opted out)`,
       );
       return new Response(
-        JSON.stringify({ sent: 0, failed: 0, total_tokens: 0, opted_out: optedOutCount }),
+        JSON.stringify({ sent: 0, failed: 0, total_tokens: 0, opted_out: optedOutCount, ...(await logOperatorPush(0)) }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
@@ -341,7 +367,7 @@ Deno.serve(async (req) => {
       }
 
       return new Response(
-        JSON.stringify({ message: 'No devices found', sent: 0, failed: 0, opted_out: optedOutCount }),
+        JSON.stringify({ message: 'No devices found', sent: 0, failed: 0, opted_out: optedOutCount, ...(await logOperatorPush(0)) }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
@@ -490,7 +516,7 @@ Deno.serve(async (req) => {
     );
 
     return new Response(
-      JSON.stringify({ sent, failed, total_tokens: tokens.length, opted_out: optedOutCount }),
+      JSON.stringify({ sent, failed, total_tokens: tokens.length, opted_out: optedOutCount, ...(await logOperatorPush(sent)) }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   } catch (err) {

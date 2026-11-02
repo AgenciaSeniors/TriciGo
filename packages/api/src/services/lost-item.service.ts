@@ -136,34 +136,6 @@ export const lostItemService = {
   },
 
   /**
-   * Close a lost item case (admin or when not found / abandoned).
-   */
-  async closeLostItem(
-    lostItemId: string,
-    resolvedBy: string,
-    adminNotes?: string,
-  ): Promise<LostItem> {
-    const supabase = getSupabaseClient();
-    const updates: Record<string, unknown> = {
-      status: 'closed',
-      resolved_by: resolvedBy,
-      resolved_at: new Date().toISOString(),
-    };
-    if (adminNotes) {
-      updates.admin_notes = adminNotes;
-    }
-
-    const { data, error } = await supabase
-      .from('lost_items')
-      .update(updates)
-      .eq('id', lostItemId)
-      .select()
-      .single();
-    if (error) throw error;
-    return data as LostItem;
-  },
-
-  /**
    * Get all lost items (admin). Optional status filter.
    */
   async getAllLostItems(options: {
@@ -188,17 +160,5 @@ export const lostItemService = {
     const { data, error } = await query;
     if (error) throw error;
     return (data ?? []) as LostItem[];
-  },
-
-  /**
-   * Add admin notes to a lost item case.
-   */
-  async addAdminNotes(lostItemId: string, notes: string): Promise<void> {
-    const supabase = getSupabaseClient();
-    const { error } = await supabase
-      .from('lost_items')
-      .update({ admin_notes: notes })
-      .eq('id', lostItemId);
-    if (error) throw error;
   },
 };

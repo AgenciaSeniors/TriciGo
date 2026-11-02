@@ -15,9 +15,9 @@ import {
   X,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { lostItemService, panelReadService, type PanelLostItem } from '@tricigo/api';
+import { caseOpsService, lostItemService, panelReadService, type PanelLostItem } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
-import { useAdminUser } from '@/lib/useAdminUser';
+import { isOpsStaleError, opsErrorMessage } from '@/lib/opsErrors';
 import { usePanelCan } from '@/lib/usePanelCan';
 import { formatCUP, getErrorMessage } from '@tricigo/utils';
 import type { LostItemStatus } from '@tricigo/types';
@@ -58,11 +58,10 @@ function categoryLabel(raw: string, t: TFunction): string {
 }
 
 export default function LostFoundPage() {
-  const { userId: adminUserId } = useAdminUser();
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
   const { can, ready } = usePanelCan();
-  // The operator reads the full lost items but acts on none yet (00668).
+  // The operator reads the full lost items (00668) and works them (00673).
   const fullData = can('detail.full');
   const canAct = can('cases.act');
 
@@ -115,11 +114,15 @@ export default function LostFoundPage() {
   const handleSaveNotes = async () => {
     if (!selected) return;
     try {
-      await lostItemService.addAdminNotes(selected.id, adminNotes);
-      setSelected((prev) => (prev ? { ...prev, admin_notes: adminNotes } : null));
+      await caseOpsService.saveLostItemNotes(selected.id, selected.status, adminNotes);
+      setSelected((prev) => (prev ? { ...prev, admin_notes: adminNotes.trim() || null } : null));
       showToast('success', t('lost_found.toast_notes_saved', { defaultValue: 'Notas guardadas' }));
     } catch (err) {
-      showToast('error', getErrorMessage(err));
+      showToast('error', opsErrorMessage(err, t));
+      if (isOpsStaleError(err)) {
+        setSelected(null);
+        void fetchItems();
+      }
     }
   };
 
@@ -127,17 +130,18 @@ export default function LostFoundPage() {
     if (!selected) return;
     setClosing(true);
     try {
-      const updated = await lostItemService.closeLostItem(
-        selected.id,
-        adminUserId,
-        adminNotes || undefined,
-      );
-      setSelected(updated);
+      // Bound to the status on screen: the server refuses with lost_item_changed if it moved.
+      await caseOpsService.closeLostItem(selected.id, selected.status, adminNotes);
+      setSelected((prev) => (prev ? { ...prev, status: 'closed', admin_notes: adminNotes.trim() || prev.admin_notes } : null));
       // Refetch so the closed item drops out of the active status tab.
       await fetchItems();
       showToast('success', t('lost_found.toast_closed', { defaultValue: 'Objeto marcado como cerrado' }));
     } catch (err) {
-      showToast('error', getErrorMessage(err));
+      showToast('error', opsErrorMessage(err, t));
+      if (isOpsStaleError(err)) {
+        setSelected(null);
+        void fetchItems();
+      }
     } finally {
       setClosing(false);
     }

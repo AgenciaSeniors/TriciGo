@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Headphones, Send } from 'lucide-react';
-import { supportService } from '@tricigo/api';
+import { caseOpsService, supportService } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
 import type { SupportTicket, TicketMessage, TicketStatus } from '@tricigo/types';
-import { useAdminUser } from '@/lib/useAdminUser';
+import { isOpsStaleError, opsErrorMessage } from '@/lib/opsErrors';
 import { usePanelCan } from '@/lib/usePanelCan';
 import { formatAdminDate } from '@/lib/formatDate';
 import { FilterBar, type StatusTab } from '@/components/data/FilterBar';
@@ -24,7 +24,6 @@ const PRIORITY_CLASS: Record<string, string> = {
 };
 
 export default function SupportPage() {
-  const { userId: adminUserId } = useAdminUser();
   const { t } = useTranslation('admin');
   const { can } = usePanelCan();
   const canReply = can('tickets.act');
@@ -102,35 +101,28 @@ export default function SupportPage() {
     if (!selected || !reply.trim()) return;
     setSending(true);
     try {
-      const msg = await supportService.sendMessage({
-        ticket_id: selected.id,
-        sender_id: adminUserId,
-        message: reply.trim(),
-        is_admin: true,
-      });
+      // The server answers as support and moves an open ticket to in_progress in the same call.
+      const { message: msg, status } = await caseOpsService.replyTicket(selected.id, reply);
       setMessages((prev) => [...prev, msg]);
       setReply('');
       showToast('success', t('support.toast_sent', { defaultValue: 'Respuesta enviada' }));
 
-      if (selected.status === 'open') {
-        await supportService.updateTicket(selected.id, { status: 'in_progress' });
-        setSelected((prev) => (prev ? { ...prev, status: 'in_progress' } : null));
-        setTickets((prev) =>
-          prev.map((x) =>
-            x.id === selected.id ? { ...x, status: 'in_progress' as TicketStatus } : x,
-          ),
-        );
+      if (status !== selected.status) {
+        setSelected((prev) => (prev ? { ...prev, status } : null));
+        setTickets((prev) => prev.map((x) => (x.id === selected.id ? { ...x, status } : x)));
       }
     } catch (err) {
-      showToast('error', getErrorMessage(err));
+      showToast('error', opsErrorMessage(err, t));
     } finally {
       setSending(false);
     }
   };
 
   const handleStatusChange = async (ticketId: string, newStatus: TicketStatus) => {
+    const shown = tickets.find((x) => x.id === ticketId)?.status ?? selected?.status;
+    if (!shown) return;
     try {
-      await supportService.updateTicket(ticketId, { status: newStatus });
+      await caseOpsService.updateTicket(ticketId, newStatus, shown);
       setTickets((prev) =>
         prev.map((x) => (x.id === ticketId ? { ...x, status: newStatus } : x)),
       );
@@ -139,7 +131,11 @@ export default function SupportPage() {
       }
       showToast('success', t('support.toast_status_updated', { defaultValue: 'Estado actualizado' }));
     } catch (err) {
-      showToast('error', getErrorMessage(err));
+      showToast('error', opsErrorMessage(err, t));
+      if (isOpsStaleError(err)) {
+        setSelected(null);
+        void fetchTickets();
+      }
     }
   };
 

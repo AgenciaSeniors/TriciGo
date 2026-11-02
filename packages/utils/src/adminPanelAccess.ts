@@ -70,6 +70,8 @@ export const OPERATOR_ROUTES: readonly string[] = [
   '/wallet',
   '/promotions',
   '/referrals',
+  // 00673: a push to one person, and the push history.
+  '/notifications',
 ];
 
 /** Sub-pages of an allowed page that the operator still may not open: gifts move money. */
@@ -167,6 +169,12 @@ export type PanelCapability =
   | 'pois.act'
   /** Anything that moves money: wallet adjustments, gifts, top-ups, refunds, bonus pushes. */
   | 'money.act'
+  /** A push to one person from /notifications (announcement only, no data). */
+  | 'push.one'
+  /** A push to everyone, to all passengers or all drivers, and the inbox statistics of /notifications. */
+  | 'push.broadcast'
+  /** Feature a review on the website. */
+  | 'reviews.feature'
   /** Create, edit, pause and delete promotions. */
   | 'promotions.write'
   /** See what waits for approval: the strip and the menu dot. */
@@ -182,15 +190,21 @@ const MARKETING_CAPABILITIES: readonly PanelCapability[] = ['tickets.act', 'prom
 
 /**
  * The operator role: it reads everything it opens (00668), assists, unsticks and cancels rides
- * (00671), and runs driver onboarding and fleet review, including deleting an account that never
- * finished signing up (00672). The last delivery adds the capabilities its server functions open.
+ * (00671), runs driver onboarding and fleet review, including deleting an account that never
+ * finished signing up (00672), and works support, cases, account blocks, moderation and a push to
+ * one person (00673). Refunds stay with admins: the operator proposes one.
  */
 const OPERATOR_CAPABILITIES: readonly PanelCapability[] = [
   'detail.full',
   'rides.act',
+  'tickets.act',
+  'cases.act',
   'drivers.review',
   'fleets.review',
+  'users.block',
   'accounts.delete_pending',
+  'moderation.act',
+  'push.one',
 ];
 
 /** Whether the panel offers this capability to the role. It only shapes the UI. */

@@ -8,6 +8,7 @@ import {
   isPanelRole,
   isPanelStaffRole,
   marketingPushData,
+  pushDataForRole,
 } from './panel-roles';
 
 describe('panel roles', () => {
@@ -52,6 +53,34 @@ describe('panel roles', () => {
   it('never lets anyone else send', () => {
     expect(canSendPush('customer', 'campaign')).toBe(false);
     expect(canSendPush(null, 'campaign')).toBe(false);
+  });
+
+  it('lets the operator send one announcement to exactly one person (00673)', () => {
+    expect(canSendPush('operator', 'announcement', ['u1'])).toBe(true);
+    expect(canSendPush('operator', 'announcement', ['u1', 'u2'])).toBe(false);
+    expect(canSendPush('operator', 'announcement', ['u1', 'u1'])).toBe(false);
+    expect(canSendPush('operator', 'announcement', [])).toBe(false);
+    expect(canSendPush('operator', 'announcement')).toBe(false);
+    for (const category of ['campaign', 'promo', 'blog', 'system', 'ride', undefined]) {
+      expect(canSendPush('operator', category, ['u1'])).toBe(false);
+    }
+  });
+});
+
+describe('pushDataForRole', () => {
+  const data = { event: 'ride_assigned', ride_id: 'r1', deep_link: '/x' };
+
+  it('keeps everything for an admin and for internal calls', () => {
+    expect(pushDataForRole('admin', data)).toBe(data);
+    expect(pushDataForRole(null, data)).toBe(data);
+  });
+
+  it("keeps marketing's content keys only", () => {
+    expect(pushDataForRole('marketing', data)).toEqual({ deep_link: '/x' });
+  });
+
+  it('drops all of it for the operator', () => {
+    expect(pushDataForRole('operator', data)).toEqual({});
   });
 });
 

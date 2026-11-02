@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Shield, ShieldCheck, X } from 'lucide-react';
-import { fraudService } from '@tricigo/api';
+import { caseOpsService, fraudService } from '@tricigo/api';
 import type { FraudAlert } from '@tricigo/types';
 import { getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
-import { useAdminUser } from '@/lib/useAdminUser';
+import { isOpsStaleError, opsErrorMessage } from '@/lib/opsErrors';
 import { usePanelCan } from '@/lib/usePanelCan';
 import { useToast } from '@/components/ui/AdminToast';
 import { DataTable, type DataColumn } from '@/components/data/DataTable';
@@ -23,7 +23,6 @@ const SEVERITY_CLASS: Record<string, string> = {
 };
 
 export default function FraudAlertsPage() {
-  const { userId: adminUserId } = useAdminUser();
   const { t } = useTranslation('admin');
   const { can } = usePanelCan();
   const { showToast } = useToast();
@@ -77,14 +76,18 @@ export default function FraudAlertsPage() {
   const handleResolve = async (alertId: string) => {
     setResolving(alertId);
     try {
-      await fraudService.resolveAlert(alertId, adminUserId, resolutionNote || undefined);
+      await caseOpsService.resolveFraudAlert(alertId, resolutionNote);
       setResolveModalId(null);
       setResolutionNote('');
       // Refetch so the resolved alert drops out of the "Sin resolver" tab.
       await fetchAlerts();
       showToast('success', t('fraud.toast_resolved', { defaultValue: 'Alerta marcada como resuelta' }));
     } catch (err) {
-      showToast('error', getErrorMessage(err));
+      showToast('error', opsErrorMessage(err, t));
+      if (isOpsStaleError(err)) {
+        setResolveModalId(null);
+        void fetchAlerts();
+      }
     } finally {
       setResolving(null);
     }

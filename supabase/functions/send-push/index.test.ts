@@ -81,6 +81,7 @@ beforeAll(async () => {
 
 const ADMIN = '00000000-0000-4000-8000-0000000000a1';
 const MARKETING = '00000000-0000-4000-8000-0000000000b1';
+const OPERATOR = '00000000-0000-4000-8000-0000000000e1';
 const CUSTOMER = '00000000-0000-4000-8000-0000000000c1';
 const TARGET = '00000000-0000-4000-8000-0000000000d1';
 
@@ -88,8 +89,8 @@ beforeEach(() => {
   db.inserts.length = 0;
   db.devices = [];
   fetchMock.mockClear();
-  db.sessions = { 'jwt-admin': ADMIN, 'jwt-marketing': MARKETING, 'jwt-customer': CUSTOMER };
-  db.roles = { [ADMIN]: 'admin', [MARKETING]: 'marketing', [CUSTOMER]: 'customer' };
+  db.sessions = { 'jwt-admin': ADMIN, 'jwt-marketing': MARKETING, 'jwt-customer': CUSTOMER, 'jwt-operator': OPERATOR };
+  db.roles = { [ADMIN]: 'admin', [MARKETING]: 'marketing', [CUSTOMER]: 'customer', [OPERATOR]: 'operator' };
 });
 
 const push = (token: string, category?: string) =>
@@ -226,5 +227,63 @@ describe('send-push: data a push may carry', () => {
     expect(res.status).toBe(200);
     expect(expoData()).toEqual(ALL_KEYS);
     expect(db.inserts).toEqual(inboxRow(ALL_KEYS));
+  });
+});
+
+// 00673: the operator pushes one person from Notificaciones: only 'announcement', exactly one
+// recipient, no data. send-push writes the history row (the panel cannot: notification_log is
+// admin-only to write) and answers logged: true so the panel does not write it again.
+const operatorPush = (userIds: string[], category: string | undefined, data?: Record<string, string>) =>
+  handler(
+    new Request('https://example.supabase.co/functions/v1/send-push', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer jwt-operator', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_ids: userIds, title: 'Hola', body: 'Cuerpo', ...(category ? { category } : {}), ...(data ? { data } : {}) }),
+    }),
+  );
+
+const logRow = (sentCount: number) => ({
+  table: 'notification_log',
+  rows: { title: 'Hola', body: 'Cuerpo', target_type: 'user', target_user_id: TARGET, sent_by: OPERATOR, sent_count: sentCount },
+});
+
+describe('send-push: the operator', () => {
+  it('sends one announcement to one person, with no data, and writes the history row', async () => {
+    db.devices = [{ push_token: 'ExponentPushToken[test]', platform: 'android' }];
+    fetchMock.mockResolvedValueOnce(new Response('{"data":{"status":"ok"}}', { status: 200 }));
+    const res = await operatorPush([TARGET], 'announcement', { event: 'ride_assigned', ride_id: 'r1', deep_link: '/x' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ sent: 1, logged: true });
+    expect(expoData()).toEqual({ type: 'announcement' });
+    expect(db.inserts).toEqual([
+      { table: 'notifications', rows: [{ user_id: TARGET, type: 'announcement', title: 'Hola', body: 'Cuerpo', data: { type: 'announcement' } }] },
+      logRow(1),
+    ]);
+  });
+
+  it('writes the history row when the person has no device', async () => {
+    const res = await operatorPush([TARGET], 'announcement');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ sent: 0, logged: true });
+    expect(db.inserts.map((i) => i.table)).toEqual(['notifications', 'notification_log']);
+    expect(db.inserts[1]).toEqual(logRow(0));
+  });
+
+  it('may not push two people, or one person twice', async () => {
+    expect((await operatorPush([TARGET, ADMIN], 'announcement')).status).toBe(403);
+    expect((await operatorPush([TARGET, TARGET], 'announcement')).status).toBe(403);
+    expect(db.inserts).toEqual([]);
+  });
+
+  it.each(['campaign', 'promo', 'system', 'ride', undefined])('may not send a %s push', async (category) => {
+    expect((await operatorPush([TARGET], category)).status).toBe(403);
+    expect(db.inserts).toEqual([]);
+  });
+
+  it('an admin push writes no history row: the panel writes it', async () => {
+    const res = await push('jwt-admin', 'announcement');
+    expect(res.status).toBe(200);
+    expect((await res.json()).logged).toBeUndefined();
+    expect(db.inserts.map((i) => i.table)).toEqual(['notifications']);
   });
 });

@@ -207,41 +207,6 @@ describe('supportService', () => {
     });
   });
 
-  // ==================== updateTicket ====================
-  describe('updateTicket', () => {
-    it('updates ticket fields', async () => {
-      const mockEq = vi.fn().mockResolvedValue({ error: null });
-      const mockUpdate = vi.fn(() => ({ eq: mockEq }));
-
-      mockFrom.mockReturnValueOnce({ update: mockUpdate });
-
-      await supportService.updateTicket('t-1', { status: 'resolved' as any, priority: 'high' as any });
-
-      expect(mockFrom).toHaveBeenCalledWith('support_tickets');
-      expect(mockUpdate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          status: 'resolved',
-          priority: 'high',
-          resolved_at: expect.any(String),
-          updated_at: expect.any(String),
-        }),
-      );
-      expect(mockEq).toHaveBeenCalledWith('id', 't-1');
-    });
-
-    it('throws on supabase error', async () => {
-      const err = { message: 'Update failed', code: '42P01' };
-      const mockEq = vi.fn().mockResolvedValue({ error: err });
-      const mockUpdate = vi.fn(() => ({ eq: mockEq }));
-
-      mockFrom.mockReturnValueOnce({ update: mockUpdate });
-
-      await expect(
-        supportService.updateTicket('t-1', { status: 'in_progress' as any }),
-      ).rejects.toEqual(err);
-    });
-  });
-
   // ==================== getMessages ====================
   describe('getMessages', () => {
     it('returns messages for a ticket', async () => {

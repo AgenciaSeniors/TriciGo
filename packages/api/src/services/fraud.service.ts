@@ -46,27 +46,6 @@ export const fraudService = {
   },
 
   /**
-   * Resolve a fraud alert.
-   */
-  async resolveAlert(
-    alertId: string,
-    resolvedBy: string,
-    note?: string,
-  ): Promise<void> {
-    const supabase = getSupabaseClient();
-    const { error } = await supabase
-      .from('fraud_alerts')
-      .update({
-        resolved: true,
-        resolved_by: resolvedBy,
-        resolved_at: new Date().toISOString(),
-        resolution_note: note ?? null,
-      })
-      .eq('id', alertId);
-    if (error) throw error;
-  },
-
-  /**
    * Freeze a user's wallet.
    */
   async freezeWallet(
