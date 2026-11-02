@@ -33,7 +33,8 @@ One shared "apology" promotion, created by an admin or marketing in Promociones 
 
 ### 1. Data
 
-- `promotions.grant_only boolean NOT NULL DEFAULT false`, with `CHECK (NOT (grant_only AND COALESCE(is_public, true)))`: a grant-only promotion is never public. Existing rows pass (all `false`).
+- `promotions.grant_only boolean NOT NULL DEFAULT false`, with `CHECK (NOT (grant_only AND COALESCE(is_public, true)))`: a grant-only promotion is never public. A second CHECK, `NOT (grant_only AND COALESCE(first_ride_only, false))`: the coupon is for people who may have ridden before, so it cannot be first-ride-only (a first-ride-only coupon would be promised and then never apply). Existing rows pass (all `false`).
+- `grant_only` is chosen at creation and never changes: the trigger `promotions_grant_only_frozen` (BEFORE UPDATE OF grant_only) refuses any change, for everyone, with DETAIL `grant_only_frozen`. Switching it off would turn a held coupon into a private code anyone can type.
 - `promotion_grants` (lock table: RLS on, no policies, GRANT only to `service_role`):
   - `id uuid PK DEFAULT gen_random_uuid()`, `promotion_id uuid NOT NULL REFERENCES promotions(id) ON DELETE RESTRICT`, `user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE`, `granted_by uuid NOT NULL`, `granted_at timestamptz NOT NULL DEFAULT now()`, `source text NOT NULL CHECK (source = 'missed_ride')`.
   - `UNIQUE (user_id, source)`: one apology coupon per account. The phone rule is the claim below.
@@ -45,7 +46,7 @@ One shared "apology" promotion, created by an admin or marketing in Promociones 
 
 A failed request is a ride with `status = 'canceled'`, `driver_id IS NULL`, `COALESCE(ride_mode, 'passenger') = 'passenger'`, that waited at least `support_alert_after_s` (60 s): `canceled_at − GREATEST(created_at, COALESCE(scheduled_at, created_at))`. The 60 s keep out people who canceled seconds after asking because they picked the wrong place.
 
-A person is in the segment when their latest failed request has no completed ride (as customer) after it, their account is active, it is not a test account, not a team account (`admin`, `super_admin`, `marketing`, `operator`) and not a system account (`…0001`, `…0099`). Drivers who also ride as passengers count.
+A person is in the segment when their latest failed request has no ride taken (as customer: `completed`, or `disputed`, which only a completed ride can become) created after it, their account is active, it is not a test account, not a team account (`admin`, `super_admin`, `marketing`, `operator`) and not a system account (`…0001`, `…0099`). Drivers who also ride as passengers count.
 
 ### 3. The list: `admin_missed_riders(p_view text, p_days int)`
 
@@ -71,7 +72,7 @@ SECURITY DEFINER, same grants. In order:
 4. A confirmed phone exists (`no_phone` otherwise; nothing is recorded).
 5. Coupon, when the person has no grant yet: `_missed_ride_current_coupon()`. None → no coupon, reason `no_coupon_available`. Otherwise `_claim_reward(user, 'missed_ride_coupon', NULL, NULL)`: `claimed` → insert the grant; `taken` → no coupon, reason `already_given` (the phone got one before, from any account). A person who already has a grant gets it back when it still works, or reason `coupon_used` / `coupon_unusable`.
 6. Insert the contact row (with the grant, new or existing) and one `admin_actions` row (`missed_rider_contacted`, target `user`, new values: grant id, promotion code, failed ride id).
-7. Return `{success, phone, first_name, last_failed_at, coupon: {code, type, discount_percent, discount_fixed_cup, valid_until} | null, coupon_reason}`. A person who already holds a usable grant gets that coupon back, so a second message mentions it.
+7. Return `{success, phone, full_name, last_failed_at, coupon: {code, type, discount_percent, discount_fixed_cup, valid_until} | null, coupon_reason}`. A person who already holds a usable grant gets that coupon back, so a second message mentions it.
 
 Refusals are `{error, …}` objects, as in 00671–00673.
 
@@ -85,7 +86,7 @@ Refusals are `{error, …}` objects, as in 00671–00673.
 
 ### 6. Panel
 
-- **Promociones:** the create form gains the "Cupón de disculpa" checkbox ("Solo lo usa quien lo recibe de soporte desde Sin chofer. No se publica."), which also sends `is_public = false`. The list shows a "Disculpa" badge. `Promotion` gains `grant_only`, sent only on create and only when set; `promotionService.create` never strips it on its column-missing retry. The checkbox can't be changed after creation.
+- **Promociones:** the create form gains the "Cupón de disculpa" checkbox ("Solo lo usa quien lo recibe de soporte desde Sin chofer. No se publica."), which also sends `is_public = false` and `first_ride_only = false` and disables those two checkboxes. The list shows a "Disculpa" badge. `Promotion` gains `grant_only`, sent only on create and only when set; `promotionService.create` never strips it on its column-missing retry. The checkbox can't be changed after creation.
 - **New page `/missed-rides`** ("Sin chofer" in the menu), for ops staff: new capability `riders.outreach` (admins have it implicitly; added to `OPERATOR_CAPABILITIES`) and `/missed-rides` added to `OPERATOR_ROUTES`. Marketing does not get it.
   - Header: the coupon in use (code, amount, expiry, uses left), or "No hay cupón de disculpa activo: créalo en Promociones" with a link.
   - Tabs "Por contactar" and "Contactados", filter 30 / 90 días / todo.
@@ -104,15 +105,16 @@ Refusals are `{error, …}` objects, as in 00671–00673.
 
 ## Testing
 
-- Rehearsal `supabase/tests/00674/run.sh` with the live bodies of the three patched functions, `tg_rides_signup_promo`, `_claim_reward` and the promotions guard. RED without the migration; GREEN applied twice and from a CRLF copy, with a negative proof of every self-check (trigger order, md5 guards, grants on the new tables, the full list of functions allowed to call `is_ops_staff`). Cases:
-  - the segment: 60 s threshold, passenger rides only, completed ride after the failure, test, team and blocked accounts;
+- Rehearsal `supabase/tests/00674/run.sh` with the live bodies of the three patched functions, `tg_rides_signup_promo` and `_claim_reward`. The promotions guard is left out: it never reads `grant_only`, and the freeze trigger refuses the change for everyone. RED without the migration; GREEN applied twice and from a CRLF copy, with a negative proof of the main self-checks (trigger order, md5 guards, grants on the new tables, the full list of functions allowed to call `is_ops_staff`, the first-ride CHECK). Cases:
+  - the segment: 60 s threshold measured from the scheduled time, passenger rides only, no driver, a completed or disputed ride after the failure, test, team, blocked and system accounts, each one excluded by its own seed row;
   - contacting gives one coupon; a second contact gives none and returns the same coupon; a second grant row for the same account is refused by the unique key (the function also locks the person's `users` row);
   - same phone on a new account after deleting the first: no second coupon (`already_given`);
   - no active coupon, no phone, `self_action`, `forbidden` for a passenger and for marketing, `missed_rider_changed`;
   - the next ride gets the discount; a typed code wins; delivery and company rides do not get it; a canceled ride gives it back; a used coupon does not apply again;
   - another account typing the code: `validate_promo_code` says `invalid` and the ride gets no discount;
   - `get_my_signup_promotion` returns the coupon first, and nothing once used;
-  - a grant-only promotion cannot be public; a held promotion cannot be deleted.
+  - a paused or used-up coupon does not block the signup promotion; an admin's own ride gets no coupon;
+  - a grant-only promotion cannot be public or first-ride-only, `grant_only` cannot change, and a held promotion cannot be deleted.
 - Prod rehearsal in a block that rolls back, with the demo passenger as the person, the test passenger as operator and a coupon created in the block.
 - Vitest: the message and the link, `missedRideService`, `promotionService.create` keeping `grant_only`, `panelCan` for the new capability.
 
@@ -128,6 +130,7 @@ Refusals are `{error, …}` objects, as in 00671–00673.
 - A coupon whose promotion is paused or expires before use is lost, and that phone cannot get another one.
 - If the destination is a partner place with a larger discount, the partner discount wins and the coupon's use is still taken, as with any promotion (00559).
 - The installed apps label it "Descuento de tu código …"; a later build can name it as an apology coupon.
+- "A ride since" means a ride created after the failure. A ride created before it and completed after it (a scheduled ride) does not take the person out of the list. There are no scheduled rides in prod today.
 
 ## Out of scope
 
