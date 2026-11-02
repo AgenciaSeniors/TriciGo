@@ -190,44 +190,14 @@ export const disputeService = {
   },
 
   /**
-   * Admin updates dispute status and/or assignment.
-   */
-  async updateDisputeStatus(
-    disputeId: string,
-    updates: Partial<Pick<RideDispute, 'status' | 'assigned_to'>>,
-  ): Promise<void> {
-    const supabase = getSupabaseClient();
-    const { error } = await supabase
-      .from('ride_disputes')
-      .update({ ...updates })
-      .eq('id', disputeId);
-    if (error) throw error;
-
-    // Notify both parties about the status change
-    const { data: dispute } = await supabase
-      .from('ride_disputes')
-      .select('opened_by, respondent_id')
-      .eq('id', disputeId)
-      .single();
-    if (dispute) {
-      const userIds = [dispute.opened_by, dispute.respondent_id].filter(Boolean) as string[];
-      for (const uid of userIds) {
-        notificationService
-          .sendToUser(uid, 'Actualización de disputa', 'El estado de tu disputa ha cambiado', 'system')
-          .catch((err) => console.warn('[Dispute] notification failed:', err));
-      }
-    }
-  },
-
-  /**
-   * Resolve a dispute with optional refund.
-   * For 'no_action', sets status to 'denied' without ledger transaction.
-   * For refund resolutions, calls the process_dispute_refund RPC.
+   * Admins: resolve a dispute with a refund (full, partial or credit) through process_dispute_refund.
+   * Resolving without money, taking a dispute, its notes and proposing a refund are
+   * caseOpsService's (00673), which admins and operators share.
    */
   async resolveDispute(
     disputeId: string,
     adminId: string,
-    resolution: DisputeResolution,
+    resolution: Extract<DisputeResolution, 'full_refund' | 'partial_refund' | 'credit'>,
     refundAmountTrc: number,
     notes?: string,
   ): Promise<string | null> {
@@ -253,41 +223,6 @@ export const disputeService = {
       }
     };
 
-    if (resolution === 'no_action') {
-      // Resolve in the driver's favor without a refund. Must be a value the
-      // ride_disputes.status CHECK accepts — 'denied' is NOT one (it 23514'd).
-      // This mirrors process_dispute_refund's own mapping (no_action ->
-      // resolved_driver).
-      const { error } = await supabase
-        .from('ride_disputes')
-        .update({
-          status: 'resolved_driver' as DisputeStatus,
-          resolution,
-          resolution_notes: notes ?? null,
-          refund_amount_trc: 0,
-          resolved_at: new Date().toISOString(),
-        })
-        .eq('id', disputeId);
-      if (error) throw error;
-
-      // Restore ride status
-      const { data: dispute } = await supabase
-        .from('ride_disputes')
-        .select('ride_id')
-        .eq('id', disputeId)
-        .single();
-      if (dispute) {
-        await supabase
-          .from('rides')
-          .update({ status: 'completed' })
-          .eq('id', dispute.ride_id)
-          .eq('status', 'disputed');
-      }
-
-      notifyBothParties();
-      return null;
-    }
-
     // Process refund via RPC
     const { data, error } = await supabase.rpc('process_dispute_refund', {
       p_dispute_id: disputeId,
@@ -299,17 +234,5 @@ export const disputeService = {
     if (error) throw error;
     notifyBothParties();
     return data as string;
-  },
-
-  /**
-   * Add or update admin internal notes on a dispute.
-   */
-  async addAdminNotes(disputeId: string, notes: string): Promise<void> {
-    const supabase = getSupabaseClient();
-    const { error } = await supabase
-      .from('ride_disputes')
-      .update({ admin_notes: notes })
-      .eq('id', disputeId);
-    if (error) throw error;
   },
 };

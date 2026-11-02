@@ -82,6 +82,14 @@ describe('notificationService.sendAdminPush', () => {
     expect(log?.payload).toMatchObject({ sent_by: ADMIN_ID, target_type: 'user', target_user_id: 'u-1', sent_count: 1 });
   });
 
+  it('writes no second row when send-push wrote it (an operator push, 00673)', async () => {
+    invoke.mockResolvedValue({ data: { sent: 1, failed: 0, logged: true }, error: null });
+
+    await notificationService.sendAdminPush({ userId: 'u-1' }, { title: 'Hola', body: 'Prueba' });
+
+    expect(writes.find((w) => w.table === 'notification_log')).toBeUndefined();
+  });
+
   it('sends nothing without a session', async () => {
     getUser.mockResolvedValue({ data: { user: null } });
 

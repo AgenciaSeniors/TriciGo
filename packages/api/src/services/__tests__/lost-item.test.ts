@@ -200,24 +200,6 @@ describe('lostItemService.markReturned', () => {
   });
 });
 
-describe('lostItemService.closeLostItem', () => {
-  beforeEach(() => { vi.clearAllMocks(); });
-
-  it('closes item with admin notes', async () => {
-    const closed = { ...MOCK_LOST_ITEM, status: 'closed', resolved_by: 'admin-1', admin_notes: 'Abandoned' };
-    mockSingle.mockResolvedValue({ data: closed, error: null });
-    const result = await lostItemService.closeLostItem('li-1', 'admin-1', 'Abandoned');
-    expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: 'closed',
-        resolved_by: 'admin-1',
-        admin_notes: 'Abandoned',
-      }),
-    );
-    expect(result).toEqual(closed);
-  });
-});
-
 describe('lostItemService.getAllLostItems', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
@@ -238,16 +220,5 @@ describe('lostItemService.getAllLostItems', () => {
     const result = await lostItemService.getAllLostItems({ status: 'reported' });
     expect(mockFrom).toHaveBeenCalledWith('lost_items');
     expect(result).toEqual([MOCK_LOST_ITEM]);
-  });
-});
-
-describe('lostItemService.addAdminNotes', () => {
-  beforeEach(() => { vi.clearAllMocks(); });
-
-  it('updates admin notes', async () => {
-    mockEq.mockReturnValueOnce({ error: null });
-    await lostItemService.addAdminNotes('li-1', 'Contacted driver');
-    expect(mockFrom).toHaveBeenCalledWith('lost_items');
-    expect(mockUpdate).toHaveBeenCalledWith({ admin_notes: 'Contacted driver' });
   });
 });

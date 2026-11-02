@@ -88,7 +88,6 @@ export interface AdminRideMessage {
   senderRole: 'customer' | 'driver' | 'unknown';
 }
 import { exchangeRateService } from './exchange-rate.service';
-import { notificationService } from './notification.service';
 import { onboardingService } from './onboarding.service';
 import { buildRejectionMessage } from './_driverDocRejectionPresets';
 import { applyRideListFilters, escapeLikePattern, type RideListFilters } from './_search';
@@ -1087,36 +1086,6 @@ export const adminService = {
     return data as Record<string, unknown>[];
   },
 
-  async updateIncidentStatus(
-    id: string,
-    status: string,
-    adminId: string,
-    notes?: string,
-  ): Promise<void> {
-    const supabase = getSupabaseClient();
-    const updatePayload: Record<string, unknown> = {
-      status,
-      resolved_at: status === 'resolved' ? new Date().toISOString() : null,
-      // Record WHO resolved it — incidents/[id] shows the resolver and the audit
-      // trail needs it; was left null (resolved_at was set but resolved_by wasn't).
-      resolved_by: status === 'resolved' ? adminId : null,
-    };
-
-    const { error } = await supabase
-      .from('incident_reports')
-      .update(updatePayload)
-      .eq('id', id);
-    if (error) throw error;
-
-    await supabase.from('admin_actions').insert({
-      admin_id: adminId,
-      action: `incident_${status}`,
-      target_type: 'incident_report',
-      target_id: id,
-      reason: notes ?? null,
-    });
-  },
-
   /**
    * Full detail for a single incident: the report plus resolved display names
    * for the reporter / accused / resolver, and a lightweight ride summary.
@@ -1277,7 +1246,8 @@ export const adminService = {
 
   /**
    * Apply a SOFT sanction (Fase 2a): 'dismiss' | 'warning' | 'reputation'.
-   * Money/suspension/ban are Fase 2b. Delegates to the is_admin()-gated RPC.
+   * Money/suspension/ban are Fase 2b. Admins and operators (00673); the RPC refuses a case the
+   * caller is part of, and tells the driver of a warning or reputation hit from the server.
    */
   async applyCollusionSanction(reviewId: string, level: 'dismiss' | 'warning' | 'reputation', notes: string | undefined, adminId: string): Promise<void> {
     const supabase = getSupabaseClient();
@@ -1290,17 +1260,6 @@ export const adminService = {
     if (error) throw error;
     const r = data as { success?: boolean; error?: string; driver_user_id?: string } | null;
     if (!r || r.error) throw new Error(r?.error ?? 'collusion_sanction_failed');
-
-    // Best-effort: notify the driver of a warning/reputation sanction (due process).
-    if ((level === 'warning' || level === 'reputation') && r.driver_user_id) {
-      await notificationService.sendToUser(
-        r.driver_user_id,
-        'Aviso de la plataforma',
-        'Detectamos cancelaciones que requieren tu atención. Cancelar viajes ya empezados de forma repetida afecta tu reputación.',
-        adminId,
-        { type: 'account' },
-      ).catch((err) => console.warn('[Admin] collusion notify failed:', err));
-    }
   },
 
   /** Reverse a soft sanction on appeal (undoes the reputation hit). */
@@ -1310,22 +1269,6 @@ export const adminService = {
     if (error) throw error;
     const r = data as { success?: boolean; error?: string } | null;
     if (!r || r.error) throw new Error(r?.error ?? 'collusion_reverse_failed');
-  },
-
-  /**
-   * Hide a review (is_visible=false) to moderate a reported abusive review.
-   * Logs to admin_actions. RLS policy rev_admin allows admin UPDATE.
-   */
-  async adminHideReview(reviewId: string, adminId: string): Promise<void> {
-    const supabase = getSupabaseClient();
-    const { error } = await supabase.from('reviews').update({ is_visible: false }).eq('id', reviewId);
-    if (error) throw error;
-    await supabase.from('admin_actions').insert({
-      admin_id: adminId,
-      action: 'hide_review',
-      target_type: 'review',
-      target_id: reviewId,
-    });
   },
 
   // ==================== FEATURE FLAGS ====================

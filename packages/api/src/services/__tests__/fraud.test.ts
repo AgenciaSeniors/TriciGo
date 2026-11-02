@@ -103,45 +103,6 @@ describe('fraudService', () => {
     });
   });
 
-  // ==================== resolveAlert ====================
-  describe('resolveAlert', () => {
-    it('updates the alert as resolved with note', async () => {
-      const mockEq = vi.fn().mockResolvedValue({ error: null });
-      const mockUpdate = vi.fn(() => ({ eq: mockEq }));
-
-      mockFrom.mockReturnValueOnce({ update: mockUpdate });
-
-      // Use fake timers to control Date
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2026-03-10T12:00:00.000Z'));
-
-      await fraudService.resolveAlert('fa-1', 'admin-1', 'False positive');
-
-      expect(mockFrom).toHaveBeenCalledWith('fraud_alerts');
-      expect(mockUpdate).toHaveBeenCalledWith({
-        resolved: true,
-        resolved_by: 'admin-1',
-        resolved_at: '2026-03-10T12:00:00.000Z',
-        resolution_note: 'False positive',
-      });
-      expect(mockEq).toHaveBeenCalledWith('id', 'fa-1');
-
-      vi.useRealTimers();
-    });
-
-    it('throws on supabase error', async () => {
-      const err = { message: 'Update failed', code: '42P01' };
-      const mockEq = vi.fn().mockResolvedValue({ error: err });
-      const mockUpdate = vi.fn(() => ({ eq: mockEq }));
-
-      mockFrom.mockReturnValueOnce({ update: mockUpdate });
-
-      await expect(
-        fraudService.resolveAlert('fa-1', 'admin-1', 'Note'),
-      ).rejects.toEqual(err);
-    });
-  });
-
   // ==================== freezeWallet ====================
   describe('freezeWallet', () => {
     it('calls supabase rpc freeze_wallet with correct params', async () => {

@@ -13,6 +13,7 @@ import { DataTable, type DataColumn, type SortState } from '@/components/data/Da
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { SectionCard } from '@/components/dashboard/SectionCard';
 import { formatAdminDate } from '@/lib/formatDate';
+import { usePanelCan } from '@/lib/usePanelCan';
 
 type NotificationLog = {
   id: string;
@@ -34,6 +35,10 @@ export default function NotificationsPage() {
     return t(`notifications.audience_${a}`, { defaultValue: fallbacks[a] ?? a });
   };
   const { showToast } = useToast();
+  // The operator pushes one person and reads the history (00673): no group audiences and no inbox
+  // statistics, which read every user's inbox.
+  const { can, ready } = usePanelCan();
+  const canBroadcast = can('push.broadcast');
 
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -115,8 +120,16 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     void loadHistory();
-    void loadInboxStats();
-  }, [loadHistory, loadInboxStats]);
+  }, [loadHistory]);
+
+  useEffect(() => {
+    if (ready && canBroadcast) void loadInboxStats();
+  }, [ready, canBroadcast, loadInboxStats]);
+
+  // send-push takes one person from the operator: the audience is that person.
+  useEffect(() => {
+    if (ready && !canBroadcast) setTargetType('user');
+  }, [ready, canBroadcast]);
 
   const handleUserSearch = async (query: string) => {
     setUserSearch(query);
@@ -307,9 +320,13 @@ export default function NotificationsPage() {
               }}
               className={inputCls}
             >
-              <option value="all">{t('notifications.audience_all', { defaultValue: 'Todos' })}</option>
-              <option value="customers">{t('notifications.audience_customers', { defaultValue: 'Pasajeros' })}</option>
-              <option value="drivers">{t('notifications.audience_drivers', { defaultValue: 'Conductores' })}</option>
+              {canBroadcast && (
+                <>
+                  <option value="all">{t('notifications.audience_all', { defaultValue: 'Todos' })}</option>
+                  <option value="customers">{t('notifications.audience_customers', { defaultValue: 'Pasajeros' })}</option>
+                  <option value="drivers">{t('notifications.audience_drivers', { defaultValue: 'Conductores' })}</option>
+                </>
+              )}
               <option value="user">{t('notifications.audience_user', { defaultValue: 'Usuario específico' })}</option>
             </select>
           </label>
@@ -400,65 +417,69 @@ export default function NotificationsPage() {
         </div>
       </SectionCard>
 
-      {/* Inbox stats */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <KpiCard
-          label={t('notifications.kpi_sent_today', { defaultValue: 'Enviadas hoy' })}
-          value={statsLoading ? '—' : String(inboxStats?.totalToday ?? 0)}
-          tone="info"
-          loading={statsLoading}
-        />
-        <KpiCard
-          label={t('notifications.kpi_unread', { defaultValue: 'Sin leer' })}
-          value={statsLoading ? '—' : String(inboxStats?.totalUnread ?? 0)}
-          tone={inboxStats && inboxStats.totalUnread > 0 ? 'warning' : 'default'}
-          loading={statsLoading}
-        />
-        <KpiCard
-          label={t('notifications.kpi_types_today', { defaultValue: 'Tipos únicos hoy' })}
-          value={statsLoading ? '—' : String(Object.keys(inboxStats?.byType ?? {}).length)}
-          loading={statsLoading}
-        />
-      </div>
-
-      {inboxStats && Object.keys(inboxStats.byType).length > 0 && (
-        <SectionCard
-          eyebrow={t('notifications.today_distribution_eyebrow', { defaultValue: 'Hoy' })}
-          title={t('notifications.today_distribution_title', { defaultValue: 'Distribución por tipo' })}
-        >
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(inboxStats.byType)
-              .sort(([, a], [, b]) => b - a)
-              .map(([type, count]) => (
-                <span
-                  key={type}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-1 text-[11px]"
-                >
-                  <span className="font-mono font-medium text-ink">{type}</span>
-                  <span className="font-mono font-semibold text-ink-muted">{count}</span>
-                </span>
-              ))}
+      {/* Inbox stats: they read every user's inbox, so admins only. */}
+      {canBroadcast && (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <KpiCard
+              label={t('notifications.kpi_sent_today', { defaultValue: 'Enviadas hoy' })}
+              value={statsLoading ? '—' : String(inboxStats?.totalToday ?? 0)}
+              tone="info"
+              loading={statsLoading}
+            />
+            <KpiCard
+              label={t('notifications.kpi_unread', { defaultValue: 'Sin leer' })}
+              value={statsLoading ? '—' : String(inboxStats?.totalUnread ?? 0)}
+              tone={inboxStats && inboxStats.totalUnread > 0 ? 'warning' : 'default'}
+              loading={statsLoading}
+            />
+            <KpiCard
+              label={t('notifications.kpi_types_today', { defaultValue: 'Tipos únicos hoy' })}
+              value={statsLoading ? '—' : String(Object.keys(inboxStats?.byType ?? {}).length)}
+              loading={statsLoading}
+            />
           </div>
-        </SectionCard>
-      )}
 
-      {inboxStats?.recent && (
-        <SectionCard
-          eyebrow={t('notifications.inbox_eyebrow', { defaultValue: 'Inbox' })}
-          title={t('notifications.inbox_title', { defaultValue: 'Últimas notificaciones entregadas' })}
-        >
-          <DataTable<AppNotification>
-            columns={inboxColumns}
-            rows={inboxStats.recent}
-            keyField="id"
-            loading={statsLoading}
-            empty={{
-              icon: Bell,
-              title: t('notifications.empty_inbox_title', { defaultValue: 'Sin notificaciones recientes' }),
-              body: t('notifications.empty_inbox_body', { defaultValue: 'Todavía no llegó ninguna a los usuarios.' }),
-            }}
-          />
-        </SectionCard>
+          {inboxStats && Object.keys(inboxStats.byType).length > 0 && (
+            <SectionCard
+              eyebrow={t('notifications.today_distribution_eyebrow', { defaultValue: 'Hoy' })}
+              title={t('notifications.today_distribution_title', { defaultValue: 'Distribución por tipo' })}
+            >
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(inboxStats.byType)
+                  .sort(([, a], [, b]) => b - a)
+                  .map(([type, count]) => (
+                    <span
+                      key={type}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-1 text-[11px]"
+                    >
+                      <span className="font-mono font-medium text-ink">{type}</span>
+                      <span className="font-mono font-semibold text-ink-muted">{count}</span>
+                    </span>
+                  ))}
+              </div>
+            </SectionCard>
+          )}
+
+          {inboxStats?.recent && (
+            <SectionCard
+              eyebrow={t('notifications.inbox_eyebrow', { defaultValue: 'Inbox' })}
+              title={t('notifications.inbox_title', { defaultValue: 'Últimas notificaciones entregadas' })}
+            >
+              <DataTable<AppNotification>
+                columns={inboxColumns}
+                rows={inboxStats.recent}
+                keyField="id"
+                loading={statsLoading}
+                empty={{
+                  icon: Bell,
+                  title: t('notifications.empty_inbox_title', { defaultValue: 'Sin notificaciones recientes' }),
+                  body: t('notifications.empty_inbox_body', { defaultValue: 'Todavía no llegó ninguna a los usuarios.' }),
+                }}
+              />
+            </SectionCard>
+          )}
+        </>
       )}
 
       {/* History */}

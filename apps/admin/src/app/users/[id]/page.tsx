@@ -143,8 +143,8 @@ function AdminUserDetailPage() {
     if (!newActive && !blockReason.trim()) return; // Require reason to block
     setBlockUpdating(true);
     try {
-      // admin_set_user_active (00629) bans the login, closes the sessions,
-      // takes a driver offline and writes the audit row under the caller.
+      // admin_set_user_active (00629; operators too since 00673) bans the login, closes the
+      // sessions, takes a driver offline and writes the audit row under the caller.
       await adminService.toggleUserActive(id, newActive, blockReason || undefined);
       setDetail((prev) =>
         prev
@@ -222,7 +222,8 @@ function AdminUserDetailPage() {
               {t('admin_ops.adjust_wallet_btn', { defaultValue: 'Ajustar saldo TC' })}
             </button>
           )}
-          {can('users.block') && (
+          {/* Passengers and drivers; a team account needs a super admin (00673, as the server checks). */}
+          {can('users.block') && (!isPanelRole(user.role) || isSuperAdmin) && (
             user.is_active ? (
               <button
                 onClick={() => setBlockModalOpen(true)}

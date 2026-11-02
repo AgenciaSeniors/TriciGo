@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { adminService } from '@tricigo/api/services/admin';
-import { panelReadService } from '@tricigo/api';
+import { caseOpsService, panelReadService } from '@tricigo/api';
+import type { IncidentDecision } from '@tricigo/api';
+import type { IncidentStatus } from '@tricigo/types';
 import { useTranslation } from '@tricigo/i18n';
 import { getErrorMessage } from '@tricigo/utils';
-import { useAdminUser } from '@/lib/useAdminUser';
+import { opsErrorMessage } from '@/lib/opsErrors';
 import { usePanelCan } from '@/lib/usePanelCan';
 import { useToast } from '@/components/ui/AdminToast';
 import { DataTable, type DataColumn } from '@/components/data/DataTable';
@@ -46,11 +48,10 @@ function typeLabel(raw: string, t: (k: string, opts?: { defaultValue?: string })
 }
 
 export default function IncidentsPage() {
-  const { userId: adminUserId } = useAdminUser();
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
   const { can, ready } = usePanelCan();
-  // The operator reads the full incidents but acts on none yet (00668).
+  // The operator reads the full incidents (00668) and works them (00673).
   const fullData = can('detail.full');
   const canAct = can('cases.act');
 
@@ -105,18 +106,19 @@ export default function IncidentsPage() {
   }, [fetchIncidents]);
 
   const advanceStatus = useCallback(
-    async (id: string, next: string, successMsg: string) => {
+    async (incident: Incident, next: IncidentDecision, successMsg: string) => {
       try {
-        await adminService.updateIncidentStatus(id, next, adminUserId);
-        // Refetch instead of patching in place so the incident drops out of
-        // the active tab (e.g. "Abiertos") when its status no longer matches.
-        await fetchIncidents();
+        // Bound to the status on screen: the server refuses with incident_changed if it moved.
+        await caseOpsService.updateIncident(incident.id, next, incident.status as IncidentStatus);
         showToast('success', successMsg);
       } catch (err) {
-        showToast('error', getErrorMessage(err));
+        showToast('error', opsErrorMessage(err, t));
       }
+      // Refetch instead of patching in place so the incident drops out of
+      // the active tab (e.g. "Abiertos") when its status no longer matches.
+      await fetchIncidents();
     },
-    [adminUserId, showToast, fetchIncidents],
+    [showToast, fetchIncidents, t],
   );
 
   const columns: DataColumn<Incident>[] = useMemo(
@@ -231,7 +233,7 @@ export default function IncidentsPage() {
             label: t('incidents.action_investigate', { defaultValue: 'Investigar' }),
             onClick: (i) => {
               if (i.status === 'open') {
-                void advanceStatus(i.id, 'investigating', t('incidents.toast_now_investigating', { defaultValue: 'Incidente pasado a investigación' }));
+                void advanceStatus(i, 'investigating', t('incidents.toast_now_investigating', { defaultValue: 'Incidente pasado a investigación' }));
               }
             },
           },
@@ -239,7 +241,7 @@ export default function IncidentsPage() {
             label: t('incidents.action_resolve', { defaultValue: 'Resolver' }),
             onClick: (i) => {
               if (i.status === 'investigating') {
-                void advanceStatus(i.id, 'resolved', t('incidents.toast_resolved', { defaultValue: 'Incidente resuelto' }));
+                void advanceStatus(i, 'resolved', t('incidents.toast_resolved', { defaultValue: 'Incidente resuelto' }));
               }
             },
           },

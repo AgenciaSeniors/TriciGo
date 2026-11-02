@@ -4,10 +4,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
-import { panelReadService } from '@tricigo/api';
+import { caseOpsService, panelReadService } from '@tricigo/api';
+import type { IncidentDecision } from '@tricigo/api';
+import type { IncidentStatus } from '@tricigo/types';
 import { useTranslation } from '@tricigo/i18n';
 import { getErrorMessage } from '@tricigo/utils';
-import { useAdminUser } from '@/lib/useAdminUser';
+import { isOpsStaleError, opsErrorMessage } from '@/lib/opsErrors';
 import { usePanelCan } from '@/lib/usePanelCan';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
@@ -68,10 +70,9 @@ type IncidentDetail = {
 export default function IncidentDetailPage() {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
-  const { userId: adminUserId } = useAdminUser();
   const { id } = useParams<{ id: string }>();
   const { can, ready } = usePanelCan();
-  // The operator reads the full incident but acts on none yet (00668).
+  // The operator reads the full incident (00668) and works it (00673).
   const fullData = can('detail.full');
   const canAct = can('cases.act');
 
@@ -117,29 +118,31 @@ export default function IncidentDetailPage() {
   }, [load]);
 
   const advanceStatus = useCallback(
-    async (next: string, successMsg: string) => {
+    async (next: IncidentDecision, successMsg: string) => {
       if (!detail) return;
       setUpdating(true);
       try {
-        await adminService.updateIncidentStatus(detail.incident.id, next, adminUserId);
+        // Bound to the status on screen: the server refuses with incident_changed if it moved.
+        await caseOpsService.updateIncident(detail.incident.id, next, detail.incident.status as IncidentStatus);
         setDetail((prev) => (prev ? { ...prev, incident: { ...prev.incident, status: next } } : prev));
         showToast('success', successMsg);
       } catch (err) {
-        showToast('error', getErrorMessage(err));
+        showToast('error', opsErrorMessage(err, t));
+        if (isOpsStaleError(err)) void load();
       } finally {
         setUpdating(false);
       }
     },
-    [detail, adminUserId, showToast, t],
+    [detail, showToast, t, load],
   );
 
   const hideReview = useCallback(async () => {
     if (!detail?.review) return;
-    const reviewId = detail.review.id;
     setUpdating(true);
     try {
-      await adminService.adminHideReview(reviewId, adminUserId);
-      await adminService.updateIncidentStatus(detail.incident.id, 'resolved', adminUserId, 'Reseña ocultada');
+      // One call: the review is hidden and the incident resolved together (00673).
+      await caseOpsService.updateIncident(detail.incident.id, 'resolved', detail.incident.status as IncidentStatus,
+        { notes: 'Reseña ocultada', hideReview: true });
       setDetail((prev) =>
         prev && prev.review
           ? { ...prev, incident: { ...prev.incident, status: 'resolved' }, review: { ...prev.review, is_visible: false } }
@@ -147,11 +150,12 @@ export default function IncidentDetailPage() {
       );
       showToast('success', t('incidents.review_hidden', { defaultValue: 'Reseña ocultada' }));
     } catch (err) {
-      showToast('error', getErrorMessage(err));
+      showToast('error', opsErrorMessage(err, t));
+      if (isOpsStaleError(err)) void load();
     } finally {
       setUpdating(false);
     }
-  }, [detail, adminUserId, showToast, t]);
+  }, [detail, showToast, t, load]);
 
   const breadcrumb = (
     <AdminBreadcrumb

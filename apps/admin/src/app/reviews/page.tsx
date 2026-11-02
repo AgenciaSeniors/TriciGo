@@ -12,6 +12,8 @@ import { DataTable, type DataColumn, type SortState } from '@/components/data/Da
 import { FilterBar, type StatusTab } from '@/components/data/FilterBar';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { usePanelCan } from '@/lib/usePanelCan';
+import { caseOpsService } from '@tricigo/api';
+import { isOpsStaleError, opsErrorMessage } from '@/lib/opsErrors';
 
 const PAGE_SIZE = 20;
 
@@ -51,6 +53,8 @@ export default function ReviewsPage() {
   const { showToast } = useToast();
   const { can } = usePanelCan();
   const canAct = can('moderation.act');
+  // Featuring puts a review on the website: admins only (00673).
+  const canFeature = can('reviews.feature');
 
   const [reviews, setReviews] = useState<ReviewRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -202,13 +206,9 @@ export default function ReviewsPage() {
   const handleToggleVisibility = async (review: ReviewRow) => {
     setActionLoading(review.id);
     try {
-      const supabase = createBrowserClient();
       const newVisibility = !review.is_visible;
-      const { error: dbError } = await supabase
-        .from('reviews')
-        .update({ is_visible: newVisibility })
-        .eq('id', review.id);
-      if (dbError) throw dbError;
+      // Bound to what was on screen: the server refuses with review_changed if it moved.
+      await caseOpsService.setReviewVisibility(review.id, newVisibility, review.is_visible);
       setReviews((prev) =>
         prev.map((r) => (r.id === review.id ? { ...r, is_visible: newVisibility } : r)),
       );
@@ -216,7 +216,8 @@ export default function ReviewsPage() {
         ? t('reviews.toast_visible', { defaultValue: 'Reseña visible' })
         : t('reviews.toast_hidden', { defaultValue: 'Reseña ocultada' }));
     } catch (err) {
-      showToast('error', getErrorMessage(err));
+      showToast('error', opsErrorMessage(err, t));
+      if (isOpsStaleError(err)) void fetchReviews();
     } finally {
       setActionLoading(null);
     }
@@ -460,19 +461,19 @@ export default function ReviewsPage() {
         onSortChange={setSort}
         pagination={{ page, pageSize: PAGE_SIZE, hasMore: reviews.length === PAGE_SIZE }}
         onPaginationChange={(next) => setPage(next.page)}
-        rowActions={canAct ? [
-          {
+        rowActions={canAct || canFeature ? [
+          ...(canAct ? [{
             label: t('reviews.action_toggle_visibility', { defaultValue: 'Mostrar/Ocultar' }),
-            onClick: (r) => {
+            onClick: (r: ReviewRow) => {
               if (actionLoading !== r.id) void handleToggleVisibility(r);
             },
-          },
-          {
+          }] : []),
+          ...(canFeature ? [{
             label: t('reviews.action_toggle_featured', { defaultValue: 'Destacar' }),
-            onClick: (r) => {
+            onClick: (r: ReviewRow) => {
               if (actionLoading !== r.id) void handleToggleFeatured(r);
             },
-          },
+          }] : []),
         ] : undefined}
       />
     </div>

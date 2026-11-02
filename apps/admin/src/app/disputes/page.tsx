@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Scale } from 'lucide-react';
-import { disputeService, panelReadService, type PanelDispute } from '@tricigo/api';
+import { caseOpsService, disputeService, panelReadService, type DisputeEscalation, type PanelDispute, type RefundResolution } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import type { DisputeStatus, DisputeResolution } from '@tricigo/types';
 import { useAdminUser } from '@/lib/useAdminUser';
 import { usePanelCan } from '@/lib/usePanelCan';
+import { isOpsStaleError, opsErrorMessage } from '@/lib/opsErrors';
 import { formatTRC, getErrorMessage } from '@tricigo/utils';
 import { formatAdminDate } from '@/lib/formatDate';
 import { useToast } from '@/components/ui/AdminToast';
@@ -44,9 +45,11 @@ export default function DisputesPage() {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
   const { can, ready } = usePanelCan();
-  // The operator reads the full disputes (evidence, refunds, resolution) but resolves none yet (00668).
+  // The operator reads the full disputes (00668) and works them; a refund it proposes to an admin,
+  // who pays it (00673).
   const fullData = can('detail.full');
   const canAct = can('cases.act');
+  const canRefund = can('money.act');
 
   const [disputes, setDisputes] = useState<PanelDispute[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -110,6 +113,9 @@ export default function DisputesPage() {
   const [adminNotes, setAdminNotes] = useState('');
   const [resolving, setResolving] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  // The refund an operator proposed for the selected dispute, waiting for an admin.
+  const [escalation, setEscalation] = useState<DisputeEscalation | null>(null);
+  const [refundingEscalation, setRefundingEscalation] = useState(false);
 
   const fetchDisputes = useCallback(async () => {
     // Wait for the role: marketing reads the panel view, which leaves out evidence, refunds and notes.
@@ -134,6 +140,28 @@ export default function DisputesPage() {
     void fetchDisputes();
   }, [fetchDisputes]);
 
+  const selectedId = selected?.id ?? null;
+  const loadEscalation = useCallback(async (disputeId: string | null) => {
+    setEscalation(null);
+    if (!disputeId || !fullData) return;
+    try {
+      setEscalation(await caseOpsService.getPendingEscalation(disputeId));
+    } catch (err) {
+      showToast('error', getErrorMessage(err));
+    }
+  }, [fullData, showToast]);
+
+  useEffect(() => {
+    void loadEscalation(selectedId);
+  }, [selectedId, loadEscalation]);
+
+  /** After a refusal saying the dispute moved: drop the stale selection and load the tray again. */
+  const reloadIfStale = (err: unknown) => {
+    if (!isOpsStaleError(err)) return;
+    setSelected(null);
+    void fetchDisputes();
+  };
+
   const handleSelect = (d: PanelDispute) => {
     setSelected(d);
     setAdminNotes(d.admin_notes ?? '');
@@ -148,7 +176,8 @@ export default function DisputesPage() {
     if (!resolutionNotes.trim()) errors.resolutionNotes = t('disputes.notes_required', { defaultValue: 'Cuéntanos qué hiciste y por qué.' });
     if (resolution !== 'no_action' && resolution !== 'warning_issued') {
       const amt = parseInt(refundAmount || '0', 10);
-      if (isNaN(amt) || amt < 0) errors.refundAmount = t('disputes.amount_invalid', { defaultValue: 'El monto debe ser un número positivo.' });
+      // A proposal needs an amount; an admin may still refund 0.
+      if (isNaN(amt) || amt < (canRefund ? 0 : 1)) errors.refundAmount = t('disputes.amount_invalid', { defaultValue: 'El monto debe ser un número positivo.' });
     }
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -159,21 +188,29 @@ export default function DisputesPage() {
     if (!validateResolveForm()) return;
     setResolving(true);
     try {
-      const amount = resolution === 'no_action' ? 0 : parseInt(refundAmount || '0', 10);
-      const d = selected as unknown as { ride_final_fare_trc?: number; ride_estimated_fare_trc?: number };
-      const maxRefund = d.ride_final_fare_trc ?? d.ride_estimated_fare_trc ?? 100000;
-      if (amount > maxRefund) {
-        showToast('warning', t('disputes.refund_limit', { max: formatTRC(maxRefund), defaultValue: 'El reembolso no puede superar {{max}}' }));
-        setResolving(false);
-        return;
+      if (resolution === 'no_action' || resolution === 'warning_issued') {
+        // No money: the server resolves in the driver's favour and tells both parties. No amount is
+        // sent, so a figure typed earlier under a refund option cannot be paid out.
+        await caseOpsService.resolveDisputeWithoutRefund(selected.id, resolution, selected.status, resolutionNotes);
+      } else {
+        const amount = parseInt(refundAmount || '0', 10);
+        const d = selected as unknown as { ride_final_fare_trc?: number; ride_estimated_fare_trc?: number };
+        const maxRefund = d.ride_final_fare_trc ?? d.ride_estimated_fare_trc ?? 100000;
+        if (amount > maxRefund) {
+          showToast('warning', t('disputes.refund_limit', { max: formatTRC(maxRefund), defaultValue: 'El reembolso no puede superar {{max}}' }));
+          setResolving(false);
+          return;
+        }
+        if (!canRefund) {
+          // The operator proposes it; an admin pays it from this same page.
+          await caseOpsService.escalateDispute(selected.id, resolution as RefundResolution, amount, selected.status, resolutionNotes);
+          setSelected(null);
+          await fetchDisputes();
+          showToast('success', t('disputes.toast_escalated', { defaultValue: 'Propuesta enviada. Un administrador decide el reembolso.' }));
+          return;
+        }
+        await disputeService.resolveDispute(selected.id, adminUserId, resolution as RefundResolution, amount, resolutionNotes);
       }
-      await disputeService.resolveDispute(
-        selected.id,
-        adminUserId,
-        resolution,
-        amount,
-        resolutionNotes,
-      );
       setSelected(null);
       // Refetch instead of patching in place: the server maps resolution →
       // status (warning_issued → resolved_driver, mig 00167), and a resolved
@@ -181,19 +218,35 @@ export default function DisputesPage() {
       await fetchDisputes();
       showToast('success', t('disputes.toast_resolved', { defaultValue: 'Disputa resuelta' }));
     } catch (err) {
-      showToast('error', getErrorMessage(err));
+      showToast('error', opsErrorMessage(err, t));
+      reloadIfStale(err);
     } finally {
       setResolving(false);
+    }
+  };
+
+  /** Admins: pay the proposal as it is on screen (the server refuses with amount_changed if it moved). */
+  const handleRefundEscalation = async () => {
+    if (!escalation) return;
+    setRefundingEscalation(true);
+    try {
+      await caseOpsService.refundEscalation(escalation.id, escalation.suggested_trc);
+      setSelected(null);
+      await fetchDisputes();
+      showToast('success', t('disputes.toast_resolved', { defaultValue: 'Disputa resuelta' }));
+    } catch (err) {
+      showToast('error', opsErrorMessage(err, t));
+      reloadIfStale(err);
+    } finally {
+      setRefundingEscalation(false);
     }
   };
 
   const handleAssignToMe = async () => {
     if (!selected) return;
     try {
-      await disputeService.updateDisputeStatus(selected.id, {
-        status: 'under_review',
-        assigned_to: adminUserId,
-      });
+      // The server assigns it to the caller and tells both parties.
+      await caseOpsService.takeDispute(selected.id, selected.status);
       const updated: PanelDispute = {
         ...selected,
         status: 'under_review' as DisputeStatus,
@@ -205,18 +258,20 @@ export default function DisputesPage() {
       await fetchDisputes();
       showToast('success', t('disputes.toast_assigned', { defaultValue: 'Asignada a ti' }));
     } catch (err) {
-      showToast('error', getErrorMessage(err));
+      showToast('error', opsErrorMessage(err, t));
+      reloadIfStale(err);
     }
   };
 
   const handleSaveAdminNotes = async () => {
     if (!selected) return;
     try {
-      await disputeService.addAdminNotes(selected.id, adminNotes);
-      setSelected((prev) => (prev ? { ...prev, admin_notes: adminNotes } : null));
+      await caseOpsService.saveDisputeNotes(selected.id, selected.status, adminNotes);
+      setSelected((prev) => (prev ? { ...prev, admin_notes: adminNotes.trim() || null } : null));
       showToast('success', t('disputes.toast_notes_saved', { defaultValue: 'Notas guardadas' }));
     } catch (err) {
-      showToast('error', getErrorMessage(err));
+      showToast('error', opsErrorMessage(err, t));
+      reloadIfStale(err);
     }
   };
 
@@ -489,6 +544,39 @@ export default function DisputesPage() {
                 </div>
               </section>
 
+              {escalation && (
+                <section className="px-5 pt-4">
+                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+                    <h3 className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-800 dark:text-amber-400">
+                      {t('disputes.escalation_title', { defaultValue: 'Reembolso propuesto' })}
+                    </h3>
+                    <p className="font-display text-[15px] font-semibold text-ink">
+                      {formatTRC(escalation.suggested_trc)} · {resolutionLabel(escalation.resolution)}
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap break-words text-[12.5px] text-ink-muted">{escalation.reason}</p>
+                    <p className="mt-1 text-[11px] text-ink-subtle">{formatAdminDate(escalation.escalated_at)}</p>
+                    {canRefund ? (
+                      <div className="mt-3 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => void handleRefundEscalation()}
+                          disabled={refundingEscalation}
+                          className="rounded-full bg-ink px-4 py-1.5 text-[12px] font-medium text-surface hover:opacity-90 disabled:opacity-50"
+                        >
+                          {refundingEscalation
+                            ? t('disputes.resolving', { defaultValue: 'Resolviendo…' })
+                            : t('disputes.escalation_refund_button', { defaultValue: 'Reembolsar lo sugerido' })}
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-[12px] text-ink-muted">
+                        {t('disputes.escalation_waiting', { defaultValue: 'Esperando a un administrador.' })}
+                      </p>
+                    )}
+                  </div>
+                </section>
+              )}
+
               {canResolve && (
                 <section className="px-5 py-4">
                   <div className="rounded-xl border border-primary-500/20 bg-primary-500/5 p-4">
@@ -581,7 +669,9 @@ export default function DisputesPage() {
                             ? t('disputes.resolving', { defaultValue: 'Resolviendo…' })
                             : resolution === 'no_action'
                               ? t('disputes.deny_button', { defaultValue: 'Denegar' })
-                              : t('disputes.resolve_button', { defaultValue: 'Resolver' })}
+                              : isNumericResolution && !canRefund
+                                ? t('disputes.escalate_button', { defaultValue: 'Escalar con monto sugerido' })
+                                : t('disputes.resolve_button', { defaultValue: 'Resolver' })}
                         </button>
                       </div>
                     </div>
@@ -631,7 +721,7 @@ export default function DisputesPage() {
                   </div>
                 </section>
               ) : fullData ? (
-                // The operator reads the notes but writes none yet (00668). Marketing's view has no notes.
+                // Read-only: the full detail without cases.act. Marketing's view has no notes.
                 <section className="px-5 py-4">
                   <h3 className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
                     {t('disputes.admin_notes_title', { defaultValue: 'Notas internas' })}

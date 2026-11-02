@@ -100,25 +100,6 @@ export const supportService = {
     return data as SupportTicket | null;
   },
 
-  /**
-   * Update ticket status, priority, or assignment (admin).
-   */
-  async updateTicket(
-    ticketId: string,
-    updates: Partial<Pick<SupportTicket, 'status' | 'priority' | 'assigned_to'>>,
-  ): Promise<void> {
-    const supabase = getSupabaseClient();
-    const payload: Record<string, unknown> = { ...updates, updated_at: new Date().toISOString() };
-    if (updates.status === 'resolved' || updates.status === 'closed') {
-      payload.resolved_at = new Date().toISOString();
-    }
-    const { error } = await supabase
-      .from('support_tickets')
-      .update(payload)
-      .eq('id', ticketId);
-    if (error) throw error;
-  },
-
   // ==================== MESSAGES ====================
 
   /**
