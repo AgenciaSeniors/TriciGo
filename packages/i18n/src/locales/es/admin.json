@@ -453,6 +453,7 @@
     "cancel_error": "No se pudo cancelar el viaje",
     "cancel_already_closed": "El viaje ya estaba cerrado",
     "cancel_forbidden": "No tienes permiso para cancelar viajes",
+    "cancel_self_ride": "No puedes cancelar como soporte un viaje en el que eres el pasajero o el conductor",
     "page_eyebrow": "Operación - viajes",
     "page_description": "Todas las solicitudes de viaje, en cualquier estado, en toda Cuba.",
     "load_error": "No pudimos cargar los viajes.",

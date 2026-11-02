@@ -2269,7 +2269,7 @@ Cuando el despacho no encuentra conductor, soporte ayuda desde el panel: banner 
 
 Desde la 00660, `/rides/[id]/assist` también ayuda a un viaje `accepted`, `driver_en_route`, `arrived_at_pickup`, `in_progress` o `arrived_at_destination`: la app del conductor murió, no tiene GPS para marcar "Llegué" o no puede terminar. Diseño: `docs/superpowers/specs/2026-10-12-stuck-ride-support-design.md`. Ensayo: `supabase/tests/00660/run.sh` (RED: 80 fallos; GREEN 93/93, con la migración aplicada dos veces, una copia CRLF y pruebas negativas de sus autochequeos). **Estado:** ensayada en prod el 2026-10-12 dentro de un bloque revertido (la migración llegó intacta, con md5 `6e687d1f…`, y dejó en cada función el mismo md5 que en el ensayo local; se probaron el viaje completo con las cuentas demo, la liberación y el rechazo con un conductor equivocado). Todavía no está aplicada.
 
-- **Cuatro RPC, solo admin y super_admin** (marketing no): `admin_active_ride_context`, `admin_release_active_ride` (vuelve a buscar conductor ya), `admin_advance_active_ride` (un paso: llegada, inicio, destino) y `admin_complete_active_ride` (cobra el precio acordado más la espera registrada, por `complete_ride_and_pay`).
+- **Cuatro RPC, para admin, super_admin y, desde la 00671, el operador** (marketing no): `admin_active_ride_context`, `admin_release_active_ride` (vuelve a buscar conductor ya), `admin_advance_active_ride` (un paso: llegada, inicio, destino) y `admin_complete_active_ride` (cobra el precio acordado más la espera registrada, por `complete_ride_and_pay`).
   - Las tres acciones reciben el estado y el `driver_id` que vio soporte, y responden `ride_changed` si cualquiera de los dos cambió.
   - Completar recibe además el total que soporte confirmó, y responde `amount_changed` si cambió.
   - Las cuatro rechazan `self_ride` cuando el admin es el pasajero o el conductor del viaje.
@@ -2659,11 +2659,11 @@ Desde la 00663, marketing también abre en solo lectura Viajes, Conductores, Usu
   | `get_product_failures` | `57a40ccc37b3efd3f6053804d922b03e` | 7232 | nueva |
   | `_panel_driver_churn_risk` | `20240a8b10635d4349bc31b96ef0eb50` | 306 | nueva |
 
-### Rol `operator` en el panel admin (00667/00668, entrega 1 de 4)
+### Rol `operator` en el panel admin (00667/00668 y 00671, entregas 1 y 3 de 4)
 
 Una persona de operaciones: viajes en vivo, soporte, alta de conductores, cuentas y moderación. Nunca toca dinero, configuración ni equipo. Diseño: `docs/superpowers/specs/2026-10-25-operator-role-design.md`. Plan de esta entrega: `docs/superpowers/plans/2026-10-25-operator-role-base.md`. Ensayo: `supabase/tests/00668/run.sh` (sin la migración pasan 34 y fallan 92; con la migración aplicada dos veces pasan las 163, entre ellas una copia CRLF, una prueba negativa de cada autochequeo y la que compara 177 escrituras del operador antes y después de aplicarla).
 
-- **Qué hace esta entrega:** el operador entra (invitado desde `/equipo`), abre sus páginas y lee todo lo que muestran, y recibe los avisos de soporte y SOS y el resumen diario sin el bloque de dinero. Todavía no actúa sobre nada: cada botón de acción se oculta por capacidad y el servidor lo rechaza por su cuenta. Las entregas 2 (alta de conductores y flotas), 3 (viajes en vivo) y 4 (soporte, cuentas y moderación) abren las acciones con funciones `ops_*`.
+- **Qué hace esta entrega:** el operador entra (invitado desde `/equipo`), abre sus páginas y lee todo lo que muestran, y recibe los avisos de soporte y SOS y el resumen diario sin el bloque de dinero. Con esta entrega no actuaba sobre nada: cada botón de acción se oculta por capacidad y el servidor lo rechaza por su cuenta. La entrega 3 (00671, viajes en vivo) ya está hecha; faltan la 2 (alta de conductores y flotas) y la 4 (soporte, cuentas y moderación).
 - **Helpers:** `is_operator()` (solo operator) e `is_ops_staff()` (admin, super_admin u operator). Son plpgsql con el `RETURN false` sin sesión de 00592, y `anon` tiene EXECUTE porque las políticas los llaman también cuando lee `anon`. `is_admin()` no cambia.
 - **Lecturas:**
   - Una política `<tabla>_select_operator` (SELECT, `{authenticated}`, `USING ((SELECT public.is_operator()))`) en 33 tablas. La lista está en `c_tables`, en el §8 de la migración.
@@ -2680,8 +2680,8 @@ Una persona de operaciones: viajes en vivo, soporte, alta de conductores, cuenta
   - una función de dinero o de roles menciona al operador. La lista incluye `admin_refund_ride_commission`, `admin_send_wallet_v2_bonus_push`, `promote_user_role`, `admin_set_user_level` y `admin_set_user_active`. Las funciones de equipo no están: nombran al operador porque es un rol que se puede invitar, y lo que lo deja afuera es `_team_require_super_admin`.
 
   Una tabla nueva que el operador tenga que leer se agrega en una migración que también actualice esas listas.
-- **Panel:** `panelCanAct` ya no existe. Las páginas preguntan `usePanelCan().can('<capacidad>')` (`packages/utils/src/adminPanelAccess.ts`). En esta entrega el operador solo tiene `detail.full`: ve el detalle completo (GPS, documentos, chat, billetera) y ningún botón. Una página nueva con acciones pregunta por la capacidad que corresponde, no por el rol.
-- **Transiciones de viaje:** `enforce_ride_transition` trata al operador como `customer`, igual que a marketing: viaja como pasajero, sin transiciones de admin. La entrega 3 lo trata como `admin` solo dentro de una función `ops_*` sobre ese viaje.
+- **Panel:** `panelCanAct` ya no existe. Las páginas preguntan `usePanelCan().can('<capacidad>')` (`packages/utils/src/adminPanelAccess.ts`). En la entrega 1 el operador solo tenía `detail.full`: ve el detalle completo (GPS, documentos, chat, billetera) y ningún botón. La 3 le suma `rides.act`. Una página nueva con acciones pregunta por la capacidad que corresponde, no por el rol.
+- **Transiciones de viaje:** `enforce_ride_transition` trata al operador como `customer`, igual que a marketing: viaja como pasajero, sin transiciones de admin. Desde la 00671 (entrega 3, abajo) lo trata como `admin` solo dentro de una función de soporte que actúa sobre ese viaje.
 - **Avisos:**
   - `_support_alert` suma al operador a los avisos de soporte.
   - **El push de SOS lo manda `_sos_staff_alert`** (trigger `incident_reports_sos_staff_alert`, AFTER INSERT de un SOS) por `cron_http_post`, con la etiqueta `sos-staff-alert`:
@@ -2702,6 +2702,30 @@ Una persona de operaciones: viajes en vivo, soporte, alta de conductores, cuenta
   - **Verificado por objeto después:** los 32 cuerpos (29 parcheados y 3 nuevos) tienen el md5 del ensayo local y ningún `\r`; 33 políticas `*_select_operator` en `public` y 3 en storage; el trigger del SOS activo; `ops_delivery_details` solo para `authenticated` y `service_role`; el CHECK de equipo acepta `operator`. Los crons siguieron sin fallas.
   - **Funciones:** `send-email` v62 y `send-team-digest` v2, desplegadas desde una exportación LF de master: bajadas de nuevo, son byte a byte iguales y conservan `verify_jwt` (false y true).
   - **Panel:** los deploys del merge (#1176) fallaron dos veces. La primera vez los rechazó el control del runner, porque el repo volvió a llamarse AgenciaSeniors/TriciGo (lo arregló #1178). La segunda, "Re-run failed jobs" no encontró el build: el artifact se guarda un día. Después de un fallo así hay que relanzar el workflow entero desde master ("Run workflow"), no los jobs fallidos.
+
+#### Entrega 3: viajes en vivo (00671)
+
+El operador asiste viajes en búsqueda, destraba viajes con conductor y cancela, con las mismas funciones que usan los admins. En el panel tiene la capacidad `rides.act`, así que ve los botones de `/rides/[id]/assist` y "Cancelar viaje". Ensayo: `supabase/tests/00671/run.sh` (sin la migración fallan 17 de 26; con ella pasan las 36, aplicada dos veces, con una copia CRLF y una prueba negativa de cada autochequeo).
+
+- **Funciones abiertas** (`is_admin()` → `is_ops_staff()`): `admin_offer_ride_to_driver`, `admin_assign_ride_to_driver`, `admin_change_ride_service` (00628), `admin_release_active_ride`, `admin_advance_active_ride`, `admin_complete_active_ride` (00660) y `admin_cancel_ride` (00485). Marketing sigue afuera.
+- **Nunca sobre un viaje propio**, para cualquier rol, admins incluidos. Las tres de 00628 y la cancelación responden `self_ride` cuando quien llama es el pasajero o el conductor del viaje, o cuando quiere ofrecerse o asignarse el viaje a sí mismo. Las de 00660 ya lo hacían.
+- **Cómo pasa los controles sin abrirlos:** `_ops_allow(ids)` anota en `app.ops_targets`, por el resto de la transacción, las filas sobre las que actúa una función de soporte. Solo la puede llamar su dueño (`postgres`), y un cliente no puede fijar `app.*` por PostgREST. `_ops_acting_on(id)` es verdadero si quien llama es del equipo de operaciones y el id está anotado. Lo consultan:
+  - `enforce_ride_transition`: el operador mueve ese viaje como `admin`. `ride_transitions` guarda `actor_role = 'admin'`; quién fue está en `actor_id`;
+  - `enforce_ride_update_columns`: liberar un viaje borra `driver_id`;
+  - `tg_rides_validate_actuals`: completar un viaje trabado durante horas pasa los límites de 8 h;
+  - `complete_ride_and_pay`: su chequeo de quién llama (el conductor o un admin).
+
+  `tg_rides_require_delivery_proof` no cambió: las funciones rechazan un envío sin prueba antes que el trigger.
+- **Un control nuevo que frene a un no admin** en una escritura que hacen estas funciones (otro trigger en `rides`, en `driver_profiles` o en `ride_offers`) tiene que sumar `OR public._ops_acting_on(<id>)`, o el operador queda frenado, o se le deshace la escritura sin error.
+- **El autochequeo (§Checks de 00671) aborta si** algún cuerpo no tiene el md5 esperado, otra función llama a los chequeos del operador, una función de dinero o de roles lo nombra, o `_ops_allow` queda ejecutable por un cliente.
+- **Cuerpos tras 00671:** están en `NEW_BODIES` de `supabase/tests/00671/run.sh`, más `_ops_allow` `4762cf93…` y `_ops_acting_on` `3fb1b052…`. Re-correr 00485, 00628, 00660 o 00669 devolvería la función a la verja de solo admin, sin error.
+- **Ensayo en prod (2026-11-02), en un bloque revertido,** con la cuenta demo del pasajero convertida en operadora, un pasajero de prueba y el conductor demo:
+  - antes de la migración, cancelar, ofrecer y asignar dieron `forbidden`;
+  - después, ofreció, asignó, marcó llegada e inicio y completó a 2.500 CUP (el viaje quedó `completed` con su transacción de comisión);
+  - también liberó otro viaje (volvió a búsqueda y el conductor quedó fuera de línea), lo canceló y cambió el tipo de un tercero a Auto, propuesto y aplicado;
+  - todas las transiciones quedaron como `admin` a su nombre, y cada acción en `admin_actions`;
+  - en un viaje suyo, las cuatro acciones dieron `self_ride`;
+  - `_ops_allow` le dio 42501, un UPDATE directo cambió 0 filas, marketing recibió `forbidden` y un super_admin canceló como antes.
 
 ### Equipo del panel: invitaciones (00661)
 

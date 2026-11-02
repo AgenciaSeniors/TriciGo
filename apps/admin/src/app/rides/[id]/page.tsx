@@ -126,7 +126,9 @@ function AdminRideDetailPage() {
           ? t('rides.cancel_already_closed', { defaultValue: 'El viaje ya estaba cerrado' })
           : code === 'forbidden'
             ? t('rides.cancel_forbidden', { defaultValue: 'No tienes permiso para cancelar viajes' })
-            : t('rides.cancel_error', { defaultValue: 'No se pudo cancelar el viaje' });
+            : code === 'self_ride'
+              ? t('rides.cancel_self_ride', { defaultValue: 'No puedes cancelar como soporte un viaje en el que eres el pasajero o el conductor' })
+              : t('rides.cancel_error', { defaultValue: 'No se pudo cancelar el viaje' });
       showToast('error', msg);
     }
   };
