@@ -1848,7 +1848,7 @@ Hasta la 00675, todo UPDATE o DELETE sobre `corporate_employees` fallaba con `42
 
 Ensayo: `supabase/tests/00675/run.sh` (RED: 29 fallos con la recursión; GREEN 56/56, aplicada dos veces, con 11 pruebas negativas y una copia CRLF). Ensayada en prod dentro de un bloque revertido, con los triggers reales.
 
-**Estado: sin aplicar en prod.** Primero se aplica la migración y después se mergea. El merge despliega la web; la app del pasajero necesita un OTA. Hasta entonces, en la app quitar funciona, pero volver a agregar a alguien responde "ya es empleada" y la ✕ sigue en la fila de quien creó la empresa.
+**Estado: aplicada en prod el 2026-11-05** por MCP (`20261105122829`). Verificado por objeto: cuerpo `61ee78d1…/693` sin retornos de carro, las dos políticas nuevas y el trigger activo. Probado después en un bloque revertido: el segundo admin quita y vuelve a agregar a un empleado, y se le rechaza quitar a quien creó la empresa. La app del pasajero necesita un OTA: hasta entonces, en la app quitar funciona, pero volver a agregar a alguien responde "ya es empleada" y la ✕ sigue en la fila de quien creó la empresa.
 
 ### Flotas: cómo queda vinculada una invitación (00598, verificado 2026-09-25)
 
