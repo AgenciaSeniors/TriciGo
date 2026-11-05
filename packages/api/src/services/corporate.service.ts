@@ -307,21 +307,43 @@ export const corporateService = {
       })
       .select()
       .single();
-    if (error) {
-      if (error.code === '23505') throw new Error('EMPLOYEE_ALREADY_EXISTS');
-      throw error;
-    }
-    return data as CorporateEmployee;
+    if (!error) return data as CorporateEmployee;
+    if (error.code !== '23505') throw error;
+
+    // A removed employee keeps their row, so the key answers for them too:
+    // give that row back. An active employee matches nothing here.
+    const { data: former, error: formerError } = await supabase
+      .from('corporate_employees')
+      .update({ is_active: true, role, added_by: addedBy })
+      .eq('corporate_account_id', accountId)
+      .eq('user_id', user.id)
+      .eq('is_active', false)
+      .select()
+      .maybeSingle();
+    if (formerError) throw formerError;
+    if (!former) throw new Error('EMPLOYEE_ALREADY_EXISTS');
+    return former as CorporateEmployee;
   },
 
   async removeEmployee(accountId: string, userId: string): Promise<void> {
     const supabase = getSupabaseClient();
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('corporate_employees')
       .update({ is_active: false })
       .eq('corporate_account_id', accountId)
-      .eq('user_id', userId);
-    if (error) throw error;
+      .eq('user_id', userId)
+      .select('id');
+    if (error) {
+      if (error.details === 'corporate_creator_protected') {
+        throw new AppError(error.message, 'CORPORATE_CREATOR_PROTECTED', 400);
+      }
+      throw error;
+    }
+    // RLS turns the update of anyone who does not manage the company into no
+    // row, without an error.
+    if (!data?.length) {
+      throw new AppError('Solo un administrador de la empresa puede quitar empleados.', 'CORPORATE_NOT_ADMIN', 400);
+    }
   },
 
   async getEmployees(

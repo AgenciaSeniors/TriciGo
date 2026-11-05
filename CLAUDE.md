@@ -1835,6 +1835,19 @@ SELECT EXISTS (
 
 **FK schema importante**: `fleet_members.driver_id` referencia `users.id`, NO `driver_profiles.id`. En el JOIN final, usar `fm.driver_id = dp.user_id` (NO `dp.id`).
 
+### Empleados de una empresa: quitar, volver a agregar y proteger a quien la creó (00675, 2026-11-05)
+
+Hasta la 00675, todo UPDATE o DELETE sobre `corporate_employees` fallaba con `42P17 infinite recursion detected in policy`, para el admin de la empresa y para el de la plataforma: "quitar empleado" nunca funcionó. Sus dos políticas de escritura leían la propia tabla, y Postgres las reescribe con las políticas de SELECT de esa tabla; una de ellas tiene una subconsulta (sobre `users`), y a una tabla con subconsultas en sus políticas no entra dos veces. La 00087 lo había arreglado solo para SELECT.
+
+- **Una política no lee su propia tabla: pregunta a una función SECURITY DEFINER** (`is_corp_admin`). Esa función corre como dueña de la tabla y no pasa por las políticas.
+- **Para cambiar una política sin `DROP`:** `ALTER POLICY … USING (…) WITH CHECK (…)` reemplaza la expresión. Por MCP entra sin esperar aprobación, y re-aplicarla no cambia nada.
+- **Quitar es `is_active = false`.** La fila queda para los reportes, y la clave (empresa, usuario) sigue ocupada. Por eso `addEmployee`, al recibir 23505, le devuelve esa fila a un ex empleado con el rol elegido ahora. Si la persona está activa no cambia nada y lanza `EMPLOYEE_ALREADY_EXISTS`. PostgREST no puede hacer upsert: la clave es un índice parcial (00657).
+- **RLS responde 0 filas sin error a quien no administra la empresa.** `removeEmployee` pide `.select('id')` y en ese caso lanza `CORPORATE_NOT_ADMIN`.
+- **A quien creó la empresa no se lo puede quitar** (`trg_corporate_employees_protect_creator`): la empresa paga con su billetera, y un segundo admin lo dejaría afuera de su propia plata. Con JWT, solo un admin de plataforma puede sacarle el rol, quitarlo, borrar su fila o moverla. Sin JWT pasa (eliminación de cuenta, cascada desde la empresa). El error trae DETAIL `corporate_creator_protected` y el texto en español; `removeEmployee` lo convierte en `AppError`. Las pantallas tampoco muestran el botón en esa fila.
+- **Sin decidir:** un viaje en curso o programado de quien se quita se cobra igual a la empresa.
+
+Ensayo: `supabase/tests/00675/run.sh` (RED: 26 fallos con la recursión; GREEN 51/51, aplicada dos veces, con 11 pruebas negativas y una copia CRLF).
+
 ### Flotas: cómo queda vinculada una invitación (00598, verificado 2026-09-25)
 
 **Estado:** aplicada en prod el 2026-09-27, después de la 00599, la 00600 y la 00601, y ninguna de ellas redefine nada de la 00598. Los cuatro cuerpos de prod coinciden byte a byte con git. La prueba combinada de `supabase/tests/00600/run.sh` pasa en los dos órdenes.

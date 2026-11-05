@@ -217,8 +217,8 @@ export default function CorporatePage() {
     try {
       await corporateService.removeEmployee(accountId, empUserId);
       await loadEmployees(accountId);
-    } catch {
-      setError(t('corporate_employee_remove_error', { defaultValue: 'No se pudo remover al empleado' }));
+    } catch (err) {
+      setError(err instanceof AppError ? err.message : t('corporate_employee_remove_error', { defaultValue: 'No se pudo remover al empleado' }));
     }
   };
 
@@ -996,7 +996,7 @@ export default function CorporatePage() {
                                 </span>
                               </div>
                             </div>
-                            {isAdmin && emp.user_id !== userId && (
+                            {isAdmin && emp.user_id !== userId && emp.user_id !== acc.created_by && (
                               <button
                                 onClick={() => handleRemoveEmployee(acc.id, emp.user_id)}
                                 aria-label={t('corporate_remove_employee', { defaultValue: 'Remover empleado' })}

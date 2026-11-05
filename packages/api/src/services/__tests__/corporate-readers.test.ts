@@ -15,6 +15,10 @@ import { fileURLToPath } from 'node:url';
 //    PGRST202, like any RPC the database does not have.
 //  - find_user_by_phone returns the one active account that confirmed the
 //    number, or no row.
+//  - corporate_employees keeps a removed person's row, so its key on (company,
+//    user) answers 23505 to a former employee too. Only an active admin of the
+//    company updates its rows (00675): RLS turns anyone else's update into no
+//    row, without an error, and a trigger refuses to take the creator out.
 // Every call resolves { data, error } and nothing throws, as in postgrest-js.
 type Row = Record<string, unknown>;
 type QueryError = { code: string; message: string; details: string | null; hint: string | null };
@@ -31,9 +35,11 @@ function queryError(code: string, message: string, details: string | null = null
 const missingFunction = (fn: string, args: Row) =>
   queryError('PGRST202', `Could not find the function public.${fn}(${Object.keys(args).sort().join(', ')}) in the schema cache`);
 const notCompanyAdmin = queryError('42501', 'Solo un administrador de la empresa puede ver su saldo.', 'not_corporate_admin');
+const CREATOR_PROTECTED = 'Quien creó la empresa no se puede quitar ni cambiar de rol: los viajes se pagan con su billetera.';
 
 let signedIn: string;
 let applied00624: boolean;
+let updateFailure: QueryError | null;
 let rpcFailure: Partial<Record<string, QueryError>>;
 let rpcCalls: Array<{ fn: string; args: Row }>;
 let reads: Array<{ table: string; filters: Array<[string, unknown]> }>;
@@ -79,6 +85,19 @@ function visible(table: string, row: Row): boolean {
   return true;
 }
 
+// What an UPDATE answers: the rows it changed, as the caller's RLS allows.
+function runUpdate(table: string, patch: Row, filters: Array<[string, unknown]>): Result {
+  if (updateFailure) return { data: null, error: updateFailure };
+  const targets = (db[table as keyof typeof db] as Row[])
+    .filter((r) => admins().includes(signedIn))
+    .filter((r) => filters.every(([col, value]) => r[col] === value));
+  if (targets.some((r) => r.user_id === CREATOR) && patch.is_active === false) {
+    return { data: null, error: queryError('P0001', CREATOR_PROTECTED, 'corporate_creator_protected') };
+  }
+  for (const r of targets) Object.assign(r, patch);
+  return { data: targets.map((r) => ({ ...r })), error: null };
+}
+
 function from(table: string) {
   const filters: Array<[string, unknown]> = [];
   let range: [number, number] | null = null;
@@ -122,11 +141,37 @@ function from(table: string) {
     },
     insert: (row: Row) => {
       inserts.push({ table, row });
+      const taken = db.corporate_employees.some(
+        (e) => e.corporate_account_id === row.corporate_account_id && e.user_id === row.user_id,
+      );
+      const result: Result = taken
+        ? { data: null, error: queryError('23505', 'duplicate key value violates unique constraint "corporate_employees_corporate_account_id_user_id_key"') }
+        : { data: { id: 'employee-new', is_active: true, ...row }, error: null };
       return {
         select: () => ({
-          single: () => Promise.resolve({ data: { id: 'employee-new', is_active: true, ...row }, error: null }),
+          single: () => Promise.resolve(result),
         }),
       };
+    },
+    update: (patch: Row) => {
+      const updated = {
+        eq: (col: string, value: unknown) => {
+          filters.push([col, value]);
+          return updated;
+        },
+        select: () => ({
+          maybeSingle: () => {
+            const { data, error } = runUpdate(table, patch, filters);
+            if (error) return Promise.resolve({ data: null, error });
+            const rows = data as Row[];
+            if (rows.length > 1) return Promise.resolve({ data: null, error: queryError('PGRST116', 'JSON object requested, multiple (or no) rows returned') });
+            return Promise.resolve({ data: rows[0] ?? null, error: null });
+          },
+          then: (resolve: (value: Result) => unknown, reject?: (reason: unknown) => unknown) =>
+            Promise.resolve(runUpdate(table, patch, filters)).then(resolve, reject),
+        }),
+      };
+      return updated;
     },
     then: (resolve: (value: Result) => unknown, reject?: (reason: unknown) => unknown) => {
       record();
@@ -166,6 +211,7 @@ function declaredParams(fn: string): string[] {
 beforeEach(() => {
   signedIn = SECOND_ADMIN;
   applied00624 = true;
+  updateFailure = null;
   rpcFailure = {};
   rpcCalls = [];
   reads = [];
@@ -185,6 +231,7 @@ beforeEach(() => {
       { id: EMPLOYEE, full_name: 'Cora', phone: '+5350000003', confirmed_phone: '+5350000003' },
       { id: 'former', full_name: 'Fede', phone: '+5350000006', confirmed_phone: '+5350000006' },
       { id: 'unconfirmed', full_name: 'Gil', phone: '+5350000007', confirmed_phone: null },
+      { id: 'new-hire', full_name: 'Hugo', phone: '+5350000008', confirmed_phone: '+5350000008' },
     ],
     corporate_rides: [
       { corporate_account_id: COMPANY, employee_user_id: EMPLOYEE, fare_trc: 300, created_at: '2026-10-05T10:00:00Z' },
@@ -273,12 +320,31 @@ describe('the company employees (00624)', () => {
 describe('adding an employee', () => {
   it('finds the person by the phone their account confirmed, and adds them', async () => {
     signedIn = CREATOR;
-    await corporateService.addEmployee(COMPANY, '+5350000003', 'employee', CREATOR);
-    expect(rpcCalls).toEqual([{ fn: 'find_user_by_phone', args: { p_phone: '+5350000003' } }]);
+    await corporateService.addEmployee(COMPANY, '+5350000008', 'employee', CREATOR);
+    expect(rpcCalls).toEqual([{ fn: 'find_user_by_phone', args: { p_phone: '+5350000008' } }]);
     expect(inserts).toEqual([
-      { table: 'corporate_employees', row: { corporate_account_id: COMPANY, user_id: EMPLOYEE, role: 'employee', added_by: CREATOR } },
+      { table: 'corporate_employees', row: { corporate_account_id: COMPANY, user_id: 'new-hire', role: 'employee', added_by: CREATOR } },
     ]);
     expect(reads.some((r) => r.table === 'users')).toBe(false);
+  });
+
+  it('brings a former employee back on their own row, with the role chosen now', async () => {
+    signedIn = SECOND_ADMIN;
+    const employee = await corporateService.addEmployee(COMPANY, '+5350000006', 'admin', SECOND_ADMIN);
+    expect(employee).toMatchObject({ id: 'e4', user_id: 'former', role: 'admin', is_active: true, added_by: SECOND_ADMIN });
+    expect(db.corporate_employees.filter((e) => e.user_id === 'former')).toHaveLength(1);
+  });
+
+  it('leaves an active employee as they are and says they are already there', async () => {
+    signedIn = CREATOR;
+    await expect(corporateService.addEmployee(COMPANY, '+5350000003', 'admin', CREATOR)).rejects.toThrow('EMPLOYEE_ALREADY_EXISTS');
+    expect(db.corporate_employees.find((e) => e.user_id === EMPLOYEE)).toMatchObject({ role: 'employee', added_by: CREATOR });
+  });
+
+  it('surfaces a failed reactivation instead of saying the person is already there', async () => {
+    signedIn = CREATOR;
+    updateFailure = queryError('42P17', 'infinite recursion detected in policy for relation "corporate_employees"');
+    await expect(corporateService.addEmployee(COMPANY, '+5350000006', 'employee', CREATOR)).rejects.toMatchObject({ code: '42P17' });
   });
 
   it('a number no account confirmed is not found', async () => {
@@ -292,5 +358,37 @@ describe('adding an employee', () => {
     rpcFailure.find_user_by_phone = queryError('P0001', 'Rate limit exceeded: max 30 phone lookups per hour');
     await expect(corporateService.addEmployee(COMPANY, '+5350000003', 'employee', CREATOR)).rejects.toMatchObject({ code: 'P0001' });
     expect(inserts).toEqual([]);
+  });
+});
+
+describe('removing an employee', () => {
+  it('takes the person out of the list and keeps their row for the reports', async () => {
+    await corporateService.removeEmployee(COMPANY, EMPLOYEE);
+    expect(db.corporate_employees.find((e) => e.user_id === EMPLOYEE)).toMatchObject({ is_active: false });
+    const employees = await corporateService.getEmployees(COMPANY);
+    expect(employees.map((e) => e.user_id)).not.toContain(EMPLOYEE);
+  });
+
+  it('says so when the caller does not manage the company, which RLS answers with no row', async () => {
+    signedIn = EMPLOYEE;
+    await expect(corporateService.removeEmployee(COMPANY, SECOND_ADMIN)).rejects.toMatchObject({
+      code: 'CORPORATE_NOT_ADMIN',
+      statusCode: 400,
+    });
+    expect(db.corporate_employees.find((e) => e.user_id === SECOND_ADMIN)).toMatchObject({ is_active: true });
+  });
+
+  it('gives the screen the server\'s reason when the person created the company', async () => {
+    await expect(corporateService.removeEmployee(COMPANY, CREATOR)).rejects.toMatchObject({
+      code: 'CORPORATE_CREATOR_PROTECTED',
+      statusCode: 400,
+      message: CREATOR_PROTECTED,
+    });
+    expect(db.corporate_employees.find((e) => e.user_id === CREATOR)).toMatchObject({ is_active: true });
+  });
+
+  it('surfaces any other failure', async () => {
+    updateFailure = queryError('42P17', 'infinite recursion detected in policy for relation "corporate_employees"');
+    await expect(corporateService.removeEmployee(COMPANY, EMPLOYEE)).rejects.toMatchObject({ code: '42P17' });
   });
 });
