@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient, notificationService, useFeatureFlag } from '@tricigo/api';
 import { realEmail } from '@tricigo/utils';
@@ -8,6 +9,7 @@ import type { User } from '@supabase/supabase-js';
 
 export function WebHeader() {
   const { t } = useTranslation('web');
+  const currentPath = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -92,6 +94,7 @@ export function WebHeader() {
   const DarkToggle = () => (
     <button
       onClick={toggleDark}
+      className="theme-toggle"
       aria-label={t('toggle_theme', { defaultValue: 'Cambiar tema' })}
       style={{
         background: 'var(--bg-hover)',
@@ -151,6 +154,15 @@ export function WebHeader() {
       >
         {unreadCount > 9 ? '9+' : unreadCount}
       </span>
+    );
+  }
+
+  function LoginLink() {
+    if (isLoading || isAuthenticated || currentPath === '/login') return null;
+    return (
+      <a href="/login" className="btn-base btn-secondary-outline nav-login">
+        {t('nav.login')}
+      </a>
     );
   }
 
@@ -296,7 +308,7 @@ export function WebHeader() {
       className="header-glass"
       style={{ position: 'sticky', top: 0, zIndex: 50 }}
     >
-      <div style={{
+      <div className="header-bar" style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -314,10 +326,12 @@ export function WebHeader() {
 
         <nav style={{ gap: '1.5rem', alignItems: 'center' }} className="nav-desktop" aria-label="Navegación principal">
           <AuthNav />
+          <LoginLink />
           <DarkToggle />
         </nav>
 
         <div className="nav-mobile-toggle">
+          <LoginLink />
           <DarkToggle />
           <button
             onClick={() => setMenuOpen(!menuOpen)}
