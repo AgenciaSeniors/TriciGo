@@ -91,7 +91,7 @@ function runUpdate(table: string, patch: Row, filters: Array<[string, unknown]>)
   const targets = (db[table as keyof typeof db] as Row[])
     .filter((r) => admins().includes(signedIn))
     .filter((r) => filters.every(([col, value]) => r[col] === value));
-  if (targets.some((r) => r.user_id === CREATOR) && patch.is_active === false) {
+  if (targets.some((r) => r.user_id === CREATOR) && (patch.is_active === false || patch.role === 'employee')) {
     return { data: null, error: queryError('P0001', CREATOR_PROTECTED, 'corporate_creator_protected') };
   }
   for (const r of targets) Object.assign(r, patch);
@@ -347,6 +347,15 @@ describe('adding an employee', () => {
     await expect(corporateService.addEmployee(COMPANY, '+5350000006', 'employee', CREATOR)).rejects.toMatchObject({ code: '42P17' });
   });
 
+  it('gives the screen the server\'s reason when the creator would come back without being an admin', async () => {
+    db.corporate_employees.find((e) => e.user_id === CREATOR)!.is_active = false; // a platform admin took them out
+    await expect(corporateService.addEmployee(COMPANY, '+5350000001', 'employee', SECOND_ADMIN)).rejects.toMatchObject({
+      code: 'CORPORATE_CREATOR_PROTECTED',
+      statusCode: 400,
+      message: CREATOR_PROTECTED,
+    });
+  });
+
   it('a number no account confirmed is not found', async () => {
     signedIn = CREATOR;
     await expect(corporateService.addEmployee(COMPANY, '+5350000007', 'employee', CREATOR)).rejects.toThrow('USER_NOT_FOUND');
@@ -372,10 +381,16 @@ describe('removing an employee', () => {
   it('says so when the caller does not manage the company, which RLS answers with no row', async () => {
     signedIn = EMPLOYEE;
     await expect(corporateService.removeEmployee(COMPANY, SECOND_ADMIN)).rejects.toMatchObject({
-      code: 'CORPORATE_NOT_ADMIN',
+      code: 'CORPORATE_EMPLOYEE_NOT_REMOVED',
       statusCode: 400,
     });
     expect(db.corporate_employees.find((e) => e.user_id === SECOND_ADMIN)).toMatchObject({ is_active: true });
+  });
+
+  it('does not blame an admin for a list that went stale', async () => {
+    const error = await corporateService.removeEmployee(COMPANY, 'deleted-their-account').catch((e: unknown) => e);
+    expect(error).toMatchObject({ code: 'CORPORATE_EMPLOYEE_NOT_REMOVED', statusCode: 400 });
+    expect((error as Error).message).toContain('ya no está en la empresa');
   });
 
   it('gives the screen the server\'s reason when the person created the company', async () => {

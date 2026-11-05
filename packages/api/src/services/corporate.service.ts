@@ -17,6 +17,7 @@ import { logger } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
 import { fleetService } from './fleet.service';
 import { readCorporateBalance } from './_corporate-balance';
+import { corporateServerRejection } from './_corporate-rides';
 import { AppError, ValidationError } from '../errors';
 
 // PostgREST's signal that the database does not have the RPC. A generic
@@ -320,7 +321,7 @@ export const corporateService = {
       .eq('is_active', false)
       .select()
       .maybeSingle();
-    if (formerError) throw formerError;
+    if (formerError) throw corporateServerRejection(formerError) ?? formerError;
     if (!former) throw new Error('EMPLOYEE_ALREADY_EXISTS');
     return former as CorporateEmployee;
   },
@@ -333,16 +334,16 @@ export const corporateService = {
       .eq('corporate_account_id', accountId)
       .eq('user_id', userId)
       .select('id');
-    if (error) {
-      if (error.details === 'corporate_creator_protected') {
-        throw new AppError(error.message, 'CORPORATE_CREATOR_PROTECTED', 400);
-      }
-      throw error;
-    }
+    if (error) throw corporateServerRejection(error) ?? error;
     // RLS turns the update of anyone who does not manage the company into no
-    // row, without an error.
+    // row, without an error. So does a list that went stale: the person's row
+    // moves away when they delete their account.
     if (!data?.length) {
-      throw new AppError('Solo un administrador de la empresa puede quitar empleados.', 'CORPORATE_NOT_ADMIN', 400);
+      throw new AppError(
+        'No se pudo quitar a esta persona: ya no está en la empresa o ya no la administras.',
+        'CORPORATE_EMPLOYEE_NOT_REMOVED',
+        400,
+      );
     }
   },
 

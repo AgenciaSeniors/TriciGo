@@ -214,6 +214,7 @@ export default function CorporatePage() {
 
   const handleRemoveEmployee = async (accountId: string, empUserId: string) => {
     if (!window.confirm(t('corporate_remove_employee_confirm', { defaultValue: '¿Remover este empleado?' }))) return;
+    setError(null);
     try {
       await corporateService.removeEmployee(accountId, empUserId);
       await loadEmployees(accountId);

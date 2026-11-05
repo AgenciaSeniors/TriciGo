@@ -52,6 +52,8 @@ add(){ echo "WITH i AS (INSERT INTO public.corporate_employees (corporate_accoun
 erase(){ echo "WITH d AS (DELETE FROM public.corporate_employees
   WHERE corporate_account_id = '$1' AND user_id = '$2' RETURNING id) SELECT count(*) FROM d;"; }
 active(){ echo "SELECT is_active FROM public.corporate_employees WHERE corporate_account_id = '$1' AND user_id = '$2';"; }
+ride(){ echo "WITH i AS (INSERT INTO public.rides (customer_id, payment_method, estimated_fare_cup, estimated_fare_trc, corporate_account_id)
+  VALUES ('$2', 'corporate', 1000, 1000, '$1') RETURNING id) SELECT count(*) FROM i;"; }
 
 fresh(){ $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS $1" -c "CREATE DATABASE $1" >/dev/null 2>&1
          $BIN/psql $CONN -d "$1" -qAt -v ON_ERROR_STOP=1 -f "$DIR/scaffold.sql" >/dev/null 2>&1; }
@@ -62,12 +64,17 @@ echo "== reset database =="
 fresh $DB || { echo "scaffold failed"; exit 1; }
 
 echo "== what already worked, with or without the migration =="
+val "S0 the two corporate triggers here are prod's, byte for byte" \
+  "SELECT md5(prosrc) || ':' || length(prosrc) FROM pg_proc WHERE oid = 'public.tg_rides_validate_corporate()'::regprocedure;
+   SELECT md5(prosrc) || ':' || length(prosrc) FROM pg_proc WHERE oid = 'public.tg_corporate_accounts_protect_admin_fields()'::regprocedure" \
+  "1ce7e55f97ad92e5f6e3416e375e374a:5018;a8263f1d55d0af6ade45d972b21e6800:1479"
 val "S1 an admin of the company reads its employees" \
   "$(as $BETO "SELECT count(*) FROM public.corporate_employees WHERE corporate_account_id = '$A';")" "4"
 val "S2 an admin of the company adds a person" "$(as $ANA "$(add $A $GIL $ANA)")" "1"
 err "S3 a former employee keeps their row, so adding them again hits the key" "$(as $ANA "$(add $A $FEDE $ANA)")" "23505"
 val "S4 an admin of the company updates its account" \
   "$(as $BETO "WITH u AS (UPDATE public.corporate_accounts SET name = 'Nueva' WHERE id = '$A' RETURNING id) SELECT count(*) FROM u;")" "1"
+val "S5 an employee asks a ride on the company" "$(as $CORA "$(ride $A $CORA)")" "1"
 
 if [ "$MIG" != "none" ]; then
   echo "== apply migration (1st, one transaction, as the owner, search_path = '') =="
@@ -104,6 +111,8 @@ val "U9 a removed employee stops seeing the company" \
   "$(as $ANA "$(remove $A $CORA) SET LOCAL request.jwt.claim.sub = '$CORA'; SELECT count(*) FROM public.corporate_accounts WHERE id = '$A';")" "1;0"
 err "U10 a row cannot be moved to a company the caller does not manage" \
   "$(as $ANA "UPDATE public.corporate_employees SET corporate_account_id = '$B' WHERE corporate_account_id = '$A' AND user_id = '$CORA';")" "42501"
+err "U11 a removed employee can no longer ask a ride on the company" \
+  "$(as $ANA "$(remove $A $CORA) SET LOCAL request.jwt.claim.sub = '$CORA'; $(ride $A $CORA)")" "corporate_not_employee"
 
 echo "== adding a former employee back =="
 val "R1 an admin brings the row back, with the role chosen now" "$(as $ANA "$(readd $A $FEDE admin $ANA)")" "admin:true:true"
@@ -111,6 +120,8 @@ val "R2 so does the second admin" "$(as $BETO "$(readd $A $FEDE employee $BETO)"
 val "R3 a former employee cannot bring themselves back" "$(as $FEDE "$(readd $A $FEDE admin $FEDE)")" ""
 val "R4 an active employee has nothing to bring back: addEmployee reports the duplicate" \
   "$(as $ANA "$(readd $A $CORA employee $ANA)")" ""
+val "R5 once back, they ride on the company again" \
+  "$(as $ANA "$(remove $A $CORA) $(readd $A $CORA employee $ANA) SET LOCAL request.jwt.claim.sub = '$CORA'; $(ride $A $CORA)")" "1;employee:true:true;1"
 
 echo "== deleting a row (no screen does, the policy stays usable) =="
 val "D1 an admin of the company can" "$(as $BETO "$(erase $A $CORA)")" "1"
@@ -136,6 +147,8 @@ val "K10 the service role still moves the row when the creator deletes their acc
   "$(service "WITH u AS (UPDATE public.corporate_employees SET user_id = '$GONE', added_by = '$GONE' WHERE corporate_account_id = '$A' AND user_id = '$ANA' RETURNING id) SELECT count(*) FROM u;")" "1"
 val "K11 deleting the company takes its employee rows with it" \
   "$(service "DELETE FROM public.corporate_accounts WHERE id = '$A'; SELECT count(*) FROM public.corporate_employees WHERE corporate_account_id = '$A';")" "0"
+err "K12 the second admin cannot walk around the guard by taking created_by first" \
+  "$(as $BETO "UPDATE public.corporate_accounts SET created_by = '$BETO' WHERE id = '$A'; $(remove $A $ANA)")" "corporate_creator_protected"
 
 if [ "$MIG" != "none" ]; then
   echo "== negative proofs =="
