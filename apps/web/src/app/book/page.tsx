@@ -966,7 +966,7 @@ export default function BookPage() {
   /* ─── Auth gate (after all hooks) ─── */
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      router.replace('/login');
+      router.replace('/login?return=/book');
     }
   }, [authLoading, isAuthenticated, router]);
 

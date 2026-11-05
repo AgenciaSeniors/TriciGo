@@ -377,6 +377,13 @@ body {
   flex-direction: column;
 }
 
+.nav-login {
+  min-height: 44px;
+  padding: 0 0.875rem;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
 @media (max-width: 768px) {
   .nav-desktop {
     display: none !important;
@@ -386,6 +393,31 @@ body {
   }
   .nav-mobile-menu {
     display: flex !important;
+  }
+}
+
+/* The logo, sign-in, theme and menu controls must fit a 360px phone in one row. */
+@media (max-width: 480px) {
+  .header-bar {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+  .nav-mobile-menu {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+  .nav-mobile-toggle {
+    gap: 0.25rem;
+  }
+  .nav-login {
+    padding: 0 0.625rem;
+  }
+}
+
+/* Narrower phones cannot fit both, so sign-in wins while it is showing. */
+@media (max-width: 359px) {
+  .nav-mobile-toggle .nav-login ~ .theme-toggle {
+    display: none !important;
   }
 }
 
@@ -717,10 +749,6 @@ body {
 
   .hero__store-buttons {
     justify-content: center;
-  }
-
-  .hero__visual {
-    order: -1;
   }
 }
 
