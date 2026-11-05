@@ -402,18 +402,21 @@ body {
     padding-left: 1rem !important;
     padding-right: 1rem !important;
   }
+  .nav-mobile-menu {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
   .nav-mobile-toggle {
     gap: 0.25rem;
   }
   .nav-login {
     padding: 0 0.625rem;
-    font-size: 0.8125rem;
   }
 }
 
-/* Narrower phones keep sign-in; the theme still follows the system setting. */
+/* Narrower phones cannot fit both, so sign-in wins while it is showing. */
 @media (max-width: 359px) {
-  .nav-mobile-toggle .theme-toggle {
+  .nav-mobile-toggle .nav-login ~ .theme-toggle {
     display: none !important;
   }
 }
