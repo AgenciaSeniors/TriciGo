@@ -17,6 +17,7 @@ import { logger } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
 import { fleetService } from './fleet.service';
 import { readCorporateBalance } from './_corporate-balance';
+import { corporateServerRejection } from './_corporate-rides';
 import { AppError, ValidationError } from '../errors';
 
 // PostgREST's signal that the database does not have the RPC. A generic
@@ -307,21 +308,43 @@ export const corporateService = {
       })
       .select()
       .single();
-    if (error) {
-      if (error.code === '23505') throw new Error('EMPLOYEE_ALREADY_EXISTS');
-      throw error;
-    }
-    return data as CorporateEmployee;
+    if (!error) return data as CorporateEmployee;
+    if (error.code !== '23505') throw error;
+
+    // A removed employee keeps their row, so the key answers for them too:
+    // give that row back. An active employee matches nothing here.
+    const { data: former, error: formerError } = await supabase
+      .from('corporate_employees')
+      .update({ is_active: true, role, added_by: addedBy })
+      .eq('corporate_account_id', accountId)
+      .eq('user_id', user.id)
+      .eq('is_active', false)
+      .select()
+      .maybeSingle();
+    if (formerError) throw corporateServerRejection(formerError) ?? formerError;
+    if (!former) throw new Error('EMPLOYEE_ALREADY_EXISTS');
+    return former as CorporateEmployee;
   },
 
   async removeEmployee(accountId: string, userId: string): Promise<void> {
     const supabase = getSupabaseClient();
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('corporate_employees')
       .update({ is_active: false })
       .eq('corporate_account_id', accountId)
-      .eq('user_id', userId);
-    if (error) throw error;
+      .eq('user_id', userId)
+      .select('id');
+    if (error) throw corporateServerRejection(error) ?? error;
+    // RLS turns the update of anyone who does not manage the company into no
+    // row, without an error. So does a list that went stale: the person's row
+    // moves away when they delete their account.
+    if (!data?.length) {
+      throw new AppError(
+        'No se pudo quitar a esta persona: ya no está en la empresa o ya no la administras.',
+        'CORPORATE_EMPLOYEE_NOT_REMOVED',
+        400,
+      );
+    }
   },
 
   async getEmployees(

@@ -201,8 +201,8 @@ export default function CorporateProfileScreen() {
             try {
               await corporateService.removeEmployee(expandedAccountId, empUserId);
               await loadEmployees(expandedAccountId);
-            } catch {
-              Alert.alert(t('common:error', { defaultValue: 'Error' }), t('common:errors.corporate_load_failed', { defaultValue: 'Error al cargar cuenta corporativa' }));
+            } catch (err) {
+              Alert.alert(t('common:error', { defaultValue: 'Error' }), getErrorMessage(err));
             }
           },
         },
@@ -708,7 +708,7 @@ export default function CorporateProfileScreen() {
                         )}
                       </View>
                     </View>
-                    {isAdmin && emp.user_id !== userId && emp.is_active && (
+                    {isAdmin && emp.user_id !== userId && emp.user_id !== acc.created_by && emp.is_active && (
                       <Pressable
                         onPress={() => handleRemoveEmployee(emp.user_id, emp.users?.full_name || emp.users?.phone)}
                         hitSlop={8}
