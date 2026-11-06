@@ -7,8 +7,10 @@ const api = vi.hoisted(() => ({
 }));
 
 // Mocked with a factory so the real Supabase client is never loaded.
-vi.mock('@tricigo/api', () => ({
+vi.mock('../corporate.service', () => ({
   corporateService: { registerAccount: api.registerAccount, updateAccount: api.updateAccount },
+}));
+vi.mock('../fleet.service', () => ({
   fleetService: { submitFleetRequest: api.submitFleetRequest },
 }));
 
