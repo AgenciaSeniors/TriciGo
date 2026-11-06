@@ -22,6 +22,8 @@
     "./destinationPredictor": "./src/destinationPredictor.ts",
     "./fareCalculator": "./src/fareCalculator.ts",
     "./fleet/corporateScreen": "./src/fleet/corporateScreen.ts",
+    "./fleet/fleetEditForm": "./src/fleet/fleetEditForm.ts",
+    "./fleet/fleetMemberActions": "./src/fleet/fleetMemberActions.ts",
     "./fleet/fleetMemberForm": "./src/fleet/fleetMemberForm.ts",
     "./fleet/fleetRequestForm": "./src/fleet/fleetRequestForm.ts",
     "./geo": "./src/geo.ts",
