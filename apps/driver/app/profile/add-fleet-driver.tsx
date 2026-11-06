@@ -9,7 +9,7 @@
 // ============================================================
 
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, View, useColorScheme } from 'react-native';
+import { AccessibilityInfo, KeyboardAvoidingView, Platform, ScrollView, View, useColorScheme } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Toast from 'react-native-toast-message';
 import { Screen } from '@tricigo/ui/Screen';
@@ -23,10 +23,17 @@ import { useTranslation } from '@tricigo/i18n';
 import {
   addDriverFailure,
   emptyFleetMemberForm,
+  fleetMemberErrorTexts,
   parseFleetMemberForm,
   type FleetMemberFormErrors,
   type FleetMemberFormValues,
 } from '@/utils/fleetMemberForm';
+
+// A message that appears on screen is silent for a screen reader. Queued so
+// VoiceOver does not cut it off to read the button the driver just tapped.
+function announce(message: string) {
+  AccessibilityInfo.announceForAccessibilityWithOptions(message, { queue: true });
+}
 
 export default function AddFleetDriverScreen() {
   const { t } = useTranslation('driver');
@@ -51,6 +58,7 @@ export default function AddFleetDriverScreen() {
       setErrors(parsed.errors);
       // The fields at fault can be out of view: this line sits by the button.
       setSubmitError(t('fleet.add_driver_fix_fields', { defaultValue: 'Revisa los campos marcados.' }));
+      announce(Object.values(fleetMemberErrorTexts(parsed.errors, t)).join(' '));
       return;
     }
     setErrors({});
@@ -61,26 +69,20 @@ export default function AddFleetDriverScreen() {
       Toast.show({ type: 'success', text1: t('fleet.add_driver_done', { defaultValue: 'Conductor agregado' }) });
       router.back();
     } catch (err) {
-      setSubmitError(
+      const message =
         addDriverFailure(err) === 'exists'
           ? t('fleet.add_driver_exists', { defaultValue: 'Ese teléfono ya está en tu flota.' })
           : t('fleet.add_driver_failed', {
               defaultValue: 'No se pudo agregar al conductor. Revisa tu conexión e inténtalo de nuevo.',
-            }),
-      );
+            });
+      setSubmitError(message);
+      announce(message);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const phoneError =
-    errors.phone === 'required'
-      ? t('fleet.add_driver_phone_required', { defaultValue: 'Escribe el teléfono del conductor.' })
-      : errors.phone === 'invalid'
-        ? t('fleet.add_driver_phone_invalid', {
-            defaultValue: 'Escribe un móvil cubano: 8 dígitos que empiezan por 5 o 6.',
-          })
-        : undefined;
+  const errorTexts = fleetMemberErrorTexts(errors, t);
 
   return (
     <Screen bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'} padded={false}>
@@ -93,7 +95,7 @@ export default function AddFleetDriverScreen() {
             <ProfileScreenHeader
               title={t('fleet.add_driver', { defaultValue: 'Agregar conductor' })}
               onBack={() => router.back()}
-              backAccessibilityLabel="Atrás"
+              backAccessibilityLabel={t('common:back', { defaultValue: 'Volver' })}
             />
 
             <Text variant="bodySmall" color="secondary" className="mb-4">
@@ -106,11 +108,8 @@ export default function AddFleetDriverScreen() {
               label={t('fleet.add_driver_name', { defaultValue: 'Nombre completo *' })}
               value={form.name}
               onChangeText={setField('name')}
-              error={
-                errors.name
-                  ? t('fleet.add_driver_name_required', { defaultValue: 'Escribe el nombre del conductor.' })
-                  : undefined
-              }
+              error={errorTexts.name}
+              accessibilityHint={errorTexts.name}
             />
             <Input
               label={t('fleet.add_driver_phone', { defaultValue: 'Teléfono *' })}
@@ -118,7 +117,8 @@ export default function AddFleetDriverScreen() {
               onChangeText={setField('phone')}
               keyboardType="phone-pad"
               placeholder="+53 5XXXXXXX o 6XXXXXXX"
-              error={phoneError}
+              error={errorTexts.phone}
+              accessibilityHint={errorTexts.phone}
             />
             <Input
               label={t('fleet.add_driver_email', { defaultValue: 'Email' })}

@@ -33,6 +33,34 @@ export type ParsedFleetMemberForm =
   | { ok: true; member: FleetMemberInput }
   | { ok: false; errors: FleetMemberFormErrors };
 
+export interface FleetMemberErrorTexts {
+  name?: string;
+  phone?: string;
+}
+
+type Translate = (key: string, options: { defaultValue: string }) => string;
+
+/**
+ * The message for each field at fault, in the order the form shows them.
+ * The screen prints them under the fields and reads them out, so a screen
+ * reader user hears what to fix without finding the field first.
+ */
+export function fleetMemberErrorTexts(errors: FleetMemberFormErrors, t: Translate): FleetMemberErrorTexts {
+  const texts: FleetMemberErrorTexts = {};
+  if (errors.name) {
+    texts.name = t('fleet.add_driver_name_required', { defaultValue: 'Escribe el nombre del conductor.' });
+  }
+  if (errors.phone === 'required') {
+    texts.phone = t('fleet.add_driver_phone_required', { defaultValue: 'Escribe el teléfono del conductor.' });
+  }
+  if (errors.phone === 'invalid') {
+    texts.phone = t('fleet.add_driver_phone_invalid', {
+      defaultValue: 'Escribe un móvil cubano: 8 dígitos que empiezan por 5 o 6.',
+    });
+  }
+  return texts;
+}
+
 /**
  * Which message a failed fleetService.addMember gets. The service's own text
  * is Spanish or a technical line, so the screen shows its translated ones.

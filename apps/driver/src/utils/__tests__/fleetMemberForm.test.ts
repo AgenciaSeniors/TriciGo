@@ -1,7 +1,33 @@
 import { describe, it, expect } from 'vitest';
-import { addDriverFailure, emptyFleetMemberForm, parseFleetMemberForm } from '../fleetMemberForm';
+import {
+  addDriverFailure,
+  emptyFleetMemberForm,
+  fleetMemberErrorTexts,
+  parseFleetMemberForm,
+} from '../fleetMemberForm';
 
 const filled = { ...emptyFleetMemberForm, name: 'Ana Díaz', phone: '52345678' };
+
+describe('fleetMemberErrorTexts', () => {
+  const t = (key: string) => `text of ${key}`;
+
+  it('has no text for a field without an error', () => {
+    expect(fleetMemberErrorTexts({}, t)).toEqual({});
+    expect(fleetMemberErrorTexts({ name: undefined, phone: undefined }, t)).toEqual({});
+  });
+
+  it('tells a missing phone from one that is not a Cuban mobile', () => {
+    expect(fleetMemberErrorTexts({ phone: 'required' }, t).phone).toBe('text of fleet.add_driver_phone_required');
+    expect(fleetMemberErrorTexts({ phone: 'invalid' }, t).phone).toBe('text of fleet.add_driver_phone_invalid');
+  });
+
+  it('lists the fields in the order the form shows them, so a screen reader follows it', () => {
+    expect(Object.values(fleetMemberErrorTexts({ phone: 'required', name: 'required' }, t))).toEqual([
+      'text of fleet.add_driver_name_required',
+      'text of fleet.add_driver_phone_required',
+    ]);
+  });
+});
 
 describe('addDriverFailure', () => {
   it('recognizes a number already in the fleet', () => {
