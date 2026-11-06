@@ -9,10 +9,16 @@
 // ============================================================
 
 import type { FleetMemberInput } from '@tricigo/types';
-import { isValidCubanPhone, isValidEmail } from '../validation';
+import { isValidCubanPhone, isValidEmail, normalizeCubanPhone } from '../validation';
 import { fleetMemberErrorTexts } from './fleetMemberForm';
 
 export interface FleetRequestFormFields {
+  /**
+   * The contact phone the owner typed. Left out when the session already has
+   * one (the driver app, or a passenger who signed in with a phone); given,
+   * even empty, it is required and must be a Cuban mobile.
+   */
+  ownerPhone?: string;
   responsibleEmail: string;
   hoursStart: string;
   hoursEnd: string;
@@ -26,6 +32,7 @@ export interface FleetRequestRowErrors {
 }
 
 export interface FleetRequestFormErrors {
+  ownerPhone?: 'required' | 'invalid';
   responsibleEmail?: 'invalid';
   hoursStart?: 'invalid';
   hoursEnd?: 'invalid';
@@ -34,6 +41,20 @@ export interface FleetRequestFormErrors {
 }
 
 export const noFleetRequestErrors: FleetRequestFormErrors = { members: [] };
+
+/** Whether the form must ask for the contact phone: the session brings none. */
+export function fleetOwnerPhoneIsAsked(sessionPhone: string | null | undefined): boolean {
+  return !sessionPhone?.trim();
+}
+
+/**
+ * The phone saved as the contact of the request: the session's, else the one
+ * typed in E.164. It is never written to users.phone: the server reverts that
+ * without an OTP (00599).
+ */
+export function fleetOwnerContactPhone(sessionPhone: string | null | undefined, typed: string): string {
+  return fleetOwnerPhoneIsAsked(sessionPhone) ? normalizeCubanPhone(typed.trim()) : (sessionPhone as string);
+}
 
 const HOUR = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -70,6 +91,11 @@ function rowErrors(row: FleetMemberInput): FleetRequestRowErrors {
 export function validateFleetRequestForm(form: FleetRequestFormFields): FleetRequestFormErrors | null {
   const errors: FleetRequestFormErrors = { members: form.members.map(rowErrors) };
 
+  if (form.ownerPhone !== undefined) {
+    const ownerPhone = form.ownerPhone.trim();
+    if (!ownerPhone) errors.ownerPhone = 'required';
+    else if (!isValidCubanPhone(ownerPhone)) errors.ownerPhone = 'invalid';
+  }
   const responsibleEmail = form.responsibleEmail.trim();
   if (responsibleEmail && !isValidEmail(responsibleEmail)) errors.responsibleEmail = 'invalid';
   const hoursStart = form.hoursStart.trim();
@@ -78,6 +104,7 @@ export function validateFleetRequestForm(form: FleetRequestFormFields): FleetReq
   if (hoursEnd && !isValidFleetHour(hoursEnd)) errors.hoursEnd = 'invalid';
 
   const fine =
+    !errors.ownerPhone &&
     !errors.responsibleEmail &&
     !errors.hoursStart &&
     !errors.hoursEnd &&
@@ -92,6 +119,7 @@ export interface FleetRequestRowErrorTexts {
 }
 
 export interface FleetRequestErrorTexts {
+  ownerPhone?: string;
   responsibleEmail?: string;
   hoursStart?: string;
   hoursEnd?: string;
@@ -112,6 +140,16 @@ export function fleetRequestErrorTexts(errors: FleetRequestFormErrors, t: Transl
       return rowTexts;
     }),
   };
+  if (errors.ownerPhone === 'required') {
+    texts.ownerPhone = t('fleet.request_owner_phone_required', {
+      defaultValue: 'Escribe tu teléfono de contacto.',
+    });
+  }
+  if (errors.ownerPhone === 'invalid') {
+    texts.ownerPhone = t('fleet.request_owner_phone_invalid', {
+      defaultValue: 'Escribe un móvil cubano: 8 dígitos que empiezan por 5 o 6.',
+    });
+  }
   if (errors.responsibleEmail) texts.responsibleEmail = emailText();
   if (errors.hoursStart) {
     texts.hoursStart = t('fleet.request_hours_start_invalid', {
@@ -132,8 +170,8 @@ export function fleetRequestErrorTexts(errors: FleetRequestFormErrors, t: Transl
  * message of a row says which driver it is about.
  */
 export function fleetRequestAnnouncement(errors: FleetRequestFormErrors, t: Translate): string {
-  const { responsibleEmail, hoursStart, hoursEnd, members } = fleetRequestErrorTexts(errors, t);
-  const parts = [responsibleEmail, hoursStart, hoursEnd].filter(Boolean);
+  const { ownerPhone, responsibleEmail, hoursStart, hoursEnd, members } = fleetRequestErrorTexts(errors, t);
+  const parts = [ownerPhone, responsibleEmail, hoursStart, hoursEnd].filter(Boolean);
   members.forEach((row, index) => {
     const messages = [row.name, row.phone, row.email].filter(Boolean);
     if (messages.length === 0) return;

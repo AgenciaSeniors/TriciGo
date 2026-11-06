@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  fleetOwnerContactPhone,
+  fleetOwnerPhoneIsAsked,
   fleetRequestAnnouncement,
   fleetRequestErrorTexts,
   validateFleetRequestForm,
@@ -166,5 +168,67 @@ describe('fleetRequestAnnouncement', () => {
         'fleet.request_driver_row 2: fleet.add_driver_name_required fleet.add_driver_phone_invalid fleet.request_email_invalid ' +
         'fleet.request_driver_row 4: fleet.add_driver_phone_required',
     );
+  });
+});
+
+describe('the owner phone of a session without one', () => {
+  it('asks for it only when the session has none', () => {
+    expect(fleetOwnerPhoneIsAsked('+5352345678')).toBe(false);
+    expect(fleetOwnerPhoneIsAsked('')).toBe(true);
+    expect(fleetOwnerPhoneIsAsked('   ')).toBe(true);
+    expect(fleetOwnerPhoneIsAsked(null)).toBe(true);
+    expect(fleetOwnerPhoneIsAsked(undefined)).toBe(true);
+  });
+
+  it('does not check a phone that was not asked for', () => {
+    expect(validateFleetRequestForm(filled)).toBeNull();
+  });
+
+  it('requires it once asked for', () => {
+    for (const ownerPhone of ['', '   ']) {
+      expect(validateFleetRequestForm({ ...filled, ownerPhone })?.ownerPhone).toBe('required');
+    }
+  });
+
+  it.each(['1234', '42345678', '+34612345678', 'cincuenta'])('refuses %s as a Cuban mobile', (ownerPhone) => {
+    expect(validateFleetRequestForm({ ...filled, ownerPhone })?.ownerPhone).toBe('invalid');
+  });
+
+  it.each(['52345678', '+53 6323 4567'])('accepts %s', (ownerPhone) => {
+    expect(validateFleetRequestForm({ ...filled, ownerPhone })).toBeNull();
+  });
+
+  it('keeps the other errors when the phone is fine', () => {
+    const errors = validateFleetRequestForm({ ...filled, responsibleEmail: 'no', ownerPhone: '52345678' });
+    expect(errors?.responsibleEmail).toBe('invalid');
+    expect(errors?.ownerPhone).toBeUndefined();
+  });
+
+  it('says what to fix', () => {
+    const t = (key: string) => `text of ${key}`;
+    expect(fleetRequestErrorTexts({ ownerPhone: 'required', members: [] }, t).ownerPhone).toBe(
+      'text of fleet.request_owner_phone_required',
+    );
+    expect(fleetRequestErrorTexts({ ownerPhone: 'invalid', members: [] }, t).ownerPhone).toBe(
+      'text of fleet.request_owner_phone_invalid',
+    );
+  });
+
+  it('reads the phone error first in the announcement', () => {
+    const t = (key: string, options: { row?: number }) => (options.row ? `${key} ${options.row}` : key);
+    expect(fleetRequestAnnouncement({ ownerPhone: 'invalid', responsibleEmail: 'invalid', members: [] }, t)).toBe(
+      'fleet.request_owner_phone_invalid fleet.request_email_invalid',
+    );
+  });
+
+  describe('fleetOwnerContactPhone', () => {
+    it('keeps the phone of the session as it is', () => {
+      expect(fleetOwnerContactPhone('+5352345678', '63234567')).toBe('+5352345678');
+    });
+
+    it('saves the typed phone in E.164 when the session has none', () => {
+      expect(fleetOwnerContactPhone('', '5234 5678')).toBe('+5352345678');
+      expect(fleetOwnerContactPhone(null, '+53 6323 4567')).toBe('+5363234567');
+    });
   });
 });
