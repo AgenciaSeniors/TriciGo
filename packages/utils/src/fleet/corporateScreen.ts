@@ -11,11 +11,11 @@
 // Plain TypeScript, so vitest can test it without a renderer.
 // ============================================================
 
-import type { CorporateAccountStatus, FleetMember, FleetWithMembers } from '@tricigo/types';
+import type { CorporateAccountStatus, FleetMembership, FleetWithMembers } from '@tricigo/types';
 
 export interface CorporateState {
   /** Fleets the driver drives for; `undefined` until a read succeeds. */
-  memberships: FleetMember[] | undefined;
+  memberships: FleetMembership[] | undefined;
   /** The fleet the driver owns, `null` for none; `undefined` until a read succeeds. */
   ownedFleet: FleetWithMembers | null | undefined;
   /** The load whose result applies; any other one is stale. `null` while none runs. */
@@ -42,7 +42,7 @@ export type CorporateAction =
   | {
       type: 'load_settled';
       load: number;
-      memberships: PromiseSettledResult<FleetMember[]>;
+      memberships: PromiseSettledResult<FleetMembership[]>;
       ownedFleet: PromiseSettledResult<FleetWithMembers | null>;
     };
 
@@ -72,7 +72,7 @@ export type CorporateView =
       /** The owner dashboard. It takes the place of the member card. */
       ownerFleet: FleetWithMembers | null;
       /** The member card: one row per fleet the driver drives for. */
-      memberships: FleetMember[];
+      memberships: FleetMembership[];
       /** The driver's fleet request when every one of them was rejected. */
       rejectedRequest: FleetWithMembers | null;
       /** FleetRequestForm: no fleet at all, or a rejected request to send again. */
@@ -131,4 +131,36 @@ export function canAddFleetDrivers(status: CorporateAccountStatus): boolean {
 export function rejectionReason(suspendedReason: string | null): string | null {
   const reason = suspendedReason?.trim();
   return reason ? reason : null;
+}
+
+export interface MembershipCardView {
+  /** The fleet's name, or null when it is unknown: the screen shows a generic title. */
+  title: string | null;
+  /** Who runs the fleet. Only shown next to a known fleet name. */
+  ownerLabel: string | null;
+  /** The "Salir de la flota" button: only while the driver is in the fleet. */
+  canLeave: boolean;
+}
+
+// leave_fleet (00676) accepts exactly these statuses.
+const LEAVABLE_STATUSES = ['active', 'approved', 'pending_signup'];
+
+function plainText(value: string | null): string | null {
+  const text = value?.trim();
+  return text ? text : null;
+}
+
+/**
+ * What the member card shows for one fleet. The name and the owner come from
+ * other people: they are returned as they are, to be drawn as plain text and
+ * never used to build anything else. A fallback read has neither, and then the
+ * card shows no owner line either.
+ */
+export function membershipCard(m: FleetMembership): MembershipCardView {
+  const title = plainText(m.fleet_name);
+  return {
+    title,
+    ownerLabel: title ? plainText(m.owner_label) : null,
+    canLeave: LEAVABLE_STATUSES.includes(m.status),
+  };
 }

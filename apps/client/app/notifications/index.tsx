@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { logger, formatTimestamp, triggerHaptic } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
+import { fleetUpdateRoute } from '@/utils/fleetPush';
 import { useNotificationStore } from '@/stores/notification.store';
 import type { AppNotification } from '@tricigo/types';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
@@ -151,6 +152,12 @@ export default function NotificationsScreen() {
 
     // Deep link based on notification data / category.
     const data = notif.data as Record<string, string> | null;
+    // Fleet changes are stored as `system`: only data.type tells them apart.
+    const fleetRoute = fleetUpdateRoute(data);
+    if (fleetRoute) {
+      router.push(fleetRoute);
+      return;
+    }
     // Chat notifications carry ride_id but must open the conversation, not
     // the ride screen (matches the OS push-tap handler).
     if (((notif.type as string) === 'chat' || data?.type === 'chat') && data?.ride_id) {

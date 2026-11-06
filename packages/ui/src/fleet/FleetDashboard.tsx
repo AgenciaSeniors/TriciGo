@@ -18,12 +18,18 @@
 // result of useFleetScreen, and where the buttons lead.
 // ============================================================
 
-import React from 'react';
-import { View, RefreshControl, useColorScheme } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { Alert, Pressable, View, RefreshControl, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { cubanLight, cubanDark, colors } from '@tricigo/theme';
+import { fleetService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
-import { canAddFleetDrivers, fleetStatusBadge, rejectionReason } from '@tricigo/utils/fleet/corporateScreen';
+import {
+  canAddFleetDrivers,
+  fleetStatusBadge,
+  membershipCard,
+  rejectionReason,
+} from '@tricigo/utils/fleet/corporateScreen';
 import { Screen, type ScreenProps } from '../Screen';
 import { Text } from '../Text';
 import { Button } from '../Button';
@@ -35,7 +41,8 @@ import { ProfileScreenHeader } from '../ProfileScreenHeader';
 import { TintedCard } from '../TintedCard';
 import { FleetRequestForm } from './FleetRequestForm';
 import { FleetMembersList, type FleetLicensePicker, type FleetNotify } from './FleetMembersList';
-import type { DriverFleet } from '@tricigo/types';
+import { announce } from './announce';
+import type { DriverFleet, FleetMembership } from '@tricigo/types';
 import type { FleetScreen } from './useFleetScreen';
 
 export interface FleetDashboardProps {
@@ -80,6 +87,10 @@ export function FleetDashboard({
   const palette = isDark ? cubanDark : cubanLight;
 
   const { view, sends, refreshing, reload, pullToRefresh, requestSubmitted } = screen;
+  // One "Salir de la flota" at a time. The ref answers a second tap in the same frame,
+  // before the state has re-rendered the button as disabled.
+  const [leavingId, setLeavingId] = useState<string | null>(null);
+  const leaving = useRef(false);
   const ready = view.kind === 'ready' ? view : null;
   const memberships = ready?.memberships ?? [];
   const ownerFleet = ready?.ownerFleet ?? null;
@@ -87,6 +98,54 @@ export function FleetDashboard({
   const inSeveralFleets = memberships.length > 1;
   const ownerBadge = ownerFleet ? fleetStatusBadge(ownerFleet.account.status) : null;
   const reason = rejectedRequest ? rejectionReason(rejectedRequest.account.suspended_reason) : null;
+
+  const leave = async (m: FleetMembership) => {
+    if (leaving.current) return;
+    leaving.current = true;
+    setLeavingId(m.member_id);
+    try {
+      await fleetService.leaveFleet(m.member_id);
+      const done = t('fleet.left_done', { defaultValue: 'Saliste de la flota.' });
+      onNotify('success', done);
+      announce(done);
+      await reload();
+    } catch {
+      const message = t('fleet.error_leave_failed', {
+        defaultValue: 'No pudimos sacarte de la flota. Revisa tu conexión e inténtalo de nuevo.',
+      });
+      onNotify('error', message);
+      announce(message);
+    } finally {
+      leaving.current = false;
+      setLeavingId(null);
+    }
+  };
+
+  const confirmLeave = (m: FleetMembership, title: string | null) => {
+    if (leaving.current) return;
+    Alert.alert(
+      t('fleet.leave_confirm_title', { defaultValue: '¿Salir de la flota?' }),
+      title
+        ? t('fleet.leave_confirm_body_named', {
+            defaultValue:
+              'Dejarás de recibir los viajes de la flota {{name}}. Podrás volver si su dueño te invita de nuevo.',
+            name: title,
+          })
+        : t('fleet.leave_confirm_body', {
+            defaultValue: 'Dejarás de recibir los viajes de esta flota. Podrás volver si su dueño te invita de nuevo.',
+          }),
+      [
+        { text: t('fleet.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
+        {
+          text: t('fleet.leave_fleet', { defaultValue: 'Salir de la flota' }),
+          style: 'destructive',
+          onPress: () => {
+            void leave(m);
+          },
+        },
+      ],
+    );
+  };
 
   return (
     <Screen
@@ -144,28 +203,69 @@ export function FleetDashboard({
               })}
             </Text>
             <View className="gap-3">
-              {memberships.map((m) => (
-                <View
-                  key={m.id}
-                  className="flex-row items-center justify-between border-t border-neutral-100 dark:border-neutral-800 pt-3"
-                >
-                  <View className="flex-1 mr-2">
-                    <Text variant="caption" color="secondary">
-                      {t('fleet.registered_as', { defaultValue: 'Registrado como' })}
+              {memberships.map((m) => {
+                const card = membershipCard(m);
+                const leavingThis = leavingId === m.member_id;
+                return (
+                  <View key={m.member_id} className="border-t border-neutral-100 dark:border-neutral-800 pt-3">
+                    {/* The name and the owner are other people's text: drawn as is, never interpreted */}
+                    <Text variant="body" className="font-medium">
+                      {card.title ?? t('fleet.member_fleet_generic', { defaultValue: 'Flota de conductores' })}
                     </Text>
-                    <Text variant="body">{m.driver_name}</Text>
-                    <Text variant="bodySmall" color="secondary">{m.driver_phone}</Text>
+                    {card.ownerLabel && (
+                      <Text variant="bodySmall" color="secondary">
+                        {t('fleet.member_run_by', { defaultValue: 'La maneja {{owner}}', owner: card.ownerLabel })}
+                      </Text>
+                    )}
+                    <View className="flex-row items-center justify-between mt-2">
+                      <View className="flex-1 mr-2">
+                        <Text variant="caption" color="secondary">
+                          {t('fleet.registered_as', { defaultValue: 'Registrado como' })}
+                        </Text>
+                        <Text variant="body">{m.driver_name}</Text>
+                        <Text variant="bodySmall" color="secondary">{m.driver_phone}</Text>
+                      </View>
+                      <StatusBadge
+                        label={
+                          m.status === 'active'
+                            ? t('fleet.membership_active', { defaultValue: 'Activo' })
+                            : t('fleet.membership_pending', { defaultValue: 'Pendiente' })
+                        }
+                        variant={m.status === 'active' ? 'success' : 'warning'}
+                      />
+                    </View>
+                    {card.canLeave && (
+                      <Pressable
+                        onPress={() => confirmLeave(m, card.title)}
+                        disabled={leavingId !== null}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          card.title
+                            ? t('fleet.leave_fleet_for', { defaultValue: 'Salir de la flota {{name}}', name: card.title })
+                            : t('fleet.leave_fleet', { defaultValue: 'Salir de la flota' })
+                        }
+                        accessibilityState={{ disabled: leavingId !== null, busy: leavingThis }}
+                        style={{ minHeight: 44, minWidth: 44, alignSelf: 'flex-start' }}
+                      >
+                        {({ pressed }) => (
+                          <View
+                            style={{
+                              minHeight: 44,
+                              minWidth: 44,
+                              justifyContent: 'center',
+                              opacity: leavingId !== null ? 0.4 : pressed ? 0.6 : 1,
+                            }}
+                          >
+                            <Text variant="label" color="error">
+                              {t('fleet.leave_fleet', { defaultValue: 'Salir de la flota' })}
+                            </Text>
+                          </View>
+                        )}
+                      </Pressable>
+                    )}
                   </View>
-                  <StatusBadge
-                    label={
-                      m.status === 'active'
-                        ? t('fleet.membership_active', { defaultValue: 'Activo' })
-                        : t('fleet.membership_pending', { defaultValue: 'Pendiente' })
-                    }
-                    variant={m.status === 'active' ? 'success' : 'warning'}
-                  />
-                </View>
-              ))}
+                );
+              })}
             </View>
           </Card>
         )}

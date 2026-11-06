@@ -962,6 +962,15 @@
     "edit_vehicle_types_required": "Escolha pelo menos um tipo de veículo.",
     "edit_number_invalid": "Escreva um número inteiro maior que 0.",
     "edit_not_updated": "Não foi possível salvar as alterações. Volte à lista, atualize-a e tente de novo.",
-    "edit_failed": "Não foi possível salvar as alterações. Verifique sua conexão e tente de novo."
+    "edit_failed": "Não foi possível salvar as alterações. Verifique sua conexão e tente de novo.",
+    "member_fleet_generic": "Frota de motoristas",
+    "member_run_by": "Gerenciada por {{owner}}",
+    "leave_fleet": "Sair da frota",
+    "leave_fleet_for": "Sair da frota {{name}}",
+    "leave_confirm_title": "Sair da frota?",
+    "leave_confirm_body_named": "Você deixará de receber as corridas da frota {{name}}. Poderá voltar se o dono dela convidar você de novo.",
+    "leave_confirm_body": "Você deixará de receber as corridas desta frota. Poderá voltar se o dono dela convidar você de novo.",
+    "left_done": "Você saiu da frota.",
+    "error_leave_failed": "Não foi possível tirar você da frota. Verifique sua conexão e tente de novo."
   }
 }
