@@ -37,6 +37,19 @@ export const noFleetRequestErrors: FleetRequestFormErrors = { members: [] };
 
 const HOUR = /^([01]\d|2[0-3]):[0-5]\d$/;
 
+/** The HH:MM the time columns of driver_fleets accept. */
+export function isValidFleetHour(value: string): boolean {
+  return HOUR.test(value);
+}
+
+/** The vehicle types a fleet can list. `label` is the Spanish default of fleet.vehicle_type.<id>. */
+export const FLEET_VEHICLE_TYPES = [
+  { id: 'triciclo_basico', label: 'Triciclo' },
+  { id: 'moto_standard', label: 'Moto' },
+  { id: 'auto_standard', label: 'Auto' },
+  { id: 'triciclo_cargo', label: 'Cargo' },
+];
+
 function rowErrors(row: FleetMemberInput): FleetRequestRowErrors {
   const name = row.driver_name.trim();
   const phone = row.driver_phone.trim();
@@ -60,9 +73,9 @@ export function validateFleetRequestForm(form: FleetRequestFormFields): FleetReq
   const responsibleEmail = form.responsibleEmail.trim();
   if (responsibleEmail && !isValidEmail(responsibleEmail)) errors.responsibleEmail = 'invalid';
   const hoursStart = form.hoursStart.trim();
-  if (hoursStart && !HOUR.test(hoursStart)) errors.hoursStart = 'invalid';
+  if (hoursStart && !isValidFleetHour(hoursStart)) errors.hoursStart = 'invalid';
   const hoursEnd = form.hoursEnd.trim();
-  if (hoursEnd && !HOUR.test(hoursEnd)) errors.hoursEnd = 'invalid';
+  if (hoursEnd && !isValidFleetHour(hoursEnd)) errors.hoursEnd = 'invalid';
 
   const fine =
     !errors.responsibleEmail &&
