@@ -1,5 +1,5 @@
 // ============================================================
-// TriciGo Driver — Fleet members list (Phase 4)
+// TriciGo — Fleet members list (Phase 4)
 // Read-only list shown in the fleet owner dashboard. Each row
 // shows the member name + phone + status. The status is the
 // signal the owner uses to know who is still pending review,
@@ -9,10 +9,10 @@
 
 import React from 'react';
 import { View } from 'react-native';
-import { Text } from '@tricigo/ui/Text';
-import { Card } from '@tricigo/ui/Card';
-import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import type { FleetMember, FleetMemberStatus } from '@tricigo/types';
+import { Text } from '../Text';
+import { Card } from '../Card';
+import { StatusBadge } from '../StatusBadge';
 
 interface Props {
   members: FleetMember[];
@@ -36,7 +36,7 @@ const STATUS_VARIANT: Record<FleetMemberStatus, 'success' | 'warning' | 'error' 
   inactive: 'neutral',
 };
 
-export default function FleetMembersList({ members }: Props) {
+export function FleetMembersList({ members }: Props) {
   if (members.length === 0) {
     return (
       <Text variant="bodySmall" color="secondary" className="text-center py-4">

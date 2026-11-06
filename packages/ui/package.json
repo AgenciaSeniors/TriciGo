@@ -19,6 +19,11 @@
     "./ErrorBoundary": "./src/ErrorBoundary.tsx",
     "./ErrorState": "./src/ErrorState.tsx",
     "./FareBreakdownCard": "./src/FareBreakdownCard.tsx",
+    "./fleet/AddFleetDriverForm": "./src/fleet/AddFleetDriverForm.tsx",
+    "./fleet/FleetDashboard": "./src/fleet/FleetDashboard.tsx",
+    "./fleet/FleetMembersList": "./src/fleet/FleetMembersList.tsx",
+    "./fleet/FleetRequestForm": "./src/fleet/FleetRequestForm.tsx",
+    "./fleet/useFleetScreen": "./src/fleet/useFleetScreen.ts",
     "./HistoryFilters": "./src/HistoryFilters.tsx",
     "./IconButton": "./src/IconButton.tsx",
     "./Input": "./src/Input.tsx",
@@ -48,7 +53,10 @@
     "./SourceAttribution": "./src/SourceAttribution.tsx"
   },
   "dependencies": {
+    "@tricigo/api": "workspace:*",
+    "@tricigo/i18n": "workspace:*",
     "@tricigo/theme": "workspace:*",
+    "@tricigo/types": "workspace:*",
     "@tricigo/utils": "workspace:*"
   },
   "peerDependencies": {
