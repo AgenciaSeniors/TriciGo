@@ -16,6 +16,8 @@ import type { FleetMemberInput } from '@tricigo/types';
 import { buildFleetRequest, createFleetRequestSubmission } from '@tricigo/api';
 import {
   FLEET_VEHICLE_TYPES,
+  fleetOwnerContactPhone,
+  fleetOwnerPhoneIsAsked,
   fleetRequestAnnouncement,
   fleetRequestErrorTexts,
   noFleetRequestErrors,
@@ -42,12 +44,17 @@ const ROW_ERROR_FIELDS: Partial<Record<keyof FleetMemberInput, keyof FleetReques
 
 interface Props {
   ownerUserId: string;
+  /** The phone of the session. Empty, the form asks for one and saves that as the contact. */
   ownerPhone: string;
   onSubmitted: () => void;
 }
 
 export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props) {
   const { t } = useTranslation('driver');
+
+  // A passenger who signed in with Google or Apple may have no phone on the session.
+  const asksOwnerPhone = fleetOwnerPhoneIsAsked(ownerPhone);
+  const [typedOwnerPhone, setTypedOwnerPhone] = useState('');
 
   // Fleet info
   const [fleetName, setFleetName] = useState('');
@@ -85,7 +92,7 @@ export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props
 
   // Typing in a field takes its error away, as in the add driver form.
   const checkedField =
-    (field: 'responsibleEmail' | 'hoursStart' | 'hoursEnd', setValue: (value: string) => void) =>
+    (field: 'ownerPhone' | 'responsibleEmail' | 'hoursStart' | 'hoursEnd', setValue: (value: string) => void) =>
     (value: string) => {
       setValue(value);
       setErrors((prev) => ({ ...prev, [field]: undefined }));
@@ -132,7 +139,9 @@ export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props
 
   const handleSubmit = async () => {
     if (!ownerUserId) return;
-    const found = validateFleetRequestForm({ responsibleEmail, hoursStart, hoursEnd, members });
+    const found = validateFleetRequestForm({
+      ownerPhone: asksOwnerPhone ? typedOwnerPhone : undefined,
+      responsibleEmail, hoursStart, hoursEnd, members });
     if (found) {
       setErrors(found);
       // The fields at fault can be out of view: this line sits by the button.
@@ -146,7 +155,7 @@ export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props
     try {
       const { account, fleet } = buildFleetRequest({
         ownerUserId,
-        ownerPhone,
+        ownerPhone: fleetOwnerContactPhone(ownerPhone, typedOwnerPhone),
         fleetName,
         taxId,
         city,
@@ -219,6 +228,20 @@ export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props
           placeholder={t('fleet.request_city_placeholder', { defaultValue: 'Ej: La Habana' })}
           maxLength={120}
         />
+        {asksOwnerPhone && (
+          <>
+            <View className="h-3" />
+            <Input
+              label={t('fleet.request_owner_phone', { defaultValue: 'Tu teléfono de contacto *' })}
+              value={typedOwnerPhone}
+              onChangeText={checkedField('ownerPhone', setTypedOwnerPhone)}
+              keyboardType="phone-pad"
+              placeholder={t('fleet.phone_placeholder', { defaultValue: '+53 5XXXXXXX o 6XXXXXXX' })}
+              error={errorTexts.ownerPhone}
+              accessibilityHint={errorTexts.ownerPhone}
+            />
+          </>
+        )}
         <View className="h-3" />
         <Input
           label={t('fleet.request_responsible', { defaultValue: 'Responsable (nombre)' })}
