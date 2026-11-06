@@ -17,6 +17,9 @@ export default function ProfileLayout() {
       <Stack.Screen name="about" />
       <Stack.Screen name="blog" />
       <Stack.Screen name="corporate" />
+      <Stack.Screen name="fleet" />
+      <Stack.Screen name="add-fleet-driver" />
+      <Stack.Screen name="edit-fleet" />
       <Stack.Screen name="terms" />
       <Stack.Screen name="privacy" />
       <Stack.Screen name="blocked-users" />
