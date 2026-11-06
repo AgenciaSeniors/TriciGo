@@ -122,6 +122,11 @@ export function fleetStatusBadge(status: CorporateAccountStatus): FleetStatusBad
   return FLEET_STATUS_BADGES[status];
 }
 
+/** The owner adds drivers while the fleet is in review or approved. */
+export function canAddFleetDrivers(status: CorporateAccountStatus): boolean {
+  return status === 'pending' || status === 'approved';
+}
+
 /** The admin's reason for rejecting a request, or null when they wrote none. */
 export function rejectionReason(suspendedReason: string | null): string | null {
   const reason = suspendedReason?.trim();

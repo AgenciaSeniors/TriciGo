@@ -20,6 +20,7 @@ export default function BusinessesPage() {
   const [tab, setTab] = useState<Filter>('all');
   const [accounts, setAccounts] = useState<CorporateAccount[]>([]);
   const [fleetAccountIds, setFleetAccountIds] = useState<Set<string>>(new Set());
+  const [pendingDrivers, setPendingDrivers] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
@@ -43,12 +44,17 @@ export default function BusinessesPage() {
       );
       // A fleet request sent from the app is only flagged is_fleet_owner once
       // approved; until then its driver_fleets row is what marks it.
-      const withFleet = await fleetService.getAccountIdsWithFleet(data.map((a) => a.id));
+      const [withFleet, pending] = await Promise.all([
+        fleetService.getAccountIdsWithFleet(data.map((a) => a.id)),
+        fleetService.getPendingMemberCounts(data),
+      ]);
       setAccounts(data);
       setFleetAccountIds(withFleet);
+      setPendingDrivers(pending);
     } catch (err) {
       setAccounts([]);
       setFleetAccountIds(new Set());
+      setPendingDrivers(new Map());
       setError(getErrorMessage(err));
     } finally {
       setLoading(false);
@@ -69,6 +75,11 @@ export default function BusinessesPage() {
           {(a.is_fleet_owner || fleetAccountIds.has(a.id)) && (
             <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
               Flota
+            </span>
+          )}
+          {pendingDrivers.has(a.id) && (
+            <span className="whitespace-nowrap rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-400">
+              {t('businesses.pending_drivers', { count: pendingDrivers.get(a.id) })}
             </span>
           )}
         </span>
