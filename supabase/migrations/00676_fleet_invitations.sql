@@ -100,9 +100,10 @@ GRANT SELECT ON public.fleet_invite_sends TO authenticated;
 GRANT ALL ON public.fleet_invite_sends TO service_role;
 
 -- ── 2. The text of the SMS ───────────────────────────────────
--- One GSM-7 part. The owner's name loses its accents (ñ stays, GSM-7 has it): one letter outside
--- GSM-7 triples the cost. Whatever is left outside the set falls back to the text with no name.
--- The fixed text with a name is 136 characters and the name at most 23.
+-- One GSM-7 part. The SMS goes out with GSM-7 coding, so a letter outside GSM-7 would arrive mangled:
+-- the owner's name loses its accents (ñ stays, GSM-7 has it), and whatever is left outside the set
+-- falls back to the text with no name. The fixed text with a name is 136 characters and the name at
+-- most 23.
 CREATE OR REPLACE FUNCTION public._fleet_invite_sms_text(p_owner_name text)
  RETURNS text
  LANGUAGE plpgsql
@@ -151,6 +152,9 @@ $function$;
 -- the review that waits, and its trigger then finds this invitation approved. The company's side
 -- reads the invitations with no row lock, so the two sides cannot deadlock. If a review holds the row
 -- past lock_timeout, nothing goes out, it is logged, and the owner's resend recovers it.
+-- The SMS sends gsm7: true, the caller's word that the text fits GSM-7, so send-sms codes it as text
+-- and it goes out as one part. A send-sms not redeployed yet ignores the field and the SMS still
+-- arrives, in UCS-2 and in more parts, so this migration and that deploy can go in either order.
 -- Returns what happened, for the caller and the tests. It never raises.
 CREATE OR REPLACE FUNCTION public._fleet_announce_member(p_member_id uuid, p_source text)
  RETURNS text
@@ -250,7 +254,7 @@ BEGIN
     headers := jsonb_build_object('Content-Type', 'application/json',
                                   'Authorization', 'Bearer ' || v_key, 'apikey', v_key),
     body    := jsonb_build_object('phone', v_phone, 'body', public._fleet_invite_sms_text(v_name),
-                                  'user_id', v_driver, 'event_type', 'fleet_invite'));
+                                  'user_id', v_driver, 'event_type', 'fleet_invite', 'gsm7', true));
   RETURN 'sent_sms';
 EXCEPTION WHEN OTHERS THEN
   RAISE WARNING '_fleet_announce_member(%): % %', p_member_id, SQLSTATE, SQLERRM;
@@ -580,7 +584,7 @@ BEGIN
     FROM (VALUES
       ('public._fleet_invite_sms_text(text)'::regprocedure, '617ee8832f32dc04e2f3cc3923edc75f'),
       ('public._fleet_push(uuid,uuid,text,text,text)', 'd4878b8bb0eb0e4fe7d5e0c0b55ecf2b'),
-      ('public._fleet_announce_member(uuid,text)', '6183d2d7e723437a72a4f84a6a85558c'),
+      ('public._fleet_announce_member(uuid,text)', 'a453645e5f419e736e4c552e5ae50c4e'),
       ('public.resend_fleet_invite(uuid)', '1ad9632095eb6a0779166435c7c7d671'),
       ('public.leave_fleet(uuid)', '0bb9f0a8ff7265e7c5df006fc34b0b60'),
       ('public.get_my_fleet_memberships()', '30221e4c16b5494442a3f281e584d45a'),
