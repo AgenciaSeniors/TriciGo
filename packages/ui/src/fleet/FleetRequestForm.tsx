@@ -1,21 +1,21 @@
 // ============================================================
-// TriciGo Driver — Fleet registration form (Phase 4)
-// Dueño de flota completa: datos de la flota + vehículos +
-// lista repetible de conductores (mín 1, máx 30). Submit crea
-// corporate_account + driver_fleets + fleet_members en bloque.
+// TriciGo — Fleet registration form (Phase 4)
+// The owner fills in the fleet, its vehicles and a repeatable list
+// of drivers (min 1, max 30). Submitting creates corporate_account +
+// driver_fleets + fleet_members in one go.
 // ============================================================
 
 import React, { useState } from 'react';
 import { View, Pressable, Alert, ScrollView } from 'react-native';
-import { Text } from '@tricigo/ui/Text';
-import { Card } from '@tricigo/ui/Card';
-import { Button } from '@tricigo/ui/Button';
-import { Input } from '@tricigo/ui/Input';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@tricigo/theme';
 import { getErrorMessage } from '@tricigo/utils';
 import type { FleetMemberInput } from '@tricigo/types';
 import { buildFleetRequest, createFleetRequestSubmission } from '@tricigo/api';
+import { Text } from '../Text';
+import { Card } from '../Card';
+import { Button } from '../Button';
+import { Input } from '../Input';
 
 const VEHICLE_TYPES = [
   { id: 'triciclo_basico', label: 'Triciclo' },
@@ -32,7 +32,7 @@ interface Props {
   onSubmitted: () => void;
 }
 
-export default function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props) {
+export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props) {
   // Fleet info
   const [fleetName, setFleetName] = useState('');
   const [taxId, setTaxId] = useState('');
