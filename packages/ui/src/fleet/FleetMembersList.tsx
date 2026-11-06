@@ -9,6 +9,7 @@
 
 import React from 'react';
 import { View } from 'react-native';
+import { useTranslation } from '@tricigo/i18n';
 import type { FleetMember, FleetMemberStatus } from '@tricigo/types';
 import { Text } from '../Text';
 import { Card } from '../Card';
@@ -18,6 +19,7 @@ interface Props {
   members: FleetMember[];
 }
 
+// Spanish defaults of the fleet.member_status keys.
 const STATUS_LABELS: Record<FleetMemberStatus, string> = {
   pending_review: 'Pendiente revisión',
   approved: 'Aprobado',
@@ -37,10 +39,14 @@ const STATUS_VARIANT: Record<FleetMemberStatus, 'success' | 'warning' | 'error' 
 };
 
 export function FleetMembersList({ members }: Props) {
+  const { t } = useTranslation('driver');
+  const statusLabel = (status: string) =>
+    t(`fleet.member_status.${status}`, { defaultValue: STATUS_LABELS[status as FleetMemberStatus] ?? status });
+
   if (members.length === 0) {
     return (
       <Text variant="bodySmall" color="secondary" className="text-center py-4">
-        Aún no hay conductores en esta flota.
+        {t('fleet.members_empty', { defaultValue: 'Aún no hay conductores en esta flota.' })}
       </Text>
     );
   }
@@ -56,12 +62,16 @@ export function FleetMembersList({ members }: Props) {
   return (
     <View>
       <Card variant="filled" padding="md" className="mb-3 bg-primary-50 dark:bg-primary-900/20">
-        <Text variant="caption" color="secondary">Estado general</Text>
-        <Text variant="h4" className="mt-1">{active} de {total} registrados</Text>
+        <Text variant="caption" color="secondary">
+          {t('fleet.members_overview', { defaultValue: 'Estado general' })}
+        </Text>
+        <Text variant="h4" className="mt-1">
+          {t('fleet.members_registered', { defaultValue: '{{active}} de {{total}} registrados', active, total })}
+        </Text>
         <View className="flex-row flex-wrap gap-2 mt-2">
           {Object.entries(counts).map(([status, count]) => (
             <Text key={status} variant="caption" color="secondary">
-              · {STATUS_LABELS[status as FleetMemberStatus] ?? status}: {count}
+              · {statusLabel(status)}: {count}
             </Text>
           ))}
         </View>
@@ -77,11 +87,11 @@ export function FleetMembersList({ members }: Props) {
             <Text variant="caption" color="secondary">{m.driver_phone}</Text>
             {m.rejected_reason && (
               <Text variant="caption" color="error" className="mt-1">
-                Motivo: {m.rejected_reason}
+                {t('fleet.rejected_reason', { defaultValue: 'Motivo: {{reason}}', reason: m.rejected_reason })}
               </Text>
             )}
           </View>
-          <StatusBadge label={STATUS_LABELS[m.status]} variant={STATUS_VARIANT[m.status]} />
+          <StatusBadge label={statusLabel(m.status)} variant={STATUS_VARIANT[m.status]} />
         </View>
       ))}
     </View>

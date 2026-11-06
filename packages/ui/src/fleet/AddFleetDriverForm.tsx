@@ -114,7 +114,7 @@ export function AddFleetDriverForm({ fleetId, onBack, onAdded }: AddFleetDriverF
               value={form.phone}
               onChangeText={setField('phone')}
               keyboardType="phone-pad"
-              placeholder="+53 5XXXXXXX o 6XXXXXXX"
+              placeholder={t('fleet.phone_placeholder', { defaultValue: '+53 5XXXXXXX o 6XXXXXXX' })}
               error={errorTexts.phone}
               accessibilityHint={errorTexts.phone}
             />

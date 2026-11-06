@@ -47,6 +47,9 @@ export interface FleetDashboardProps {
   onAddDriver: (fleetId: string) => void;
 }
 
+// What corporate_accounts.commission_percent is compared with on screen.
+const STANDARD_COMMISSION_PERCENT = 15;
+
 export function FleetDashboard({ screen, userId, ownerPhone, onBack, onAddDriver }: FleetDashboardProps) {
   const { t } = useTranslation('driver');
   const colorScheme = useColorScheme();
@@ -75,9 +78,9 @@ export function FleetDashboard({ screen, userId, ownerPhone, onBack, onAddDriver
       <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
       <View className="pt-4 pb-8">
         <ProfileScreenHeader
-          title="Corporativo"
+          title={t('fleet.screen_title', { defaultValue: 'Corporativo' })}
           onBack={onBack}
-          backAccessibilityLabel="Atrás"
+          backAccessibilityLabel={t('common:back', { defaultValue: 'Volver' })}
         />
 
         {view.kind === 'loading' && (
@@ -101,13 +104,21 @@ export function FleetDashboard({ screen, userId, ownerPhone, onBack, onAddDriver
         {memberships.length > 0 && (
           <Card variant="outlined" padding="lg" className="mb-4">
             <Text variant="h4" className="mb-3">
-              {inSeveralFleets ? 'Tus flotas' : 'Tu flota'}
+              {inSeveralFleets
+                ? t('fleet.your_fleets', { defaultValue: 'Tus flotas' })
+                : t('fleet.your_fleet', { defaultValue: 'Tu flota' })}
             </Text>
             <Text variant="bodySmall" color="secondary" className="mb-3">
               {inSeveralFleets
-                ? `Estás vinculado como conductor en ${memberships.length} flotas.`
-                : 'Estás vinculado como conductor.'}{' '}
-              Tus viajes corporativos aplicarán comisión reducida automáticamente — el pasajero paga menos y tú cobras lo mismo de siempre.
+                ? t('fleet.linked_driver_many', {
+                    defaultValue: 'Estás vinculado como conductor en {{total}} flotas.',
+                    total: memberships.length,
+                  })
+                : t('fleet.linked_driver', { defaultValue: 'Estás vinculado como conductor.' })}{' '}
+              {t('fleet.linked_commission', {
+                defaultValue:
+                  'Tus viajes corporativos aplicarán comisión reducida automáticamente — el pasajero paga menos y tú cobras lo mismo de siempre.',
+              })}
             </Text>
             <View className="gap-3">
               {memberships.map((m) => (
@@ -116,12 +127,18 @@ export function FleetDashboard({ screen, userId, ownerPhone, onBack, onAddDriver
                   className="flex-row items-center justify-between border-t border-neutral-100 dark:border-neutral-800 pt-3"
                 >
                   <View className="flex-1 mr-2">
-                    <Text variant="caption" color="secondary">Registrado como</Text>
+                    <Text variant="caption" color="secondary">
+                      {t('fleet.registered_as', { defaultValue: 'Registrado como' })}
+                    </Text>
                     <Text variant="body">{m.driver_name}</Text>
                     <Text variant="bodySmall" color="secondary">{m.driver_phone}</Text>
                   </View>
                   <StatusBadge
-                    label={m.status === 'active' ? 'Activo' : 'Pendiente'}
+                    label={
+                      m.status === 'active'
+                        ? t('fleet.membership_active', { defaultValue: 'Activo' })
+                        : t('fleet.membership_pending', { defaultValue: 'Pendiente' })
+                    }
                     variant={m.status === 'active' ? 'success' : 'warning'}
                   />
                 </View>
@@ -143,21 +160,31 @@ export function FleetDashboard({ screen, userId, ownerPhone, onBack, onAddDriver
               </View>
               {ownerFleet.account.status === 'pending' && (
                 <Text variant="bodySmall" color="secondary" className="mb-3">
-                  Tu flota está en revisión. Recibirás una notificación cuando el equipo TriciGo la apruebe. Los conductores listados serán vinculados automáticamente cuando se registren con su número de teléfono.
+                  {t('fleet.owner_in_review', {
+                    defaultValue:
+                      'Tu flota está en revisión. Recibirás una notificación cuando el equipo TriciGo la apruebe. Los conductores listados serán vinculados automáticamente cuando se registren con su número de teléfono.',
+                  })}
                 </Text>
               )}
               {ownerFleet.account.status === 'approved' && ownerFleet.account.commission_percent !== null && (
                 <View className="border-t border-neutral-100 dark:border-neutral-800 pt-3 mb-2">
-                  <Text variant="caption" color="secondary">Comisión asignada</Text>
+                  <Text variant="caption" color="secondary">
+                    {t('fleet.commission_assigned', { defaultValue: 'Comisión asignada' })}
+                  </Text>
                   <Text variant="h4" color="accent">{ownerFleet.account.commission_percent}%</Text>
                   <Text variant="caption" color="secondary">
-                    Reducida vs. el {15}% estándar — pasajeros pagan menos.
+                    {t('fleet.commission_reduced', {
+                      defaultValue: 'Reducida vs. el {{standard}}% estándar — pasajeros pagan menos.',
+                      standard: STANDARD_COMMISSION_PERCENT,
+                    })}
                   </Text>
                 </View>
               )}
             </Card>
 
-            <Text variant="label" color="secondary" className="mb-2 ml-1">Conductores</Text>
+            <Text variant="label" color="secondary" className="mb-2 ml-1">
+              {t('fleet.drivers_heading', { defaultValue: 'Conductores' })}
+            </Text>
             <Card variant="outlined" padding="lg" className="mb-4">
               <FleetMembersList members={ownerFleet.members} />
             </Card>
