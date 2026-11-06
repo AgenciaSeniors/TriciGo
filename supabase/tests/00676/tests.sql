@@ -238,6 +238,41 @@ SELECT t.case('A14 the announce states why it did not send', 'company_not_approv
   $$SELECT public._fleet_announce_member('{pa1}', 'review')$$,
   $$SELECT public._fleet_announce_member('{b1}', 'review')$$,
   $$SELECT public._fleet_announce_member('{new}', 'review')$$);
+SELECT t.case('A15 a passenger who got the SMS and became a driver hears nothing when the company is approved again', 'sms:review;sms:review;none',
+  $$UPDATE public.fleet_members SET status = 'approved' WHERE id = '{b2}'$$,
+  $$INSERT INTO public.driver_profiles (user_id, status) VALUES ('{pepe}', 'approved')$$,
+  $$SELECT t.sends('{dfa}')$$,
+  $$DELETE FROM public.cron_http_calls$$,
+  $$UPDATE public.corporate_accounts SET status = 'suspended' WHERE id = '{caa}'$$,
+  $$UPDATE public.corporate_accounts SET status = 'approved' WHERE id = '{caa}'$$,
+  $$SELECT t.sends('{dfa}')$$,
+  $$SELECT COALESCE(string_agg(event, ','), 'none') FROM t.push WHERE user_id = '{pepe}'$$);
+SELECT t.case('A16 a driver who got the push and was then suspended gets no SMS when the company is approved again', 'push:review;push:review;0',
+  $$UPDATE public.fleet_members SET status = 'approved' WHERE id = '{b3}'$$,
+  $$UPDATE public.driver_profiles SET status = 'suspended' WHERE user_id = '{dora}'$$,
+  $$SELECT t.sends('{dfa}')$$,
+  $$UPDATE public.corporate_accounts SET status = 'suspended' WHERE id = '{caa}'$$,
+  $$UPDATE public.corporate_accounts SET status = 'approved' WHERE id = '{caa}'$$,
+  $$SELECT t.sends('{dfa}')$$,
+  $$SELECT count(*) FROM t.sms$$);
+SELECT t.case('A17 nor one who deleted their account, with the reference moved to the anonymous user', 'push:review;0',
+  $$UPDATE public.fleet_members SET status = 'approved' WHERE id = '{b3}'$$,
+  $$INSERT INTO auth.users (id) VALUES ('{gone}')$$,
+  $$UPDATE public.fleet_members SET driver_id = '{gone}' WHERE id = '{b3}'$$,
+  $$UPDATE public.corporate_accounts SET status = 'suspended' WHERE id = '{caa}'$$,
+  $$UPDATE public.corporate_accounts SET status = 'approved' WHERE id = '{caa}'$$,
+  $$SELECT t.sends('{dfa}')$$,
+  $$SELECT count(*) FROM t.sms$$);
+SELECT t.case('A18 a linked invitation that lost its first contact has no resend, and gets it when the company is approved again', 'not_invitable;sms:review',
+  $$SET LOCAL test.http_fail = 'send-sms'$$,
+  $$UPDATE public.fleet_members SET status = 'approved' WHERE id = '{b2}'$$,
+  $$SET LOCAL test.http_fail = ''$$,
+  '@{beto}',
+  $$SELECT public.resend_fleet_invite('{b2}') ->> 'error'$$,
+  '@db',
+  $$UPDATE public.corporate_accounts SET status = 'suspended' WHERE id = '{caa}'$$,
+  $$UPDATE public.corporate_accounts SET status = 'approved' WHERE id = '{caa}'$$,
+  $$SELECT t.sends('{dfa}')$$);
 
 -- ── B. Someone who already confirmed that number ─────────────
 SELECT t.case('B1 a passenger who confirmed the number is linked at approval and still gets the SMS', 'active:true;1;+5355510005;pepe;sms:review',
@@ -432,6 +467,17 @@ SELECT t.case('D9 a resend counts as contact: approving the company again sends 
   $$UPDATE public.corporate_accounts SET status = 'approved' WHERE id = '{caa}'$$,
   $$SELECT count(*) FROM t.sms$$,
   $$SELECT t.sends('{dfa}')$$);
+SELECT t.case('D10 a resend counts for a new invitation of the number too', 'true;1',
+  $$SET LOCAL test.http_fail = 'send-sms'$$,
+  $$UPDATE public.fleet_members SET status = 'approved' WHERE id = '{b1}'$$,
+  $$SET LOCAL test.http_fail = ''$$,
+  '@{beto}',
+  $$SELECT public.resend_fleet_invite('{b1}') ->> 'success'$$,
+  '@db',
+  $$DELETE FROM public.fleet_members WHERE id = '{b1}'$$,
+  $$INSERT INTO public.fleet_members (id, fleet_id, driver_name, driver_phone) VALUES ('{new}', '{dfa}', 'Quique Otra Vez', '+5355530001')$$,
+  $$UPDATE public.fleet_members SET status = 'approved' WHERE id = '{new}'$$,
+  $$SELECT count(*) FROM t.sms$$);
 
 -- ── E. What the SMS and the driver's push say ────────────────
 SELECT t.case('E1 with the owner''s name',
@@ -736,6 +782,37 @@ SELECT t.case('H10 no session: forbidden', 'forbidden',
   $$UPDATE public.fleet_members SET status = 'approved' WHERE id = '{b3}'$$,
   '@service',
   $$SELECT public.leave_fleet('{b3}') ->> 'error'$$);
+SELECT t.case('H11 one number in two spellings: leaving takes both rows out of the fleet', 'true;0;inactive,inactive',
+  $$UPDATE public.fleet_members SET status = 'approved' WHERE id = '{b3}'$$,
+  $$INSERT INTO public.fleet_members (id, fleet_id, driver_id, driver_name, driver_phone, status) VALUES ('{new}', '{dfa}', '{dora}', 'Dora Vega', '+5355510006', 'active')$$,
+  '@{dora}',
+  $$SELECT public.leave_fleet('{b3}') ->> 'success'$$,
+  $$SELECT count(*) FROM public.get_my_fleet_memberships()$$,
+  '@db',
+  $$SELECT string_agg(status, ',') FROM public.fleet_members WHERE id IN ('{b3}', '{new}')$$);
+SELECT t.case('H12 a rejected row of theirs in that fleet keeps its status', 'true;inactive;rejected',
+  $$UPDATE public.fleet_members SET status = 'approved' WHERE id = '{b3}'$$,
+  $$INSERT INTO public.fleet_members (id, fleet_id, driver_id, driver_name, driver_phone, status) VALUES ('{new}', '{dfa}', '{dora}', 'Dora Vega', '+5355510006', 'rejected')$$,
+  '@{dora}',
+  $$SELECT public.leave_fleet('{b3}') ->> 'success'$$,
+  '@db',
+  $$SELECT status FROM public.fleet_members WHERE id = '{b3}'$$,
+  $$SELECT status FROM public.fleet_members WHERE id = '{new}'$$);
+SELECT t.case('H13 a tap on a row that already left takes a twin out too: success means out of the fleet', 'true;0;inactive,inactive',
+  $$UPDATE public.fleet_members SET status = 'approved' WHERE id = '{b3}'$$,
+  $$INSERT INTO public.fleet_members (id, fleet_id, driver_id, driver_name, driver_phone, status) VALUES ('{new}', '{dfa}', '{dora}', 'Dora Vega', '+5355510006', 'inactive')$$,
+  '@{dora}',
+  $$SELECT public.leave_fleet('{new}') ->> 'success'$$,
+  $$SELECT count(*) FROM public.get_my_fleet_memberships()$$,
+  '@db',
+  $$SELECT string_agg(status, ',') FROM public.fleet_members WHERE id IN ('{b3}', '{new}')$$);
+SELECT t.case('H14 the owner hears about each row: two rows, two notices', 'true;2',
+  $$UPDATE public.fleet_members SET status = 'approved' WHERE id = '{b3}'$$,
+  $$INSERT INTO public.fleet_members (id, fleet_id, driver_id, driver_name, driver_phone, status) VALUES ('{new}', '{dfa}', '{dora}', 'Dora Vega', '+5355510006', 'active')$$,
+  '@{dora}',
+  $$SELECT public.leave_fleet('{b3}') ->> 'success'$$,
+  '@db',
+  $$SELECT count(*) FROM t.push WHERE event = 'member_left' AND user_id = '{beto}'$$);
 
 -- ── I. What the owner and the driver are told ────────────────
 SELECT t.case('I1 the owner hears the fleet was approved', 'fleet_approved>ana;Tu flota fue aprobada',
@@ -840,7 +917,7 @@ SELECT t.case('J2 a driver in two fleets sees both, with the fleet name and who 
   $$UPDATE public.fleet_members SET status = 'approved' WHERE id IN ('{b3}', '{pa3}')$$,
   '@{dora}',
   $$SELECT string_agg(fleet_name || '|' || owner_label || '|' || status, ',' ORDER BY owner_label) FROM public.get_my_fleet_memberships()$$);
-SELECT t.case('J3 approved and pending_signup count; review, rejected and inactive do not', 'approved,pending_signup',
+SELECT t.case('J3 approved counts; pending_signup, review, rejected and inactive do not', 'approved',
   $$INSERT INTO public.corporate_accounts (id, name, contact_phone, status, created_by) VALUES ('{ca2}', 'Segunda', '+5355590002', 'approved', '{beto}')$$,
   $$INSERT INTO public.driver_fleets (id, corporate_account_id, name) VALUES ('{df2}', '{ca2}', 'Segunda')$$,
   $$UPDATE public.fleet_members SET driver_id = '{dora}' WHERE id IN ('{pa1}', '{pa2}', '{pa3}', '{b1}')$$,

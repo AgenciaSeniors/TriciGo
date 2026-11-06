@@ -21,19 +21,24 @@
 --   * A first contact goes out only with the company approved and the invitation approved. An
 --     approved driver gets a push; anyone else gets an SMS, a passenger already linked included,
 --     because that person still has to install the driver app. pending_signup counts as approved
---     everywhere, as in the three linking paths.
+--     for contacting and for leaving, as in the three linking paths. The list of a driver's fleets
+--     shows only active and approved rows.
 --   * Exactly one first contact, whichever side is approved first, and also when both are approved
---     at once: see _fleet_announce_member.
+--     at once: see _fleet_announce_member. A review contacts an invitation once, on either channel:
+--     one with a send row hears nothing when its company is approved again, even if the person's
+--     situation would now call for the other channel.
 --   * SMS: once per (fleet_id, phone), so deleting an invitation and adding the number again resets
 --     nothing. 24 hours between sends, 3 sends per number and fleet, 30 resends per owner and day, 200
 --     SMS a day in total, Cuban mobiles only. Push: once per invitation row, because a driver who left
 --     and is invited again is relinked at approval and has to hear about it. A push costs nothing and
 --     every new row passes a human review.
 --   * A send row is written in the same block as its HTTP call, so an SMS call that raises leaves no
---     row and the owner can resend at once. A provider failure after the call (send-sms answers 200
---     with success false) counts as sent: sms_log is where that shows. _ops_user_push catches the
---     failure of its own call and logs push_failed, so a push row stays even then: a push has no
---     resend, and the driver sees the fleet in the app anyway.
+--     row and nothing holds back a resend. The owner can resend only an invitation that is not linked:
+--     a linked one that lost its first contact waits for the next review, such as its company being
+--     approved again. A provider failure after the call (send-sms answers 200 with success false)
+--     counts as sent: sms_log is where that shows. _ops_user_push catches the failure of its own call
+--     and logs push_failed, so a push row stays even then: a push has no resend, and the driver sees
+--     the fleet in the app anyway.
 --   * Neither the SMS nor a push to the driver carries text the owner typed: no fleet name, no company
 --     name, only the owner's reduced name (_third_party_person_name). A push to the owner may use the
 --     driver_name that owner typed.
@@ -72,6 +77,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS fleet_invite_sends_first_push_key
   ON public.fleet_invite_sends (member_id) WHERE channel = 'push';
 CREATE INDEX IF NOT EXISTS fleet_invite_sends_fleet_phone_idx
   ON public.fleet_invite_sends (fleet_id, phone, sent_at);
+-- A review looks here first, on either channel: the key on member_id above is for pushes only.
+CREATE INDEX IF NOT EXISTS fleet_invite_sends_member_idx
+  ON public.fleet_invite_sends (member_id);
 CREATE INDEX IF NOT EXISTS fleet_invite_sends_sms_sent_at_idx
   ON public.fleet_invite_sends (sent_at) WHERE channel = 'sms';
 
@@ -151,7 +159,8 @@ $function$;
 -- review is in flight it waits, and then sees the new status. If the share lock comes first, it is
 -- the review that waits, and its trigger then finds this invitation approved. The company's side
 -- reads the invitations with no row lock, so the two sides cannot deadlock. If a review holds the row
--- past lock_timeout, nothing goes out, it is logged, and the owner's resend recovers it.
+-- past lock_timeout, nothing goes out and it is logged. The owner can then resend it only if the
+-- invitation is not linked.
 -- The SMS sends gsm7: true, the caller's word that the text fits GSM-7, so send-sms codes it as text
 -- and it goes out as one part. A send-sms not redeployed yet ignores the field and the SMS still
 -- arrives, in UCS-2 and in more parts, so this migration and that deploy can go in either order.
@@ -196,6 +205,10 @@ BEGIN
   END IF;
   IF v_status NOT IN ('approved', 'pending_signup', 'active') THEN
     RETURN 'not_invitable';
+  END IF;
+  IF p_source = 'review' AND EXISTS (
+       SELECT 1 FROM public.fleet_invite_sends s WHERE s.member_id = p_member_id) THEN
+    RETURN 'already_contacted';
   END IF;
 
   v_key := public.get_service_role_key();
@@ -342,7 +355,10 @@ $function$;
 -- ── 6. A driver leaves ───────────────────────────────────────
 -- tg_fleet_members_protect keeps status from a client, so this goes through its trusted flag, set
 -- around the update and put back right after: the protection stays on for the rest of the transaction.
--- A second tap finds the row inactive and is no error.
+-- One fleet can hold a number twice in two spellings, so this takes out every row of the fleet that
+-- names the driver: success means out of the fleet. That goes for a row that already left too, so a
+-- second tap is no error and a stale one cannot answer success with a twin still in. Each row tells
+-- the owner, so a twin means two notices. A rejected row keeps its status.
 CREATE OR REPLACE FUNCTION public.leave_fleet(p_member_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -351,6 +367,7 @@ CREATE OR REPLACE FUNCTION public.leave_fleet(p_member_id uuid)
 AS $function$
 DECLARE
   v_me      uuid := auth.uid();
+  v_fleet   uuid;
   v_driver  uuid;
   v_status  text;
   v_trusted text;
@@ -359,7 +376,7 @@ BEGIN
     RETURN jsonb_build_object('error', 'forbidden');
   END IF;
 
-  SELECT fm.driver_id, fm.status INTO v_driver, v_status
+  SELECT fm.fleet_id, fm.driver_id, fm.status INTO v_fleet, v_driver, v_status
   FROM public.fleet_members fm
   WHERE fm.id = p_member_id
   FOR UPDATE;
@@ -369,16 +386,14 @@ BEGIN
   IF v_driver IS DISTINCT FROM v_me THEN
     RETURN jsonb_build_object('error', 'forbidden');
   END IF;
-  IF v_status = 'inactive' THEN
-    RETURN jsonb_build_object('success', true);
-  END IF;
-  IF v_status NOT IN ('active', 'approved', 'pending_signup') THEN
+  IF v_status NOT IN ('active', 'approved', 'pending_signup', 'inactive') THEN
     RETURN jsonb_build_object('error', 'not_active');
   END IF;
 
   v_trusted := current_setting('app.trusted_fleet_update', true);
   PERFORM set_config('app.trusted_fleet_update', '1', true);
-  UPDATE public.fleet_members SET status = 'inactive' WHERE id = p_member_id;
+  UPDATE public.fleet_members SET status = 'inactive'
+  WHERE fleet_id = v_fleet AND driver_id = v_me AND status IN ('active', 'approved', 'pending_signup');
   PERFORM set_config('app.trusted_fleet_update', COALESCE(v_trusted, ''), true);
 
   RETURN jsonb_build_object('success', true);
@@ -408,7 +423,7 @@ AS $function$
     JOIN public.corporate_accounts ca ON ca.id = df.corporate_account_id
     LEFT JOIN public.users u ON u.id = ca.created_by
     WHERE fm.driver_id = auth.uid()
-      AND fm.status IN ('active', 'approved', 'pending_signup')
+      AND fm.status IN ('active', 'approved')
     ORDER BY fm.fleet_id, (fm.status = 'active') DESC, fm.signed_up_at DESC NULLS LAST,
              fm.added_at DESC, fm.id
   ) m
@@ -584,10 +599,10 @@ BEGIN
     FROM (VALUES
       ('public._fleet_invite_sms_text(text)'::regprocedure, '617ee8832f32dc04e2f3cc3923edc75f'),
       ('public._fleet_push(uuid,uuid,text,text,text)', 'd4878b8bb0eb0e4fe7d5e0c0b55ecf2b'),
-      ('public._fleet_announce_member(uuid,text)', 'a453645e5f419e736e4c552e5ae50c4e'),
+      ('public._fleet_announce_member(uuid,text)', '5e8087e98d5a38419adee8d83d6b7d01'),
       ('public.resend_fleet_invite(uuid)', '1ad9632095eb6a0779166435c7c7d671'),
-      ('public.leave_fleet(uuid)', '0bb9f0a8ff7265e7c5df006fc34b0b60'),
-      ('public.get_my_fleet_memberships()', '30221e4c16b5494442a3f281e584d45a'),
+      ('public.leave_fleet(uuid)', '8753c20568f64cf919fb5e3286c2c8a1'),
+      ('public.get_my_fleet_memberships()', '461554a49c0a510be818932ad916b35a'),
       ('public.tg_fleet_members_notify()', '97b0d70bb190e47b7aa0c018462cde44'),
       ('public.tg_corporate_accounts_fleet_notify()', 'd6ef2ad105cdf235f1651edafcb1ffd4')
     ) AS f(fn, want)

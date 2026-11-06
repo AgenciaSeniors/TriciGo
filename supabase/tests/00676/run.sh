@@ -179,6 +179,12 @@ PUSH_HANDLER = ("EXCEPTION WHEN OTHERS THEN\n"
                 "    jsonb_build_object('user_id', p_user_id, 'event', p_event, 'sqlstate', SQLSTATE, 'error', SQLERRM));\n"
                 "END\n", "END\n")
 FIRST_SMS_CHECK = "       WHERE s.fleet_id = v_fleet AND s.phone = v_phone AND s.channel = 'sms') THEN\n    RETURN 'already_contacted';"
+MEMBER_CHECK = ("  IF p_source = 'review' AND EXISTS (\n"
+                "       SELECT 1 FROM public.fleet_invite_sends s WHERE s.member_id = p_member_id) THEN\n"
+                "    RETURN 'already_contacted';\n"
+                "  END IF;\n")
+LEAVE_UPDATE = ("  UPDATE public.fleet_members SET status = 'inactive'\n"
+                "  WHERE fleet_id = v_fleet AND driver_id = v_me AND status IN ('active', 'approved', 'pending_signup');\n")
 
 # What the self-checks have to refuse.
 variant('no_client_revoke', ("REVOKE ALL ON FUNCTION public.resend_fleet_invite(uuid),\n"
@@ -238,7 +244,8 @@ variant('announces_while_pending', ("  IF v_company IS DISTINCT FROM 'approved' 
 variant('forgets_the_first_contact',
         ("  IF v_send IS NULL THEN\n    RETURN 'already_contacted';\n  END IF;\n  PERFORM public.cron_http_post('fleet-invite-sms',",
          "  IF v_send IS NULL THEN\n    RETURN 'sent_sms';\n  END IF;\n  PERFORM public.cron_http_post('fleet-invite-sms',"),
-        (FIRST_SMS_CHECK, FIRST_SMS_CHECK.replace("'already_contacted'", "'sent_sms'")), loose=True)
+        (FIRST_SMS_CHECK, FIRST_SMS_CHECK.replace("'already_contacted'", "'sent_sms'")),
+        (MEMBER_CHECK, MEMBER_CHECK.replace("'already_contacted'", "'sent_sms'")), loose=True)
 variant('no_gap', ("  IF v_last > now() - c_gap THEN\n    RETURN jsonb_build_object('error', 'too_soon', 'retry_at', v_last + c_gap);\n  END IF;\n", ''), loose=True)
 variant('not_trusted', ("  PERFORM set_config('app.trusted_fleet_update', '1', true);\n", ''), loose=True)
 
@@ -277,6 +284,14 @@ variant('anyone_leaves', ("  IF v_driver IS DISTINCT FROM v_me THEN\n    RETURN 
 variant('anyone_resends', ("  IF v_owner IS DISTINCT FROM v_me THEN\n    RETURN jsonb_build_object('error', 'forbidden');\n  END IF;\n", ''), loose=True)
 variant('no_gsm7_flag', ("'event_type', 'fleet_invite', 'gsm7', true));", "'event_type', 'fleet_invite'));"), loose=True)
 variant('gsm7_as_text', ("'event_type', 'fleet_invite', 'gsm7', true));", "'event_type', 'fleet_invite', 'gsm7', 'true'));"), loose=True)
+variant('no_member_check', (MEMBER_CHECK, ''), loose=True)
+variant('member_check_on_resends', (MEMBER_CHECK, MEMBER_CHECK.replace("p_source = 'review' AND ", '')), loose=True)
+variant('leaves_one_row', (LEAVE_UPDATE, "  UPDATE public.fleet_members SET status = 'inactive' WHERE id = p_member_id;\n"), loose=True)
+variant('leaves_every_status', (LEAVE_UPDATE, "  UPDATE public.fleet_members SET status = 'inactive' WHERE fleet_id = v_fleet AND driver_id = v_me;\n"), loose=True)
+variant('stale_tap_stops', ("  IF v_status NOT IN ('active', 'approved', 'pending_signup', 'inactive') THEN\n",
+                            "  IF v_status = 'inactive' THEN\n    RETURN jsonb_build_object('success', true);\n  END IF;\n"
+                            "  IF v_status NOT IN ('active', 'approved', 'pending_signup') THEN\n"), loose=True)
+variant('pending_signup_listed', ("      AND fm.status IN ('active', 'approved')\n", "      AND fm.status IN ('active', 'approved', 'pending_signup')\n"), loose=True)
 variant('any_number', ("  IF v_phone !~ '^[+]53[56][0-9]{7}$' THEN\n    RETURN 'not_cuban_mobile';\n  END IF;\n", ''), loose=True)
 PYEOF
   [ -f "$T/any_number.sql" ] || { ko "the broken copies were written" "see the python error above"; echo "== $PASS passed, $FAIL failed =="; exit 1; }
@@ -362,9 +377,17 @@ PYEOF
   flips "X17 anyone leaves anyone's row (H2)" anyone_leaves "H2"
   flips "X18 anyone resends (F4)" anyone_resends "F4"
   flips "X19 any number gets the SMS (G1)" any_number "G1"
-  flips "X20 a first contact that ignores a resend (D9)" review_ignores_resends "D9"
+  flips "X20 a new invitation of a number that ignores a resend (D10)" review_ignores_resends "D10"
   flips "X21 an SMS that does not ask for GSM-7 (E11)" no_gsm7_flag "E11"
   flips "X22 a flag sent as a string, which send-sms would not read as true (E12)" gsm7_as_text "E12"
+  flips "X23 no check per invitation: a passenger turned driver hears again (A15)" no_member_check "A15"
+  flips "X24 ...a suspended driver gets the SMS (A16)" no_member_check "A16"
+  flips "X25 ...and so does someone who deleted the account (A17)" no_member_check "A17"
+  flips "X26 the check stopping a resend too (F1)" member_check_on_resends "F1"
+  flips "X27 leaving one row of two (H11)" leaves_one_row "H11"
+  flips "X28 leaving rewrites a rejected row (H12)" leaves_every_status "H12"
+  flips "X29 a tap on a row that left stops there (H13)" stale_tap_stops "H13"
+  flips "X30 pending_signup in the list of fleets (J3)" pending_signup_listed "J3"
   $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS $D" >/dev/null 2>&1
   rm -rf "$T"
 fi
