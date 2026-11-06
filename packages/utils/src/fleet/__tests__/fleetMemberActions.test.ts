@@ -164,6 +164,31 @@ describe('fleetMemberActions: decision 3, when "Reenviar" shows', () => {
     const bad = [send(0, { sent_at: 'not a date' })];
     expect(fleetMemberActions(approved(), bad, 'approved', NOW).actions).not.toContain('resend');
   });
+
+  // The server counts channel = 'sms' only (00676): a push does not use up the cap or the gap.
+  it('a push to the number does not hide "Reenviar"', () => {
+    const pushes = [send(100, { channel: 'push' }), send(80, { channel: 'push' }), send(60, { channel: 'push' })];
+    expect(fleetMemberActions(approved(), pushes, 'approved', NOW).actions).toContain('resend');
+  });
+
+  it('a push 2 h ago does not hold the 24 h gap', () => {
+    const r = fleetMemberActions(approved(), [send(2, { channel: 'push' })], 'approved', NOW);
+    expect(r.actions).toContain('resend');
+  });
+
+  it('the SMS sends still hit the cap and the gap when pushes are mixed in', () => {
+    const mixed = [send(100), send(80, { channel: 'push' }), send(60)];
+    expect(fleetMemberActions(approved(), mixed, 'approved', NOW).actions).toContain('resend');
+    const capped = [send(100), send(80), send(60), send(50, { channel: 'push' })];
+    expect(fleetMemberActions(approved(), capped, 'approved', NOW).actions).not.toContain('resend');
+    const soon = [send(100), send(2)];
+    expect(fleetMemberActions(approved(), soon, 'approved', NOW).actions).not.toContain('resend');
+  });
+
+  it('the label stays "Invitación enviada" when only a push went to the number', () => {
+    const r = fleetMemberActions(approved(), [send(5, { channel: 'push' })], 'approved', NOW);
+    expect(r.label.label).toBe('Invitación enviada');
+  });
 });
 
 describe('fleetMemberActions: licence only while pending_review', () => {
