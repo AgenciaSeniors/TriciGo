@@ -21,7 +21,7 @@ import {
   type FleetMemberFormErrors,
   type FleetMemberFormValues,
 } from '@tricigo/utils/fleet/fleetMemberForm';
-import { Screen } from '../Screen';
+import { Screen, type ScreenProps } from '../Screen';
 import { Button } from '../Button';
 import { Input } from '../Input';
 import { Text } from '../Text';
@@ -33,9 +33,15 @@ export interface AddFleetDriverFormProps {
   onBack: () => void;
   /** The driver was saved: the route says so and leaves the screen. */
   onAdded: () => void;
+  /**
+   * Background of the screen. Left out, the screen looks like the driver app's
+   * other profile screens. The passenger app passes 'cuban', like its own. The
+   * panel inside paints the same paper color, so with 'cuban' it does not show.
+   */
+  screenBg?: ScreenProps['bg'];
 }
 
-export function AddFleetDriverForm({ fleetId, onBack, onAdded }: AddFleetDriverFormProps) {
+export function AddFleetDriverForm({ fleetId, onBack, onAdded, screenBg }: AddFleetDriverFormProps) {
   const { t } = useTranslation('driver');
   const isDark = useColorScheme() === 'dark';
   const palette = isDark ? cubanDark : cubanLight;
@@ -83,7 +89,11 @@ export function AddFleetDriverForm({ fleetId, onBack, onAdded }: AddFleetDriverF
   const errorTexts = fleetMemberErrorTexts(errors, t);
 
   return (
-    <Screen bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'} padded={false}>
+    <Screen
+      bg={screenBg ?? (isDark ? 'dark' : 'white')}
+      statusBarStyle={isDark ? 'light-content' : 'dark-content'}
+      padded={false}
+    >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1, backgroundColor: palette.bg.paper }}

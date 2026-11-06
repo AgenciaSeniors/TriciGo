@@ -24,7 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { cubanLight, cubanDark, colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { canAddFleetDrivers, fleetStatusBadge, rejectionReason } from '@tricigo/utils/fleet/corporateScreen';
-import { Screen } from '../Screen';
+import { Screen, type ScreenProps } from '../Screen';
 import { Text } from '../Text';
 import { Button } from '../Button';
 import { Card } from '../Card';
@@ -45,12 +45,18 @@ export interface FleetDashboardProps {
   ownerPhone: string;
   onBack: () => void;
   onAddDriver: (fleetId: string) => void;
+  /**
+   * Background of the screen. Left out, the screen looks like the driver app's
+   * other profile screens. The passenger app passes 'cuban', like its own. The
+   * panel inside paints the same paper color, so with 'cuban' it does not show.
+   */
+  screenBg?: ScreenProps['bg'];
 }
 
 // What corporate_accounts.commission_percent is compared with on screen.
 const STANDARD_COMMISSION_PERCENT = 15;
 
-export function FleetDashboard({ screen, userId, ownerPhone, onBack, onAddDriver }: FleetDashboardProps) {
+export function FleetDashboard({ screen, userId, ownerPhone, onBack, onAddDriver, screenBg }: FleetDashboardProps) {
   const { t } = useTranslation('driver');
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -68,7 +74,7 @@ export function FleetDashboard({ screen, userId, ownerPhone, onBack, onAddDriver
   return (
     <Screen
       scroll
-      bg={isDark ? 'dark' : 'white'}
+      bg={screenBg ?? (isDark ? 'dark' : 'white')}
       statusBarStyle={isDark ? 'light-content' : 'dark-content'}
       padded
       refreshControl={
