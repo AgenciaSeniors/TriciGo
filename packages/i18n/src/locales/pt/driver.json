@@ -841,6 +841,8 @@
     "rejected_title": "Solicitação recusada",
     "rejected_reason": "Motivo: {{reason}}",
     "rejected_resubmit": "Você pode corrigir os dados e enviar a solicitação novamente.",
+    "suspended_reason": "Sua frota foi suspensa. Motivo: {{reason}}",
+    "start_own_fleet": "Montar minha própria frota",
     "add_driver": "Adicionar motorista",
     "add_driver_intro": "A TriciGo faz a revisão, e o motorista entra na sua frota ao se cadastrar com este telefone.",
     "add_driver_name": "Nome completo *",

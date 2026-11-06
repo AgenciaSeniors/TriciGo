@@ -101,6 +101,15 @@ export function deriveCorporateView(state: CorporateState): CorporateView {
   };
 }
 
+/**
+ * Someone who drives for another owner's fleet and owns none: the screen
+ * offers a button that opens the request form below the member card. It is
+ * false while the form already shows, and while a read is still pending.
+ */
+export function canStartOwnFleet(view: CorporateView): boolean {
+  return view.kind === 'ready' && view.ownerFleet === null && view.memberships.length > 0 && !view.showRequestForm;
+}
+
 export interface FleetStatusBadge {
   /** Key in the driver namespace; `label` is its Spanish default. */
   labelKey: string;

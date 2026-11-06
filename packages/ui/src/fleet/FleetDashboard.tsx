@@ -26,6 +26,7 @@ import { fleetService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import {
   canAddFleetDrivers,
+  canStartOwnFleet,
   fleetStatusBadge,
   membershipCard,
   rejectionReason,
@@ -67,6 +68,9 @@ export interface FleetDashboardProps {
   screenBg?: ScreenProps['bg'];
 }
 
+const ownFormIntroDefault =
+  'Registra tu flota para que tus conductores se vinculen automáticamente cuando descarguen TriciGo Driver con su número de teléfono.';
+
 // What corporate_accounts.commission_percent is compared with on screen.
 const STANDARD_COMMISSION_PERCENT = 15;
 
@@ -91,6 +95,8 @@ export function FleetDashboard({
   // before the state has re-rendered the button as disabled.
   const [leavingId, setLeavingId] = useState<string | null>(null);
   const leaving = useRef(false);
+  // A driver of someone else's fleet asked to set up their own: opens the request form.
+  const [ownFormOpen, setOwnFormOpen] = useState(false);
   const ready = view.kind === 'ready' ? view : null;
   const memberships = ready?.memberships ?? [];
   const ownerFleet = ready?.ownerFleet ?? null;
@@ -98,6 +104,15 @@ export function FleetDashboard({
   const inSeveralFleets = memberships.length > 1;
   const ownerBadge = ownerFleet ? fleetStatusBadge(ownerFleet.account.status) : null;
   const reason = rejectedRequest ? rejectionReason(rejectedRequest.account.suspended_reason) : null;
+  const suspendedReason =
+    ownerFleet?.account.status === 'suspended' ? rejectionReason(ownerFleet.account.suspended_reason) : null;
+  const offerOwnFleet = canStartOwnFleet(view) && !ownFormOpen;
+  const showForm = !!ready && (ready.showRequestForm || (ownFormOpen && ready.ownerFleet === null));
+
+  const openOwnForm = () => {
+    setOwnFormOpen(true);
+    announce(t('fleet.request_intro', { defaultValue: ownFormIntroDefault }));
+  };
 
   const leave = async (m: FleetMembership) => {
     if (leaving.current) return;
@@ -270,6 +285,18 @@ export function FleetDashboard({
           </Card>
         )}
 
+        {/* A driver of another owner's fleet can still set up their own */}
+        {offerOwnFleet && (
+          <View className="mb-4">
+            <Button
+              title={t('fleet.start_own_fleet', { defaultValue: 'Montar mi propia flota' })}
+              variant="outline"
+              fullWidth
+              onPress={openOwnForm}
+            />
+          </View>
+        )}
+
         {/* Owner dashboard */}
         {ownerFleet && ownerBadge && (
           <>
@@ -281,6 +308,14 @@ export function FleetDashboard({
                   variant={ownerBadge.variant}
                 />
               </View>
+              {suspendedReason && (
+                <Text variant="bodySmall" color="secondary" className="mb-3">
+                  {t('fleet.suspended_reason', {
+                    defaultValue: 'Tu flota fue suspendida. Motivo: {{reason}}',
+                    reason: suspendedReason,
+                  })}
+                </Text>
+              )}
               {ownerFleet.account.status === 'pending' && (
                 <Text variant="bodySmall" color="secondary" className="mb-3">
                   {t('fleet.owner_in_review', {
@@ -362,7 +397,7 @@ export function FleetDashboard({
         )}
 
         {/* No fleet, or a rejected request → form */}
-        {ready?.showRequestForm && userId && (
+        {showForm && userId && (
           <FleetRequestForm
             ownerUserId={userId}
             ownerPhone={ownerPhone}
