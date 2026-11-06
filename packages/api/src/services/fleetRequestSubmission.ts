@@ -1,5 +1,5 @@
 // ============================================================
-// TriciGo Driver — one fleet request form session
+// TriciGo — one fleet request form session
 // corporate_accounts has no uniqueness on created_by, so creating the
 // account on every attempt left one more behind each time a later step
 // failed and the owner retried. The account is created once and every
@@ -17,7 +17,8 @@
 // form requires used to be dropped here without anyone noticing.
 // ============================================================
 
-import { corporateService, fleetService } from '@tricigo/api';
+import { corporateService } from './corporate.service';
+import { fleetService } from './fleet.service';
 import type { FleetMemberInput } from '@tricigo/types';
 
 type AccountRequest = Parameters<typeof corporateService.registerAccount>[0];

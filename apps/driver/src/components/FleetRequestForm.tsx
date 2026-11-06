@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@tricigo/theme';
 import { getErrorMessage } from '@tricigo/utils';
 import type { FleetMemberInput } from '@tricigo/types';
-import { buildFleetRequest, createFleetRequestSubmission } from '@/services/fleetRequestSubmission';
+import { buildFleetRequest, createFleetRequestSubmission } from '@tricigo/api';
 
 const VEHICLE_TYPES = [
   { id: 'triciclo_basico', label: 'Triciclo' },
