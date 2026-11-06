@@ -9,6 +9,7 @@ import React, { useState } from 'react';
 import { View, Pressable, Alert, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@tricigo/theme';
+import { useTranslation } from '@tricigo/i18n';
 import { getErrorMessage } from '@tricigo/utils';
 import type { FleetMemberInput } from '@tricigo/types';
 import { buildFleetRequest, createFleetRequestSubmission } from '@tricigo/api';
@@ -17,6 +18,7 @@ import { Card } from '../Card';
 import { Button } from '../Button';
 import { Input } from '../Input';
 
+// Each label is the Spanish default of fleet.vehicle_type.<id>.
 const VEHICLE_TYPES = [
   { id: 'triciclo_basico', label: 'Triciclo' },
   { id: 'moto_standard', label: 'Moto' },
@@ -33,6 +35,8 @@ interface Props {
 }
 
 export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props) {
+  const { t } = useTranslation('driver');
+
   // Fleet info
   const [fleetName, setFleetName] = useState('');
   const [taxId, setTaxId] = useState('');
@@ -116,7 +120,7 @@ export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props
 
       onSubmitted();
     } catch (err) {
-      Alert.alert('Error', getErrorMessage(err));
+      Alert.alert(t('common.error', { defaultValue: 'Error' }), getErrorMessage(err));
     } finally {
       setSubmitting(false);
     }
@@ -140,28 +144,44 @@ export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props
   return (
     <ScrollView showsVerticalScrollIndicator={false}>
       <Text variant="bodySmall" color="secondary" className="mb-3">
-        Registra tu flota para que tus conductores se vinculen automáticamente cuando descarguen TriciGo Driver con su número de teléfono.
+        {t('fleet.request_intro', {
+          defaultValue:
+            'Registra tu flota para que tus conductores se vinculen automáticamente cuando descarguen TriciGo Driver con su número de teléfono.',
+        })}
       </Text>
 
-      {/* Flota */}
+      {/* Fleet */}
       <Card variant="outlined" padding="lg" className="mb-3">
-        <Text variant="h4" className="mb-3">Flota</Text>
-        <Input label="Nombre de la flota *" value={fleetName} onChangeText={setFleetName} placeholder="Ej: TaxiHabana" />
-        <View className="h-3" />
-        <Input label="RUC / Tax ID" value={taxId} onChangeText={setTaxId} />
+        <Text variant="h4" className="mb-3">{t('fleet.request_fleet', { defaultValue: 'Flota' })}</Text>
+        <Input
+          label={t('fleet.request_fleet_name', { defaultValue: 'Nombre de la flota *' })}
+          value={fleetName}
+          onChangeText={setFleetName}
+          placeholder={t('fleet.request_fleet_name_placeholder', { defaultValue: 'Ej: TaxiHabana' })}
+        />
         <View className="h-3" />
         <Input
-          label="Ciudad / municipio principal *"
+          label={t('fleet.request_tax_id', { defaultValue: 'RUC / Tax ID' })}
+          value={taxId}
+          onChangeText={setTaxId}
+        />
+        <View className="h-3" />
+        <Input
+          label={t('fleet.request_city', { defaultValue: 'Ciudad / municipio principal *' })}
           value={city}
           onChangeText={setCity}
-          placeholder="Ej: La Habana"
+          placeholder={t('fleet.request_city_placeholder', { defaultValue: 'Ej: La Habana' })}
           maxLength={120}
         />
         <View className="h-3" />
-        <Input label="Responsable (nombre)" value={responsibleName} onChangeText={setResponsibleName} />
+        <Input
+          label={t('fleet.request_responsible', { defaultValue: 'Responsable (nombre)' })}
+          value={responsibleName}
+          onChangeText={setResponsibleName}
+        />
         <View className="h-3" />
         <Input
-          label="Email de contacto"
+          label={t('fleet.request_contact_email', { defaultValue: 'Email de contacto' })}
           value={responsibleEmail}
           onChangeText={setResponsibleEmail}
           keyboardType="email-address"
@@ -169,36 +189,45 @@ export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props
         />
       </Card>
 
-      {/* Vehículos */}
+      {/* Vehicles */}
       <Card variant="outlined" padding="lg" className="mb-3">
-        <Text variant="h4" className="mb-3">Vehículos</Text>
-        <Text variant="caption" color="secondary" className="mb-2">Tipos *</Text>
+        <Text variant="h4" className="mb-3">{t('fleet.request_vehicles', { defaultValue: 'Vehículos' })}</Text>
+        <Text variant="caption" color="secondary" className="mb-2">
+          {t('fleet.request_vehicle_types', { defaultValue: 'Tipos *' })}
+        </Text>
         <View className="flex-row flex-wrap gap-2">
           {VEHICLE_TYPES.map((v) => (
-            <Chip key={v.id} selected={vehicleTypes.includes(v.id)} onPress={() => toggleVehicleType(v.id)} label={v.label} />
+            <Chip
+              key={v.id}
+              selected={vehicleTypes.includes(v.id)}
+              onPress={() => toggleVehicleType(v.id)}
+              label={t(`fleet.vehicle_type.${v.id}`, { defaultValue: v.label })}
+            />
           ))}
         </View>
         <View className="h-3" />
         <Input
-          label="Cantidad estimada"
+          label={t('fleet.request_vehicle_count', { defaultValue: 'Cantidad estimada' })}
           value={vehicleCount}
           onChangeText={setVehicleCount}
           keyboardType="numeric"
-          placeholder="Ej: 12"
+          placeholder={t('fleet.request_vehicle_count_placeholder', { defaultValue: 'Ej: 12' })}
         />
         <View className="h-3" />
         <Input
-          label="Zonas que cubren (separadas por coma)"
+          label={t('fleet.request_zones', { defaultValue: 'Zonas que cubren (separadas por coma)' })}
           value={zones}
           onChangeText={setZones}
-          placeholder="Ej: Vedado, Habana Vieja, Miramar"
+          placeholder={t('fleet.request_zones_placeholder', { defaultValue: 'Ej: Vedado, Habana Vieja, Miramar' })}
         />
       </Card>
 
-      {/* Operación */}
+      {/* Operations */}
       <Card variant="outlined" padding="lg" className="mb-3">
-        <Text variant="h4" className="mb-3">Operación</Text>
-        <Text variant="caption" color="secondary" className="mb-1">Horario habitual (HH:MM)</Text>
+        <Text variant="h4" className="mb-3">{t('fleet.request_operation', { defaultValue: 'Operación' })}</Text>
+        <Text variant="caption" color="secondary" className="mb-1">
+          {t('fleet.request_hours', { defaultValue: 'Horario habitual (HH:MM)' })}
+        </Text>
         <View className="flex-row items-center gap-2 mb-3">
           <View className="flex-1">
             <Input value={hoursStart} onChangeText={setHoursStart} placeholder="06:00" />
@@ -209,20 +238,27 @@ export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props
           </View>
         </View>
         <Input
-          label="Viajes estimados por día (por vehículo)"
+          label={t('fleet.request_rides_per_day', { defaultValue: 'Viajes estimados por día (por vehículo)' })}
           value={ridesPerDay}
           onChangeText={setRidesPerDay}
           keyboardType="numeric"
-          placeholder="Ej: 8"
+          placeholder={t('fleet.request_rides_per_day_placeholder', { defaultValue: 'Ej: 8' })}
         />
       </Card>
 
-      {/* Conductores */}
+      {/* Drivers */}
       <Card variant="outlined" padding="lg" className="mb-3">
         <View className="flex-row items-center justify-between mb-3">
-          <Text variant="h4">Conductores ({members.length})</Text>
+          <Text variant="h4">
+            {t('fleet.request_drivers', { defaultValue: 'Conductores ({{total}})', total: members.length })}
+          </Text>
           {members.length < MAX_MEMBERS && (
-            <Pressable onPress={addMember} hitSlop={8} accessibilityRole="button" accessibilityLabel="Agregar conductor">
+            <Pressable
+              onPress={addMember}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={t('fleet.add_driver', { defaultValue: 'Agregar conductor' })}
+            >
               <Ionicons name="add-circle" size={28} color={colors.primary[500]} />
             </Pressable>
           )}
@@ -231,29 +267,36 @@ export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props
         {members.map((m, i) => (
           <View key={i} className="border border-neutral-200 dark:border-neutral-700 rounded-xl p-3 mb-3">
             <View className="flex-row items-center justify-between mb-2">
-              <Text variant="bodySmall" color="secondary">Conductor {i + 1}</Text>
+              <Text variant="bodySmall" color="secondary">
+                {t('fleet.request_driver_row', { defaultValue: 'Conductor {{row}}', row: i + 1 })}
+              </Text>
               {members.length > 1 && (
-                <Pressable onPress={() => removeMember(i)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Quitar conductor">
+                <Pressable
+                  onPress={() => removeMember(i)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('fleet.request_remove_driver', { defaultValue: 'Quitar conductor' })}
+                >
                   <Ionicons name="trash-outline" size={18} color={colors.error.DEFAULT} />
                 </Pressable>
               )}
             </View>
             <Input
-              label="Nombre completo *"
+              label={t('fleet.add_driver_name', { defaultValue: 'Nombre completo *' })}
               value={m.driver_name}
               onChangeText={(v) => updateMember(i, 'driver_name', v)}
             />
             <View className="h-2" />
             <Input
-              label="Teléfono *"
+              label={t('fleet.add_driver_phone', { defaultValue: 'Teléfono *' })}
               value={m.driver_phone}
               onChangeText={(v) => updateMember(i, 'driver_phone', v)}
               keyboardType="phone-pad"
-              placeholder="+53 5XXXXXXX o 6XXXXXXX"
+              placeholder={t('fleet.phone_placeholder', { defaultValue: '+53 5XXXXXXX o 6XXXXXXX' })}
             />
             <View className="h-2" />
             <Input
-              label="Email"
+              label={t('fleet.add_driver_email', { defaultValue: 'Email' })}
               value={m.driver_email ?? ''}
               onChangeText={(v) => updateMember(i, 'driver_email', v)}
               keyboardType="email-address"
@@ -261,25 +304,31 @@ export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props
             />
             <View className="h-2" />
             <Input
-              label="Nº de licencia"
+              label={t('fleet.add_driver_license', { defaultValue: 'Nº de licencia' })}
               value={m.driver_license_number ?? ''}
               onChangeText={(v) => updateMember(i, 'driver_license_number', v)}
             />
             <View className="h-2" />
             <Input
-              label="Carné de identidad"
+              label={t('fleet.add_driver_id_number', { defaultValue: 'Carné de identidad' })}
               value={m.driver_id_number ?? ''}
               onChangeText={(v) => updateMember(i, 'driver_id_number', v)}
             />
             <Text variant="caption" color="secondary" className="mt-2">
-              Podrás subir las fotos de licencia desde el panel después de aprobar la flota.
+              {t('fleet.request_license_hint', {
+                defaultValue: 'Podrás subir la foto de su licencia desde la lista de conductores mientras esté en revisión.',
+              })}
             </Text>
           </View>
         ))}
       </Card>
 
       <Button
-        title={submitting ? 'Enviando…' : 'Enviar solicitud de flota'}
+        title={
+          submitting
+            ? t('fleet.request_submitting', { defaultValue: 'Enviando…' })
+            : t('fleet.request_submit', { defaultValue: 'Enviar solicitud de flota' })
+        }
         variant="primary"
         size="lg"
         fullWidth
@@ -289,7 +338,10 @@ export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props
       />
 
       <Text variant="caption" color="secondary" className="mt-3 text-center">
-        Mínimo 1 conductor · Máximo {MAX_MEMBERS} por solicitud
+        {t('fleet.request_limits', {
+          defaultValue: 'Mínimo 1 conductor · Máximo {{max}} por solicitud',
+          max: MAX_MEMBERS,
+        })}
       </Text>
     </ScrollView>
   );
