@@ -38,7 +38,7 @@ export function useFleetScreen(userId: string | undefined) {
       dispatch(start(load));
       const ownedFleetRead = fleetService.getFleetByOwner(userId);
       const [memberships, ownedFleet, sendsRead] = await Promise.allSettled([
-        fleetService.getMembershipsForDriver(userId),
+        fleetService.getMyMemberships(),
         ownedFleetRead,
         // The fleet id is known only once the owned fleet has been read.
         ownedFleetRead.then((owned) => (owned ? fleetService.getInviteSends(owned.fleet.id) : null)),

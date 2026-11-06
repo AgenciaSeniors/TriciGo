@@ -962,6 +962,15 @@
     "edit_vehicle_types_required": "Elige al menos un tipo de vehículo.",
     "edit_number_invalid": "Escribe un número entero mayor que 0.",
     "edit_not_updated": "No se pudieron guardar los cambios. Vuelve a la lista, actualízala e inténtalo de nuevo.",
-    "edit_failed": "No se pudieron guardar los cambios. Revisa tu conexión e inténtalo de nuevo."
+    "edit_failed": "No se pudieron guardar los cambios. Revisa tu conexión e inténtalo de nuevo.",
+    "member_fleet_generic": "Flota de conductores",
+    "member_run_by": "La maneja {{owner}}",
+    "leave_fleet": "Salir de la flota",
+    "leave_fleet_for": "Salir de la flota {{name}}",
+    "leave_confirm_title": "¿Salir de la flota?",
+    "leave_confirm_body_named": "Dejarás de recibir los viajes de la flota {{name}}. Podrás volver si su dueño te invita de nuevo.",
+    "leave_confirm_body": "Dejarás de recibir los viajes de esta flota. Podrás volver si su dueño te invita de nuevo.",
+    "left_done": "Saliste de la flota.",
+    "error_leave_failed": "No pudimos sacarte de la flota. Revisa tu conexión e inténtalo de nuevo."
   }
 }

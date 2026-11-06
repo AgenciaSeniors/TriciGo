@@ -1,33 +1,25 @@
 import { describe, it, expect } from 'vitest';
-import type { FleetMember, FleetWithMembers } from '@tricigo/types';
+import type { FleetMembership, FleetWithMembers } from '@tricigo/types';
 import {
   canAddFleetDrivers,
   corporateReducer,
   deriveCorporateView,
   fleetStatusBadge,
   initialCorporateState,
+  membershipCard,
   rejectionReason,
   type CorporateState,
 } from '../corporateScreen';
 
-const DRIVER = '00000000-0000-4000-8000-000000000011';
-
-function member(overrides: Partial<FleetMember> = {}): FleetMember {
+function member(overrides: Partial<FleetMembership> = {}): FleetMembership {
   return {
-    id: '00000000-0000-4000-8000-000000000201',
+    member_id: '00000000-0000-4000-8000-000000000201',
     fleet_id: '00000000-0000-4000-8000-0000000001a1',
-    driver_id: DRIVER,
+    fleet_name: 'TaxiHabana',
+    owner_label: 'Juan P.',
+    status: 'active',
     driver_name: 'Yoel Pérez',
     driver_phone: '+5351234567',
-    driver_email: null,
-    driver_license_number: null,
-    driver_id_number: null,
-    status: 'active',
-    license_doc_path: null,
-    added_at: '2026-09-20T14:00:02+00:00',
-    reviewed_at: null,
-    reviewed_by: null,
-    rejected_reason: null,
     signed_up_at: '2026-09-21T10:00:00+00:00',
     ...overrides,
   };
@@ -75,7 +67,7 @@ const failed: PromiseRejectedResult = {
 function load(
   state: CorporateState,
   n: number,
-  memberships: PromiseSettledResult<FleetMember[]>,
+  memberships: PromiseSettledResult<FleetMembership[]>,
   ownedFleet: PromiseSettledResult<FleetWithMembers | null>,
 ): CorporateState {
   const started = corporateReducer(state, { type: 'load_started', load: n });
@@ -302,5 +294,44 @@ describe('rejectionReason', () => {
     expect(rejectionReason(null)).toBeNull();
     expect(rejectionReason('')).toBeNull();
     expect(rejectionReason('   ')).toBeNull();
+  });
+});
+
+describe('membershipCard', () => {
+  it('shows the fleet name and who runs it', () => {
+    expect(membershipCard(member())).toEqual({ title: 'TaxiHabana', ownerLabel: 'Juan P.', canLeave: true });
+  });
+
+  it('shows no title and no owner line when the fleet name is unknown (fallback read)', () => {
+    expect(membershipCard(member({ fleet_name: null, owner_label: null }))).toEqual({
+      title: null,
+      ownerLabel: null,
+      canLeave: true,
+    });
+  });
+
+  it('drops the owner line when there is no fleet name, even if the owner is known', () => {
+    expect(membershipCard(member({ fleet_name: null, owner_label: 'Juan P.' })).ownerLabel).toBeNull();
+  });
+
+  it('treats blank strings as missing and trims the rest', () => {
+    expect(membershipCard(member({ fleet_name: '   ', owner_label: 'Juan P.' }))).toMatchObject({ title: null, ownerLabel: null });
+    expect(membershipCard(member({ fleet_name: '  Flota Sur ', owner_label: ' ' }))).toMatchObject({
+      title: 'Flota Sur',
+      ownerLabel: null,
+    });
+  });
+
+  it('keeps text from other people as plain text, untouched', () => {
+    expect(membershipCard(member({ fleet_name: '<b>{{x}}</b> https://evil.example' })).title).toBe('<b>{{x}}</b> https://evil.example');
+  });
+
+  it('offers leaving only while the driver is in the fleet', () => {
+    for (const status of ['active', 'approved', 'pending_signup'] as const) {
+      expect(membershipCard(member({ status })).canLeave).toBe(true);
+    }
+    for (const status of ['inactive', 'rejected', 'pending_review'] as const) {
+      expect(membershipCard(member({ status })).canLeave).toBe(false);
+    }
   });
 });

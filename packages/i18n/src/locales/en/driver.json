@@ -962,6 +962,15 @@
     "edit_vehicle_types_required": "Choose at least one vehicle type.",
     "edit_number_invalid": "Enter a whole number greater than 0.",
     "edit_not_updated": "The changes could not be saved. Go back to the list, refresh it and try again.",
-    "edit_failed": "The changes could not be saved. Check your connection and try again."
+    "edit_failed": "The changes could not be saved. Check your connection and try again.",
+    "member_fleet_generic": "Driver fleet",
+    "member_run_by": "Run by {{owner}}",
+    "leave_fleet": "Leave the fleet",
+    "leave_fleet_for": "Leave the fleet {{name}}",
+    "leave_confirm_title": "Leave the fleet?",
+    "leave_confirm_body_named": "You'll stop receiving rides from the fleet {{name}}. You can come back if its owner invites you again.",
+    "leave_confirm_body": "You'll stop receiving rides from this fleet. You can come back if its owner invites you again.",
+    "left_done": "You left the fleet.",
+    "error_leave_failed": "We couldn't remove you from the fleet. Check your connection and try again."
   }
 }
