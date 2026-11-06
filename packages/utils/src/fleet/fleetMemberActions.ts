@@ -44,10 +44,15 @@ const LABELS = {
   inactive: { labelKey: 'fleet.member_status.inactive', label: 'Inactivo', variant: 'neutral' },
 } as const satisfies Record<string, FleetMemberLabel>;
 
-/** The send times for this driver's number, as milliseconds; NaN for a date that does not read. */
-function sendTimes(member: FleetMember, sends: FleetInviteSend[]): number[] {
+/**
+ * The send times for this driver's number, as milliseconds; NaN for a date that
+ * does not read. `smsOnly` keeps the channel the server's limits count (00676).
+ */
+function sendTimes(member: FleetMember, sends: FleetInviteSend[], smsOnly: boolean): number[] {
   const phone = normalizeCubanPhone(member.driver_phone);
-  return sends.filter((s) => normalizeCubanPhone(s.phone) === phone).map((s) => Date.parse(s.sent_at));
+  return sends
+    .filter((s) => normalizeCubanPhone(s.phone) === phone && (!smsOnly || s.channel === 'sms'))
+    .map((s) => Date.parse(s.sent_at));
 }
 
 function canResend(times: number[], now: Date): boolean {
@@ -79,10 +84,12 @@ export function fleetMemberActions(
       return { label: LABELS.inactive, actions: ['reinvite', 'remove'] };
     case 'approved':
     case 'pending_signup': {
-      const times = sends ? sendTimes(member, sends) : null;
+      // The label says what went to the number by any channel; the limits count SMS only.
+      const anySend = sends ? sendTimes(member, sends, false).length > 0 : false;
+      const times = sends ? sendTimes(member, sends, true) : null;
       let label: FleetMemberLabel = LABELS.approved;
       if (fleetStatus === 'pending') label = LABELS.approved_fleet_pending;
-      else if (times && times.length > 0) label = LABELS.invited;
+      else if (anySend) label = LABELS.invited;
 
       const resend = times !== null && !member.driver_id && fleetStatus === 'approved' && canResend(times, now);
       return { label, actions: resend ? ['resend', 'remove'] : ['remove'] };
