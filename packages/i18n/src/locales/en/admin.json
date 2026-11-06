@@ -1702,6 +1702,8 @@
     "reject_reason": "Rejection reason",
     "suspend_reason": "Suspension reason",
     "not_found": "Business not found",
+    "pending_drivers_one": "{{count}} driver to review",
+    "pending_drivers_other": "{{count}} drivers to review",
     "page_eyebrow": "Growth · allies",
     "page_description": "TriciGo corporate accounts: rides with monthly budget and shared fleet.",
     "load_error": "Could not load companies.",

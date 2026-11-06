@@ -7,8 +7,10 @@ const api = vi.hoisted(() => ({
 }));
 
 // Mocked with a factory so the real Supabase client is never loaded.
-vi.mock('@tricigo/api', () => ({
+vi.mock('../corporate.service', () => ({
   corporateService: { registerAccount: api.registerAccount, updateAccount: api.updateAccount },
+}));
+vi.mock('../fleet.service', () => ({
   fleetService: { submitFleetRequest: api.submitFleetRequest },
 }));
 
@@ -163,6 +165,21 @@ describe('buildFleetRequest', () => {
         ],
       },
     });
+  });
+
+  it('saves each number in E.164, the format a driver links by', () => {
+    // A number saved as the owner typed it never matched the account of the
+    // driver who signed up with it.
+    const { fleet } = buildFleetRequest({
+      ...form,
+      members: [
+        { driver_name: 'Yoel Pérez', driver_phone: '52345678' },
+        { driver_name: 'Ana Díaz', driver_phone: ' +53 6323 4567 ' },
+        { driver_name: 'Luis Gómez', driver_phone: '5234-5679' },
+      ],
+    });
+
+    expect(fleet.members.map((m) => m.driver_phone)).toEqual(['+5352345678', '+5363234567', '+5352345679']);
   });
 
   it('leaves out the optional fields the owner did not fill in', () => {

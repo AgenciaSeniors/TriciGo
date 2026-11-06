@@ -106,3 +106,54 @@ export interface FleetWithMembers {
     suspended_reason: string | null;
   };
 }
+
+/**
+ * One invitation sent to a driver (migration 00676): who was contacted, by
+ * which channel and why. The owner reads it. `phone` is the normalized number;
+ * limits are counted per (fleet_id, phone), so deleting an invitation and
+ * adding the number again does not reset them.
+ */
+export interface FleetInviteSend {
+  id: number;
+  fleet_id: string;
+  phone: string;
+  member_id: string;
+  channel: 'sms' | 'push';
+  /** 'review': the first contact when TriciGo approved. 'resend': the owner sent it again. */
+  source: 'review' | 'resend';
+  sent_at: string;
+}
+
+/**
+ * A fleet a driver belongs to, as get_my_fleet_memberships (00676) returns it.
+ * fleet_name and owner_label are null when the list comes from the table
+ * fallback used while that function is not applied yet.
+ */
+export interface FleetMembership {
+  member_id: string;
+  fleet_id: string;
+  fleet_name: string | null;
+  /** The owner's reduced name ("Juan P."), or the company name when there is none. */
+  owner_label: string | null;
+  status: FleetMemberStatus;
+  driver_name: string;
+  driver_phone: string;
+  signed_up_at: string | null;
+}
+
+/**
+ * The driver_fleets columns an owner edits. Never id or corporate_account_id:
+ * tg_driver_fleets_protect (00609) freezes both, and a fleet stays with the
+ * company it was created for.
+ */
+export interface FleetDetailsPatch {
+  name?: string;
+  city?: string | null;
+  vehicle_count_estimate?: number | null;
+  vehicle_types?: string[];
+  operating_zones?: string[];
+  estimated_rides_per_day_per_vehicle?: number | null;
+  operating_hours_start?: string | null;
+  operating_hours_end?: string | null;
+  notes?: string | null;
+}

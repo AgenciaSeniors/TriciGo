@@ -673,9 +673,18 @@ importers:
       '@gorhom/bottom-sheet':
         specifier: '>=5'
         version: 5.2.8(@types/react@19.2.14)(react-native-gesture-handler@2.31.0(react-native@0.83.2(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native-reanimated@4.3.0(react-native-worklets@0.8.1(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(react-native@0.83.2(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native@0.83.2(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native@0.83.2(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
+      '@tricigo/api':
+        specifier: workspace:*
+        version: link:../api
+      '@tricigo/i18n':
+        specifier: workspace:*
+        version: link:../i18n
       '@tricigo/theme':
         specifier: workspace:*
         version: link:../theme
+      '@tricigo/types':
+        specifier: workspace:*
+        version: link:../types
       '@tricigo/utils':
         specifier: workspace:*
         version: link:../utils

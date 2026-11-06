@@ -15,6 +15,7 @@ import type { PushRegistrationOutcome } from '@tricigo/utils';
 import { Platform, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import { fleetUpdateRoute } from '@/utils/fleetPush';
 
 const NOTIF_PREF_KEY = '@tricigo/notifications_enabled';
 
@@ -173,6 +174,12 @@ Notifications.setNotificationHandler({
 /** Navigate to the appropriate screen based on notification data */
 function handleNotificationNavigation(data: Record<string, unknown> | undefined) {
   if (!data?.type) return;
+
+  const fleetRoute = fleetUpdateRoute(data);
+  if (fleetRoute) {
+    router.push(fleetRoute);
+    return;
+  }
 
   switch (data.type) {
     case 'ride':

@@ -1,5 +1,5 @@
 // ============================================================
-// TriciGo Driver — one fleet request form session
+// TriciGo — one fleet request form session
 // corporate_accounts has no uniqueness on created_by, so creating the
 // account on every attempt left one more behind each time a later step
 // failed and the owner retried. The account is created once and every
@@ -17,8 +17,10 @@
 // form requires used to be dropped here without anyone noticing.
 // ============================================================
 
-import { corporateService, fleetService } from '@tricigo/api';
+import { corporateService } from './corporate.service';
+import { fleetService } from './fleet.service';
 import type { FleetMemberInput } from '@tricigo/types';
+import { normalizeCubanPhone } from '@tricigo/utils';
 
 type AccountRequest = Parameters<typeof corporateService.registerAccount>[0];
 type FleetRequest = Omit<Parameters<typeof fleetService.submitFleetRequest>[0], 'corporate_account_id'>;
@@ -70,7 +72,8 @@ export function buildFleetRequest(form: FleetRequestFormValues): { account: Acco
       notes: responsible ? `Responsable: ${responsible}` : undefined,
       members: form.members.map((m) => ({
         driver_name: m.driver_name.trim(),
-        driver_phone: m.driver_phone.trim(),
+        // E.164, or the driver who signs up with this number never links.
+        driver_phone: normalizeCubanPhone(m.driver_phone),
         driver_email: m.driver_email?.trim() || undefined,
         driver_license_number: m.driver_license_number?.trim() || undefined,
         driver_id_number: m.driver_id_number?.trim() || undefined,

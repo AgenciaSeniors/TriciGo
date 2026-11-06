@@ -20,14 +20,16 @@ import type { DriverFleet, FleetMember } from '@tricigo/types';
 //    ignoreDuplicates (also within the statement). A merge upsert that hits
 //    the same key twice in one statement, which Postgres rejects, is not
 //    modelled;
-//  - an update without select() resolves data null, whatever it changed;
+//  - an update or a delete without select() resolves data null, whatever it
+//    changed; with select() it resolves the rows it touched, none when RLS
+//    hid them (RLS answers OK with 0 rows, it does not fail);
 //  - an upsert naming a column the table does not have (missingColumns, a
 //    migration not applied yet) fails with PGRST204 and writes nothing, even
 //    when the value is null: PostgREST checks the keys, not the values.
 // RLS and triggers are not emulated: the service filters by created_by
 // itself, and the protect triggers of 00418/00434 let an admin write every
 // column (only an admin approves an account).
-type Table = 'corporate_accounts' | 'driver_fleets' | 'fleet_members' | 'admin_actions';
+type Table = 'corporate_accounts' | 'driver_fleets' | 'fleet_members' | 'admin_actions' | 'fleet_invite_sends';
 type Row = Record<string, unknown>;
 type QueryError = { code: string; message: string; details: string | null; hint: string | null };
 type Result = { data: unknown; error: QueryError | null };
@@ -38,11 +40,22 @@ const UNIQUE_KEYS: Record<Table, string[][]> = {
   driver_fleets: [['corporate_account_id']],
   fleet_members: [['fleet_id', 'driver_phone']],
   admin_actions: [],
+  fleet_invite_sends: [],
 };
 
-let db: Record<Table, Row[]> = { corporate_accounts: [], driver_fleets: [], fleet_members: [], admin_actions: [] };
+let db: Record<Table, Row[]> = {
+  corporate_accounts: [],
+  driver_fleets: [],
+  fleet_members: [],
+  admin_actions: [],
+  fleet_invite_sends: [],
+};
 let failures: Partial<Record<Table, QueryError>> = {};
 let missingColumns: Partial<Record<Table, string[]>> = {};
+// Fails only the writes on a table, so a test can read and then lose a race.
+let writeFailures: Partial<Record<Table, QueryError>> = {};
+// Runs right before each write, so a test can change a row after the read.
+let beforeWrite: (() => void) | null = null;
 let generatedIds = 0;
 
 function rowsOf(table: string): Row[] {
@@ -138,7 +151,13 @@ function updateRows(table: string, values: Row, matches: (row: Row) => boolean):
     if (clash) return { data: null, error: duplicateKey(table, clash) };
   }
   db[table as Table] = staged;
-  return { data: null, error: null };
+  return { data: updated, error: null };
+}
+
+function deleteRows(table: string, matches: (row: Row) => boolean): Result {
+  const rows = rowsOf(table);
+  db[table as Table] = rows.filter((row) => !matches(row));
+  return { data: rows.filter(matches), error: null };
 }
 
 function query(table: string) {
@@ -146,6 +165,8 @@ function query(table: string) {
   const orderBy: Array<{ column: string; ascending: boolean }> = [];
   let limitTo: number | null = null;
   let write: (() => Result) | null = null;
+  let writeKind: 'insert' | 'update' | 'upsert' | 'delete' | null = null;
+  let selected = false;
   let columns: string[] | null = null; // null: select('*'), or no select() at all
 
   const project = (row: Row): Row =>
@@ -155,11 +176,14 @@ function query(table: string) {
     const failure = failures[table as Table];
     if (failure) return { data: null, error: failure };
     if (write) {
+      beforeWrite?.();
+      const writeFailure = writeFailures[table as Table];
+      if (writeFailure) return { data: null, error: writeFailure };
       const written = write();
-      // An update without select() resolves data null: no rows to project.
-      return written.error || written.data === null
-        ? written
-        : { data: (written.data as Row[]).map(project), error: null };
+      // An update or a delete without select() resolves data null: no rows to project.
+      if (written.error || written.data === null) return written;
+      if ((writeKind === 'update' || writeKind === 'delete') && !selected) return { data: null, error: null };
+      return { data: (written.data as Row[]).map(project), error: null };
     }
     const rows = rowsOf(table).filter((row) => filters.every((keep) => keep(row)));
     rows.sort((a, b) => {
@@ -192,6 +216,7 @@ function query(table: string) {
 
   const builder = {
     select: (list = '*') => {
+      selected = true;
       columns = list.trim() === '*' ? null : list.split(',').map((column) => column.trim());
       return builder;
     },
@@ -212,15 +237,23 @@ function query(table: string) {
       return builder;
     },
     insert: (rows: Row | Row[]) => {
+      writeKind = 'insert';
       write = () => insertRows(table, rows);
       return builder;
     },
     update: (values: Row) => {
+      writeKind = 'update';
       write = () => updateRows(table, values, (row) => filters.every((keep) => keep(row)));
       return builder;
     },
     upsert: (rows: Row | Row[], options?: { onConflict?: string; ignoreDuplicates?: boolean }) => {
+      writeKind = 'upsert';
       write = () => upsertRows(table, rows, options ?? {});
+      return builder;
+    },
+    delete: () => {
+      writeKind = 'delete';
+      write = () => deleteRows(table, (row) => filters.every((keep) => keep(row)));
       return builder;
     },
     single: () => Promise.resolve(one(false)),
@@ -231,8 +264,43 @@ function query(table: string) {
   return builder;
 }
 
+// rpc, the session and Storage signing, for the owner and driver actions that
+// do not go through a table.
+let rpcCalls: Array<{ fn: string; args: unknown }> = [];
+let rpcResults: Record<string, { data: unknown; error: QueryError | null }> = {};
+let sessionUserId: string | null = null;
+let signedUrlCalls: Array<{ bucket: string; path: string; seconds: number }> = [];
+let signedUrlResult: { data: { signedUrl: string } | null; error: { message: string } | null } = {
+  data: { signedUrl: 'https://signed.example/doc' },
+  error: null,
+};
+const { uploadFileFromUri } = vi.hoisted(() => ({ uploadFileFromUri: vi.fn() }));
+
+vi.mock('../_storage-upload', () => ({ uploadFileFromUri }));
+
 vi.mock('../../client', () => ({
-  getSupabaseClient: () => ({ from: (table: string) => query(table) }),
+  getSupabaseClient: () => ({
+    from: (table: string) => query(table),
+    // A function the database does not have answers PGRST202, like PostgREST.
+    rpc: (fn: string, args: unknown) => {
+      rpcCalls.push({ fn, args });
+      return Promise.resolve(
+        rpcResults[fn] ?? { data: null, error: queryError('PGRST202', `Could not find the function public.${fn}`) },
+      );
+    },
+    auth: {
+      getSession: () =>
+        Promise.resolve({ data: { session: sessionUserId ? { user: { id: sessionUserId } } : null }, error: null }),
+    },
+    storage: {
+      from: (bucket: string) => ({
+        createSignedUrl: (path: string, seconds: number) => {
+          signedUrlCalls.push({ bucket, path, seconds });
+          return Promise.resolve(signedUrlResult);
+        },
+      }),
+    },
+  }),
 }));
 
 // Import after the mock is set up.
@@ -312,9 +380,17 @@ function member(overrides: Partial<FleetMember>): FleetMember {
 const CONNECTION_LOST = queryError('08006', 'connection failure');
 
 beforeEach(() => {
-  db = { corporate_accounts: [], driver_fleets: [], fleet_members: [], admin_actions: [] };
+  db = { corporate_accounts: [], driver_fleets: [], fleet_members: [], admin_actions: [], fleet_invite_sends: [] };
+  rpcCalls = [];
+  rpcResults = {};
+  sessionUserId = null;
+  signedUrlCalls = [];
+  signedUrlResult = { data: { signedUrl: 'https://signed.example/doc' }, error: null };
+  uploadFileFromUri.mockReset();
   failures = {};
   missingColumns = {};
+  writeFailures = {};
+  beforeWrite = null;
   generatedIds = 0;
 });
 
@@ -614,6 +690,235 @@ describe('fleetService.submitFleetRequest', () => {
   });
 });
 
+describe('fleetService.addMember', () => {
+  const newDriver = { driver_name: 'Ana Díaz', driver_phone: '52345678' };
+
+  beforeEach(() => {
+    seed('corporate_accounts', account({ status: 'approved' }));
+    seed('driver_fleets', fleet({}));
+  });
+
+  it('adds the driver to the fleet pending review, with the number in full', async () => {
+    await fleetService.addMember(FLEET_A, {
+      ...newDriver,
+      driver_email: 'ana@example.com',
+      driver_license_number: 'L-123',
+      driver_id_number: '90010112345',
+    });
+
+    expect(db.fleet_members).toHaveLength(1);
+    expect(db.fleet_members[0]).toMatchObject({
+      fleet_id: FLEET_A,
+      driver_name: 'Ana Díaz',
+      driver_phone: '+5352345678',
+      driver_email: 'ana@example.com',
+      driver_license_number: 'L-123',
+      driver_id_number: '90010112345',
+      status: 'pending_review',
+    });
+  });
+
+  it('stores null for the optional fields left out', async () => {
+    await fleetService.addMember(FLEET_A, newDriver);
+
+    expect(db.fleet_members[0]).toMatchObject({
+      driver_email: null,
+      driver_license_number: null,
+      driver_id_number: null,
+    });
+  });
+
+  it.each(['pending_review', 'approved', 'pending_signup', 'active'] as const)(
+    'refuses a number already in the fleet as %s, leaving that driver as they are',
+    async (status) => {
+      const current = member({ driver_phone: '+5352345678', status });
+      seed('fleet_members', current);
+
+      await expect(fleetService.addMember(FLEET_A, newDriver)).rejects.toMatchObject({
+        code: 'FLEET_MEMBER_EXISTS',
+      });
+
+      expect(db.fleet_members).toEqual([current]);
+    },
+  );
+
+  it('recognizes the number when the request form saved it without the country code', async () => {
+    // The request form keeps the number as typed, so 5234 5678 and +5352345678
+    // are two rows for the unique key but one person.
+    seed('fleet_members', member({ driver_phone: '5234 5678', status: 'active' }));
+
+    await expect(
+      fleetService.addMember(FLEET_A, { ...newDriver, driver_phone: '+53 5234 5678' }),
+    ).rejects.toMatchObject({ code: 'FLEET_MEMBER_EXISTS' });
+
+    expect(db.fleet_members).toHaveLength(1);
+  });
+
+  it.each(['rejected', 'inactive'] as const)(
+    'invites again a driver whose invitation is %s, as a new one to review',
+    async (status) => {
+      seed(
+        'fleet_members',
+        member({
+          id: 'old-invitation',
+          driver_name: 'Ana Dias',
+          driver_phone: '52345678',
+          status,
+          rejected_reason: 'Nombre mal escrito',
+        }),
+      );
+
+      await fleetService.addMember(FLEET_A, newDriver);
+
+      expect(db.fleet_members).toHaveLength(1);
+      const [invited] = db.fleet_members;
+      expect(invited).toMatchObject({
+        driver_name: 'Ana Díaz',
+        driver_phone: '+5352345678',
+        status: 'pending_review',
+      });
+      expect(invited?.id).not.toBe('old-invitation');
+      expect(invited?.rejected_reason).toBeUndefined();
+    },
+  );
+
+  it('keeps the rejected invitation when it cannot be replaced', async () => {
+    seed('fleet_members', member({ driver_phone: '52345678', status: 'rejected' }));
+    writeFailures.fleet_members = CONNECTION_LOST;
+
+    await expect(fleetService.addMember(FLEET_A, newDriver)).rejects.toThrow('connection failure');
+
+    expect(db.fleet_members).toHaveLength(1);
+    expect(db.fleet_members[0]).toMatchObject({ driver_phone: '52345678', status: 'rejected' });
+  });
+
+  it('keeps a driver an admin approved while the owner was inviting them again', async () => {
+    seed('fleet_members', member({ driver_phone: '+5352345678', status: 'rejected' }));
+    beforeWrite = () => {
+      for (const row of db.fleet_members) row.status = 'approved';
+    };
+
+    await expect(fleetService.addMember(FLEET_A, newDriver)).rejects.toMatchObject({
+      code: 'FLEET_MEMBER_EXISTS',
+    });
+
+    expect(db.fleet_members).toHaveLength(1);
+    expect(db.fleet_members[0]).toMatchObject({ status: 'approved' });
+  });
+
+  it('leaves alone the drivers with another number', async () => {
+    const other = member({ driver_phone: '+5351111111', status: 'rejected' });
+    seed('fleet_members', other);
+
+    await fleetService.addMember(FLEET_A, newDriver);
+
+    expect(db.fleet_members).toHaveLength(2);
+    expect(db.fleet_members).toContainEqual(other);
+  });
+
+  it('adds a driver who is in the fleet of another company', async () => {
+    seed('driver_fleets', fleet({ id: FLEET_B, corporate_account_id: ACCOUNT_B }));
+    const elsewhere = member({ fleet_id: FLEET_B, driver_phone: '+5352345678', status: 'active' });
+    seed('fleet_members', elsewhere);
+
+    await fleetService.addMember(FLEET_A, newDriver);
+
+    expect(db.fleet_members).toHaveLength(2);
+    expect(db.fleet_members).toContainEqual(elsewhere);
+  });
+
+  it('says the driver is already there when someone else saved the number first', async () => {
+    writeFailures.fleet_members = queryError('23505', 'duplicate key value violates unique constraint');
+
+    await expect(fleetService.addMember(FLEET_A, newDriver)).rejects.toMatchObject({
+      code: 'FLEET_MEMBER_EXISTS',
+    });
+  });
+
+  it('writes nothing when it cannot read who is in the fleet', async () => {
+    seed('fleet_members', member({ driver_phone: '52345678', status: 'rejected' }));
+    failures.fleet_members = CONNECTION_LOST;
+
+    await expect(fleetService.addMember(FLEET_A, newDriver)).rejects.toThrow('connection failure');
+
+    expect(db.fleet_members).toHaveLength(1);
+  });
+
+  it('throws when the driver cannot be saved', async () => {
+    writeFailures.fleet_members = CONNECTION_LOST;
+
+    await expect(fleetService.addMember(FLEET_A, newDriver)).rejects.toThrow('connection failure');
+  });
+});
+
+describe('fleetService.getPendingMemberCounts', () => {
+  const companyA = { id: ACCOUNT_A, status: 'approved' } as const;
+  const companyB = { id: ACCOUNT_B, status: 'pending' } as const;
+
+  beforeEach(() => {
+    seed(
+      'driver_fleets',
+      fleet({ id: FLEET_A, corporate_account_id: ACCOUNT_A }),
+      fleet({ id: FLEET_B, corporate_account_id: ACCOUNT_B }),
+    );
+  });
+
+  it('counts the drivers waiting for review in each company', async () => {
+    seed(
+      'fleet_members',
+      member({ id: 'a1', fleet_id: FLEET_A, driver_phone: '+5351111111' }),
+      member({ id: 'a2', fleet_id: FLEET_A, driver_phone: '+5351111112' }),
+      member({ id: 'b1', fleet_id: FLEET_B, driver_phone: '+5351111113' }),
+    );
+
+    const counts = await fleetService.getPendingMemberCounts([companyA, companyB]);
+
+    expect(counts).toEqual(new Map([[ACCOUNT_A, 2], [ACCOUNT_B, 1]]));
+  });
+
+  it.each(['rejected', 'suspended'] as const)(
+    'leaves out a %s company, whose pending drivers are no work for the team',
+    async (status) => {
+      seed('fleet_members', member({ fleet_id: FLEET_A, driver_phone: '+5351111111' }));
+
+      expect(await fleetService.getPendingMemberCounts([{ id: ACCOUNT_A, status }])).toEqual(new Map());
+    },
+  );
+
+  it('leaves out the drivers already reviewed', async () => {
+    seed(
+      'fleet_members',
+      member({ id: 'a1', driver_phone: '+5351111111', status: 'approved' }),
+      member({ id: 'a2', driver_phone: '+5351111112', status: 'rejected' }),
+      member({ id: 'a3', driver_phone: '+5351111113', status: 'active' }),
+    );
+
+    expect(await fleetService.getPendingMemberCounts([companyA])).toEqual(new Map());
+  });
+
+  it('counts only the companies it was asked about', async () => {
+    seed('fleet_members', member({ fleet_id: FLEET_B, driver_phone: '+5351111113' }));
+
+    expect(await fleetService.getPendingMemberCounts([companyA])).toEqual(new Map());
+  });
+
+  it('answers an empty list without reading anything', async () => {
+    failures.driver_fleets = CONNECTION_LOST;
+    failures.fleet_members = CONNECTION_LOST;
+
+    expect(await fleetService.getPendingMemberCounts([])).toEqual(new Map());
+  });
+
+  it.each(['driver_fleets', 'fleet_members'] as const)(
+    'throws instead of reporting nothing to review when %s cannot be read',
+    async (table) => {
+      failures[table] = CONNECTION_LOST;
+
+      await expect(fleetService.getPendingMemberCounts([companyA])).rejects.toThrow('connection failure');
+    },
+  );
+});
+
 describe('fleetService.getAccountIdsWithFleet', () => {
   it('returns the accounts that have a fleet row, a request sent from the app included', async () => {
     seed(
@@ -765,5 +1070,387 @@ describe('corporateService.getRequestStatus', () => {
     failures.corporate_accounts = CONNECTION_LOST;
 
     expect(await corporateService.getRequestStatus(OWNER)).toBeNull();
+  });
+});
+
+describe('fleetService.addMember (id)', () => {
+  it('returns the id of the invitation it created', async () => {
+    seed('driver_fleets', fleet({}));
+
+    const created = await fleetService.addMember(FLEET_A, { driver_name: 'Ana Gil', driver_phone: '+5352345678' });
+
+    expect(created).toEqual({ id: 'generated-1' });
+    expect(db.fleet_members[0]).toMatchObject({ id: 'generated-1', driver_name: 'Ana Gil' });
+  });
+});
+
+describe('fleetService.removeMember', () => {
+  it('deletes the invitation', async () => {
+    seed('fleet_members', member({ id: 'm1' }));
+
+    await fleetService.removeMember('m1');
+
+    expect(db.fleet_members).toEqual([]);
+  });
+
+  it('throws FLEET_MEMBER_NOT_REMOVED when RLS hid the row and nothing was deleted', async () => {
+    await expect(fleetService.removeMember('m-gone')).rejects.toMatchObject({ code: 'FLEET_MEMBER_NOT_REMOVED' });
+  });
+
+  it('throws when the delete fails', async () => {
+    seed('fleet_members', member({ id: 'm1' }));
+    writeFailures.fleet_members = CONNECTION_LOST;
+
+    await expect(fleetService.removeMember('m1')).rejects.toThrow('connection failure');
+  });
+});
+
+describe('fleetService.reinviteMember', () => {
+  it('invites the same person again, replacing the rejected row, and returns the new id', async () => {
+    const rejected = member({
+      id: 'm1',
+      status: 'rejected',
+      driver_phone: '+5351234567',
+      driver_email: 'yoel@example.com',
+      driver_license_number: 'L-1',
+      driver_id_number: '90010112345',
+    });
+    seed('driver_fleets', fleet({}));
+    seed('fleet_members', rejected);
+
+    const created = await fleetService.reinviteMember(rejected);
+
+    expect(created).toEqual({ id: 'generated-1' });
+    expect(db.fleet_members).toHaveLength(1);
+    expect(db.fleet_members[0]).toMatchObject({
+      fleet_id: FLEET_A,
+      driver_name: 'Yoel Pérez',
+      driver_email: 'yoel@example.com',
+      driver_license_number: 'L-1',
+      driver_id_number: '90010112345',
+      status: 'pending_review',
+    });
+  });
+
+  it('refuses a number that still holds a place in the fleet', async () => {
+    const pending = member({ id: 'm1', status: 'pending_review' });
+    seed('fleet_members', pending);
+
+    await expect(fleetService.reinviteMember(pending)).rejects.toMatchObject({ code: 'FLEET_MEMBER_EXISTS' });
+  });
+});
+
+describe('fleetService.updateFleet', () => {
+  const target = { id: FLEET_A, corporate_account_id: ACCOUNT_A };
+
+  beforeEach(() => {
+    seed('corporate_accounts', account({ name: 'Razón social' }));
+    seed('driver_fleets', fleet({ name: 'TaxiHabana' }));
+  });
+
+  it('writes the details to driver_fleets', async () => {
+    await fleetService.updateFleet(target, { city: 'Santiago', vehicle_count_estimate: 20, notes: 'Turnos de noche' });
+
+    expect(db.driver_fleets[0]).toMatchObject({ city: 'Santiago', vehicle_count_estimate: 20, notes: 'Turnos de noche' });
+  });
+
+  it('never writes the id or the corporate account of the fleet', async () => {
+    await fleetService.updateFleet(target, {
+      city: 'Santiago',
+      id: 'other',
+      corporate_account_id: ACCOUNT_B,
+    } as never);
+
+    expect(db.driver_fleets[0]).toMatchObject({ id: FLEET_A, corporate_account_id: ACCOUNT_A });
+  });
+
+  it('renames the corporate account too when the name changed', async () => {
+    await fleetService.updateFleet(target, { name: 'Taxis del Vedado' });
+
+    expect(db.driver_fleets[0]).toMatchObject({ name: 'Taxis del Vedado' });
+    expect(db.corporate_accounts[0]).toMatchObject({ name: 'Taxis del Vedado' });
+  });
+
+  it('leaves the account alone when the name is the same or not in the patch', async () => {
+    await fleetService.updateFleet(target, { name: 'TaxiHabana', city: 'Santiago' });
+    await fleetService.updateFleet(target, { notes: 'x' });
+
+    expect(db.corporate_accounts[0]).toMatchObject({ name: 'Razón social' });
+  });
+
+  it('throws FLEET_NOT_UPDATED when RLS hid the fleet and 0 rows changed', async () => {
+    await expect(
+      fleetService.updateFleet({ id: 'fleet-of-someone-else', corporate_account_id: ACCOUNT_B }, { city: 'Santiago' }),
+    ).rejects.toMatchObject({ code: 'FLEET_NOT_UPDATED' });
+  });
+
+  it('throws FLEET_NOT_UPDATED when the account rename changed 0 rows', async () => {
+    db.corporate_accounts = [];
+
+    await expect(fleetService.updateFleet(target, { name: 'Taxis del Vedado' })).rejects.toMatchObject({
+      code: 'FLEET_NOT_UPDATED',
+    });
+  });
+
+  it('throws when the fleet write fails', async () => {
+    writeFailures.driver_fleets = CONNECTION_LOST;
+
+    await expect(fleetService.updateFleet(target, { city: 'Santiago' })).rejects.toThrow('connection failure');
+  });
+
+  it('throws when the current fleet cannot be read', async () => {
+    failures.driver_fleets = CONNECTION_LOST;
+
+    await expect(fleetService.updateFleet(target, { name: 'Otro' })).rejects.toThrow('connection failure');
+  });
+});
+
+describe('fleetService.uploadMemberLicenseFromUri', () => {
+  const params = {
+    fleet_member_id: 'm1',
+    corporate_account_id: ACCOUNT_A,
+    uri: 'file:///cache/licencia.jpg',
+    file_name: 'licencia.jpg',
+    mime_type: 'image/jpeg',
+  };
+
+  beforeEach(() => {
+    seed('fleet_members', member({ id: 'm1' }));
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  const PATH = `fleet-docs/${ACCOUNT_A}/m1/1700000000000-licencia.jpg`;
+
+  it('uploads once, under a name of its own and without upsert, and saves the path', async () => {
+    uploadFileFromUri.mockResolvedValue(undefined);
+
+    expect(await fleetService.uploadMemberLicenseFromUri(params)).toEqual({ storage_path: PATH });
+
+    expect(uploadFileFromUri).toHaveBeenCalledWith('driver-documents', PATH, params.uri, {
+      fileName: 'licencia.jpg',
+      mimeType: 'image/jpeg',
+      upsert: false,
+    });
+    expect(db.fleet_members[0]).toMatchObject({ license_doc_path: PATH });
+  });
+
+  it('counts the 409 of a retry whose first attempt landed as success', async () => {
+    // storage-upload answers { error: 'upload_failed', reason } with the 409 of Storage.
+    uploadFileFromUri.mockRejectedValue(new Error('upload_failed: The resource already exists'));
+
+    expect(await fleetService.uploadMemberLicenseFromUri(params)).toEqual({ storage_path: PATH });
+    expect(db.fleet_members[0]).toMatchObject({ license_doc_path: PATH });
+  });
+
+  it('turns member_reviewed (also a 409) into FLEET_MEMBER_REVIEWED and saves nothing', async () => {
+    uploadFileFromUri.mockRejectedValue(new Error('member_reviewed'));
+
+    await expect(fleetService.uploadMemberLicenseFromUri(params)).rejects.toMatchObject({
+      code: 'FLEET_MEMBER_REVIEWED',
+    });
+    expect(db.fleet_members[0]).toMatchObject({ license_doc_path: null });
+  });
+
+  it('rethrows any other upload failure', async () => {
+    uploadFileFromUri.mockRejectedValue(new Error('forbidden'));
+
+    await expect(fleetService.uploadMemberLicenseFromUri(params)).rejects.toThrow('forbidden');
+    expect(db.fleet_members[0]).toMatchObject({ license_doc_path: null });
+  });
+
+  it('throws when saving the path changed 0 rows, so it is not taken for a success', async () => {
+    uploadFileFromUri.mockResolvedValue(undefined);
+    db.fleet_members = [];
+
+    await expect(fleetService.uploadMemberLicenseFromUri(params)).rejects.toMatchObject({
+      code: 'FLEET_LICENSE_NOT_SAVED',
+    });
+  });
+
+  it('throws when saving the path fails', async () => {
+    uploadFileFromUri.mockResolvedValue(undefined);
+    writeFailures.fleet_members = CONNECTION_LOST;
+
+    await expect(fleetService.uploadMemberLicenseFromUri(params)).rejects.toThrow('connection failure');
+  });
+});
+
+describe('fleetService.getMemberLicenseUrl', () => {
+  it('signs the path for 5 minutes in the driver-documents bucket', async () => {
+    expect(await fleetService.getMemberLicenseUrl('fleet-docs/a/b/c.jpg')).toBe('https://signed.example/doc');
+    expect(signedUrlCalls).toEqual([{ bucket: 'driver-documents', path: 'fleet-docs/a/b/c.jpg', seconds: 300 }]);
+  });
+
+  it('throws when Storage cannot sign it', async () => {
+    signedUrlResult = { data: null, error: { message: 'Object not found' } };
+
+    await expect(fleetService.getMemberLicenseUrl('fleet-docs/a/b/c.jpg')).rejects.toThrow('Object not found');
+  });
+});
+
+describe('fleetService.getInviteSends', () => {
+  const send = (overrides: Row): Row => ({
+    id: 1,
+    fleet_id: FLEET_A,
+    phone: '+5351234567',
+    member_id: 'm1',
+    channel: 'sms',
+    source: 'review',
+    sent_at: '2026-11-01T10:00:00+00:00',
+    ...overrides,
+  });
+
+  it('lists the sends of the fleet, newest first', async () => {
+    seed(
+      'fleet_invite_sends',
+      send({ id: 1, sent_at: '2026-11-01T10:00:00+00:00' }),
+      send({ id: 2, sent_at: '2026-11-02T10:00:00+00:00', source: 'resend' }),
+      send({ id: 3, fleet_id: FLEET_B }),
+    );
+
+    expect((await fleetService.getInviteSends(FLEET_A)).map((s) => s.id)).toEqual([2, 1]);
+  });
+
+  it.each([['PGRST205'], ['42P01']])('returns [] while the table does not exist (%s)', async (code) => {
+    failures.fleet_invite_sends = queryError(code, 'relation does not exist');
+
+    expect(await fleetService.getInviteSends(FLEET_A)).toEqual([]);
+  });
+
+  it('throws on any other error, so a failed read is not taken for "nothing sent"', async () => {
+    failures.fleet_invite_sends = CONNECTION_LOST;
+
+    await expect(fleetService.getInviteSends(FLEET_A)).rejects.toThrow('connection failure');
+  });
+});
+
+describe('fleetService.resendInvite', () => {
+  it('calls resend_fleet_invite and resolves on success', async () => {
+    rpcResults.resend_fleet_invite = { data: { success: true }, error: null };
+
+    await expect(fleetService.resendInvite('m1')).resolves.toBeUndefined();
+    expect(rpcCalls).toEqual([{ fn: 'resend_fleet_invite', args: { p_member_id: 'm1' } }]);
+  });
+
+  it('turns too_soon into FLEET_INVITE_TOO_SOON and keeps retry_at', async () => {
+    rpcResults.resend_fleet_invite = {
+      data: { error: 'too_soon', retry_at: '2026-11-07T10:00:00+00:00' },
+      error: null,
+    };
+
+    await expect(fleetService.resendInvite('m1')).rejects.toMatchObject({
+      code: 'FLEET_INVITE_TOO_SOON',
+      details: { retry_at: '2026-11-07T10:00:00+00:00' },
+    });
+  });
+
+  it('turns limit_reached into FLEET_INVITE_LIMIT', async () => {
+    rpcResults.resend_fleet_invite = { data: { error: 'limit_reached' }, error: null };
+
+    await expect(fleetService.resendInvite('m1')).rejects.toMatchObject({ code: 'FLEET_INVITE_LIMIT' });
+  });
+
+  it.each([['forbidden'], ['not_found'], ['not_invitable'], ['send_failed']])(
+    'turns %s into FLEET_INVITE_FAILED',
+    async (reason) => {
+      rpcResults.resend_fleet_invite = { data: { error: reason }, error: null };
+
+      await expect(fleetService.resendInvite('m1')).rejects.toMatchObject({
+        code: 'FLEET_INVITE_FAILED',
+        details: { reason },
+      });
+    },
+  );
+
+  it('turns a failed call (or a missing function) into FLEET_INVITE_FAILED', async () => {
+    rpcResults.resend_fleet_invite = { data: null, error: CONNECTION_LOST };
+
+    await expect(fleetService.resendInvite('m1')).rejects.toMatchObject({ code: 'FLEET_INVITE_FAILED' });
+  });
+});
+
+describe('fleetService.leaveFleet', () => {
+  it('calls leave_fleet and resolves on success', async () => {
+    rpcResults.leave_fleet = { data: { success: true }, error: null };
+
+    await expect(fleetService.leaveFleet('m1')).resolves.toBeUndefined();
+    expect(rpcCalls).toEqual([{ fn: 'leave_fleet', args: { p_member_id: 'm1' } }]);
+  });
+
+  it.each([['forbidden'], ['not_found'], ['not_active']])('turns %s into FLEET_LEAVE_FAILED', async (reason) => {
+    rpcResults.leave_fleet = { data: { error: reason }, error: null };
+
+    await expect(fleetService.leaveFleet('m1')).rejects.toMatchObject({
+      code: 'FLEET_LEAVE_FAILED',
+      details: { reason },
+    });
+  });
+
+  it('turns a failed call into FLEET_LEAVE_FAILED', async () => {
+    rpcResults.leave_fleet = { data: null, error: CONNECTION_LOST };
+
+    await expect(fleetService.leaveFleet('m1')).rejects.toMatchObject({ code: 'FLEET_LEAVE_FAILED' });
+  });
+});
+
+describe('fleetService.getMyMemberships', () => {
+  const row = {
+    member_id: 'm1',
+    fleet_id: FLEET_A,
+    fleet_name: 'TaxiHabana',
+    owner_label: 'Juan P.',
+    status: 'active',
+    driver_name: 'Yoel Pérez',
+    driver_phone: '+5351234567',
+    signed_up_at: '2026-10-01T10:00:00+00:00',
+  };
+
+  it('returns what get_my_fleet_memberships answers', async () => {
+    rpcResults.get_my_fleet_memberships = { data: [row], error: null };
+
+    expect(await fleetService.getMyMemberships()).toEqual([row]);
+  });
+
+  it('answers an empty list as an empty list', async () => {
+    rpcResults.get_my_fleet_memberships = { data: null, error: null };
+
+    expect(await fleetService.getMyMemberships()).toEqual([]);
+  });
+
+  it('falls back to the table read of the session user while the function is missing (PGRST202)', async () => {
+    sessionUserId = OTHER_USER;
+    seed(
+      'fleet_members',
+      member({
+        id: 'm1',
+        driver_id: OTHER_USER,
+        status: 'active',
+        signed_up_at: '2026-10-01T10:00:00+00:00',
+      }),
+    );
+
+    expect(await fleetService.getMyMemberships()).toEqual([
+      {
+        member_id: 'm1',
+        fleet_id: FLEET_A,
+        fleet_name: null,
+        owner_label: null,
+        status: 'active',
+        driver_name: 'Yoel Pérez',
+        driver_phone: '+5351234567',
+        signed_up_at: '2026-10-01T10:00:00+00:00',
+      },
+    ]);
+  });
+
+  it('throws AUTH_ERROR on the fallback when there is no session', async () => {
+    await expect(fleetService.getMyMemberships()).rejects.toMatchObject({ code: 'AUTH_ERROR' });
+  });
+
+  it('throws any other error, so a failed read is not taken for "no fleet"', async () => {
+    rpcResults.get_my_fleet_memberships = { data: null, error: CONNECTION_LOST };
+
+    await expect(fleetService.getMyMemberships()).rejects.toThrow('connection failure');
   });
 });

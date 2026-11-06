@@ -11,7 +11,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface SmsRequest { user_id?: string; phone: string; body: string; ride_id?: string; event_type?: string; }
+interface SmsRequest { user_id?: string; phone: string; body: string; ride_id?: string; event_type?: string; gsm7?: boolean; }
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -24,13 +24,18 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { user_id, phone, body, ride_id, event_type } = (await req.json()) as SmsRequest;
+    const { user_id, phone, body, ride_id, event_type, gsm7 } = (await req.json()) as SmsRequest;
     if (!phone || !body) return new Response(JSON.stringify({ error: 'phone and body are required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
     const supabase = createClient(Deno.env.get('SUPABASE_URL')!, serviceRoleKey);
 
     // ── D7 Networks (sole SMS provider, Cuba + rest of world) ──
-    const result = await sendSmsViaD7(phone, body, { tracker: supabase, eventType: event_type || 'unknown' });
+    // gsm7: true is the caller saying the text fits GSM-7 (see sendSmsViaD7). Anything else stays unicode.
+    const result = await sendSmsViaD7(phone, body, {
+      tracker: supabase,
+      eventType: event_type || 'unknown',
+      ...(gsm7 === true ? { dataCoding: 'text' as const } : {}),
+    });
 
     // Audit log. The legacy `twilio_sid` column now stores the D7 request_id.
     await supabase.from('sms_log').insert({

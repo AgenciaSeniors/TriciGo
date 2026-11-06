@@ -1,10 +1,10 @@
 // ============================================================
-// TriciGo Driver — a card with its own background color
+// TriciGo — a card with its own background color
 // <Card> cannot be tinted through className: NativeWind applies
 // conflicting classes by specificity and stylesheet order, not in
 // the order they are written, and Card's own bg-white / bg-neutral-*
-// comes after most tints (src/__tests__/cardTints.test.ts checks
-// every <Card>). This View has Card's shape and accessibility but no
+// comes after most tints (apps/driver/src/__tests__/cardTints.test.ts
+// checks every <Card>). This View has Card's shape and accessibility but no
 // background, so the colors in className are the ones that render.
 // ============================================================
 
