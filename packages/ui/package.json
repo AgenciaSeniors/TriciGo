@@ -21,6 +21,7 @@
     "./FareBreakdownCard": "./src/FareBreakdownCard.tsx",
     "./fleet/AddFleetDriverForm": "./src/fleet/AddFleetDriverForm.tsx",
     "./fleet/FleetDashboard": "./src/fleet/FleetDashboard.tsx",
+    "./fleet/FleetEditForm": "./src/fleet/FleetEditForm.tsx",
     "./fleet/FleetMembersList": "./src/fleet/FleetMembersList.tsx",
     "./fleet/FleetRequestForm": "./src/fleet/FleetRequestForm.tsx",
     "./fleet/useFleetScreen": "./src/fleet/useFleetScreen.ts",

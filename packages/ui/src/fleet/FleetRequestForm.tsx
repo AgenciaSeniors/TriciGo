@@ -15,6 +15,7 @@ import { getErrorMessage } from '@tricigo/utils';
 import type { FleetMemberInput } from '@tricigo/types';
 import { buildFleetRequest, createFleetRequestSubmission } from '@tricigo/api';
 import {
+  FLEET_VEHICLE_TYPES,
   fleetRequestAnnouncement,
   fleetRequestErrorTexts,
   noFleetRequestErrors,
@@ -28,13 +29,7 @@ import { Button } from '../Button';
 import { Input } from '../Input';
 import { announce } from './announce';
 
-// Each label is the Spanish default of fleet.vehicle_type.<id>.
-const VEHICLE_TYPES = [
-  { id: 'triciclo_basico', label: 'Triciclo' },
-  { id: 'moto_standard', label: 'Moto' },
-  { id: 'auto_standard', label: 'Auto' },
-  { id: 'triciclo_cargo', label: 'Cargo' },
-];
+const VEHICLE_TYPES = FLEET_VEHICLE_TYPES;
 
 const MAX_MEMBERS = 30;
 

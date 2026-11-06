@@ -27,12 +27,21 @@ import { Input } from '../Input';
 import { Text } from '../Text';
 import { ProfileScreenHeader } from '../ProfileScreenHeader';
 import { announce } from './announce';
+import type { FleetLicensePicker, PickedLicense } from './FleetMembersList';
 
 export interface AddFleetDriverFormProps {
   fleetId: string;
+  /** The company of the fleet: where the licence file is stored. */
+  corporateAccountId: string;
   onBack: () => void;
-  /** The driver was saved: the route says so and leaves the screen. */
-  onAdded: () => void;
+  /** Opens the app's picker for a licence photo or PDF; null when cancelled. */
+  onPickLicense: FleetLicensePicker;
+  /**
+   * The driver was saved: the route says so and leaves the screen.
+   * `licenseFailed` is true when a licence was attached but did not upload:
+   * the driver is in the list and the owner uploads it from their row.
+   */
+  onAdded: (outcome: { licenseFailed: boolean }) => void;
   /**
    * Background of the screen. Left out, the screen looks like the driver app's
    * other profile screens. The passenger app passes 'cuban', like its own. The
@@ -41,7 +50,14 @@ export interface AddFleetDriverFormProps {
   screenBg?: ScreenProps['bg'];
 }
 
-export function AddFleetDriverForm({ fleetId, onBack, onAdded, screenBg }: AddFleetDriverFormProps) {
+export function AddFleetDriverForm({
+  fleetId,
+  corporateAccountId,
+  onBack,
+  onPickLicense,
+  onAdded,
+  screenBg,
+}: AddFleetDriverFormProps) {
   const { t } = useTranslation('driver');
   const isDark = useColorScheme() === 'dark';
   const palette = isDark ? cubanDark : cubanLight;
@@ -50,11 +66,26 @@ export function AddFleetDriverForm({ fleetId, onBack, onAdded, screenBg }: AddFl
   const [errors, setErrors] = useState<FleetMemberFormErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // The licence is optional: it is picked here and uploaded once the driver is saved.
+  const [license, setLicense] = useState<PickedLicense | null>(null);
 
   const setField = (field: keyof FleetMemberFormValues) => (value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setErrors((prev) => ({ ...prev, [field]: undefined }));
     setSubmitError(null);
+  };
+
+  const pickLicense = async () => {
+    try {
+      const picked = await onPickLicense();
+      if (picked) setLicense(picked);
+    } catch {
+      const message = t('fleet.add_driver_license_pick_failed', {
+        defaultValue: 'No se pudo abrir el selector. Puedes subir la licencia después, desde la lista.',
+      });
+      setSubmitError(message);
+      announce(message);
+    }
   };
 
   const handleAdd = async () => {
@@ -69,9 +100,12 @@ export function AddFleetDriverForm({ fleetId, onBack, onAdded, screenBg }: AddFl
     setErrors({});
     setSubmitError(null);
     setSubmitting(true);
+    // The driver is saved by addMember. From then on the form must not save
+    // again: a failed licence upload leaves the screen too, so it cannot add
+    // the same driver twice.
+    let saved: { id: string };
     try {
-      await fleetService.addMember(fleetId, parsed.member);
-      onAdded();
+      saved = await fleetService.addMember(fleetId, parsed.member);
     } catch (err) {
       const message =
         addDriverFailure(err) === 'exists'
@@ -81,9 +115,26 @@ export function AddFleetDriverForm({ fleetId, onBack, onAdded, screenBg }: AddFl
             });
       setSubmitError(message);
       announce(message);
-    } finally {
       setSubmitting(false);
+      return;
     }
+
+    let licenseFailed = false;
+    if (license) {
+      try {
+        await fleetService.uploadMemberLicenseFromUri({
+          fleet_member_id: saved.id,
+          corporate_account_id: corporateAccountId,
+          uri: license.uri,
+          file_name: license.file_name,
+          mime_type: license.mime_type,
+        });
+      } catch {
+        licenseFailed = true;
+      }
+    }
+    setSubmitting(false);
+    onAdded({ licenseFailed });
   };
 
   const errorTexts = fleetMemberErrorTexts(errors, t);
@@ -145,6 +196,26 @@ export function AddFleetDriverForm({ fleetId, onBack, onAdded, screenBg }: AddFl
               value={form.idNumber}
               onChangeText={setField('idNumber')}
             />
+
+            <View className="mb-4">
+              <Text variant="caption" color="secondary" className="mb-1">
+                {t('fleet.add_driver_license_photo', { defaultValue: 'Foto de la licencia (opcional)' })}
+              </Text>
+              <Button
+                title={
+                  license
+                    ? t('fleet.add_driver_license_change', {
+                        defaultValue: 'Cambiar: {{name}}',
+                        name: license.file_name,
+                      })
+                    : t('fleet.add_driver_license_attach', { defaultValue: 'Adjuntar licencia' })
+                }
+                variant="outline"
+                fullWidth
+                disabled={submitting}
+                onPress={pickLicense}
+              />
+            </View>
 
             {submitError && (
               <Text variant="bodySmall" color="error" className="mb-3">
