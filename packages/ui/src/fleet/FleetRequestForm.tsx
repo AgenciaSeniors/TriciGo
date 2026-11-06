@@ -19,6 +19,7 @@ import {
   fleetOwnerContactPhone,
   fleetOwnerPhoneIsAsked,
   fleetRequestAnnouncement,
+  fleetRequestCanSubmit,
   fleetRequestErrorTexts,
   noFleetRequestErrors,
   validateFleetRequestForm,
@@ -130,12 +131,8 @@ export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props
   };
 
   const validMembers = members.filter((m) => m.driver_name.trim() && m.driver_phone.trim());
-  const canSubmit =
-    !!fleetName.trim() &&
-    !!city.trim() &&
-    vehicleTypes.length > 0 &&
-    validMembers.length > 0 &&
-    !submitting;
+  // A half-filled row turns the button on: pressing it shows what is missing.
+  const canSubmit = fleetRequestCanSubmit({ fleetName, city, vehicleTypes, members, submitting });
 
   const handleSubmit = async () => {
     if (!ownerUserId) return;

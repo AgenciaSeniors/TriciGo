@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   fleetOwnerContactPhone,
   fleetOwnerPhoneIsAsked,
+  fleetRequestCanSubmit,
   fleetRequestAnnouncement,
   fleetRequestErrorTexts,
   validateFleetRequestForm,
@@ -230,5 +231,42 @@ describe('the owner phone of a session without one', () => {
       expect(fleetOwnerContactPhone('', '5234 5678')).toBe('+5352345678');
       expect(fleetOwnerContactPhone(null, '+53 6323 4567')).toBe('+5363234567');
     });
+  });
+});
+
+describe('fleetRequestCanSubmit', () => {
+  const base = { fleetName: 'TaxiHabana', city: 'La Habana', vehicleTypes: ['triciclo_basico'], submitting: false };
+
+  it('is on with the fleet filled in and a complete driver row', () => {
+    expect(fleetRequestCanSubmit({ ...base, members: [driver as never] })).toBe(true);
+  });
+
+  it('is off when the fleet name, the city or the vehicle types are missing', () => {
+    expect(fleetRequestCanSubmit({ ...base, fleetName: ' ', members: [driver as never] })).toBe(false);
+    expect(fleetRequestCanSubmit({ ...base, city: '', members: [driver as never] })).toBe(false);
+    expect(fleetRequestCanSubmit({ ...base, vehicleTypes: [], members: [driver as never] })).toBe(false);
+  });
+
+  it('is off while it is sending', () => {
+    expect(fleetRequestCanSubmit({ ...base, submitting: true, members: [driver as never] })).toBe(false);
+  });
+
+  it('is off with no driver data at all', () => {
+    expect(fleetRequestCanSubmit({ ...base, members: [blankRow] })).toBe(false);
+    expect(fleetRequestCanSubmit({ ...base, members: [{ ...blankRow, driver_name: '  ' }] })).toBe(false);
+  });
+
+  it('is on with one half-filled row, so the checks can say what is missing', () => {
+    const onlyName = { ...blankRow, driver_name: 'Ana Díaz' };
+    const onlyPhone = { ...blankRow, driver_phone: '52345678' };
+    const onlyEmail = { ...blankRow, driver_email: 'ana@example.com' };
+    for (const row of [onlyName, onlyPhone, onlyEmail]) {
+      expect(fleetRequestCanSubmit({ ...base, members: [row] })).toBe(true);
+      expect(validateFleetRequestForm({ ...filled, members: [row] })).not.toBeNull();
+    }
+  });
+
+  it('is on when only the licence or the id number of a row is typed', () => {
+    expect(fleetRequestCanSubmit({ ...base, members: [{ ...blankRow, driver_license_number: 'L-123' }] })).toBe(true);
   });
 });

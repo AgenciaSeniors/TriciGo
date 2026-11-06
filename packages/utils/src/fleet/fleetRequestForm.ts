@@ -87,6 +87,36 @@ function rowErrors(row: FleetMemberInput): FleetRequestRowErrors {
   return errors;
 }
 
+/** Whether a driver row has anything typed in it: the request leaves untouched rows out. */
+function rowIsStarted(row: FleetMemberInput): boolean {
+  return [row.driver_name, row.driver_phone, row.driver_email, row.driver_license_number, row.driver_id_number].some(
+    (value) => value?.trim(),
+  );
+}
+
+export interface FleetRequestSubmitState {
+  fleetName: string;
+  city: string;
+  vehicleTypes: string[];
+  members: FleetMemberInput[];
+  submitting: boolean;
+}
+
+/**
+ * Whether the send button is on. A half-filled driver row turns it on: pressing
+ * it runs validateFleetRequestForm, which says what is missing under the
+ * fields. A form with no driver data at all keeps the button off.
+ */
+export function fleetRequestCanSubmit(form: FleetRequestSubmitState): boolean {
+  return (
+    !!form.fleetName.trim() &&
+    !!form.city.trim() &&
+    form.vehicleTypes.length > 0 &&
+    form.members.some(rowIsStarted) &&
+    !form.submitting
+  );
+}
+
 /** What to fix before sending the request, or null when there is nothing to fix. */
 export function validateFleetRequestForm(form: FleetRequestFormFields): FleetRequestFormErrors | null {
   const errors: FleetRequestFormErrors = { members: form.members.map(rowErrors) };
