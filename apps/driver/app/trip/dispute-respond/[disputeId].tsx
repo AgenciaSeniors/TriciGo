@@ -8,7 +8,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { disputeService } from '@tricigo/api';
 import { getErrorMessage, formatCUP } from '@tricigo/utils';
 import { useAuth } from '@/lib/useAuth';
-import { TintedCard } from '@/components/TintedCard';
+import { TintedCard } from '@tricigo/ui/TintedCard';
 import { colors } from '@tricigo/theme';
 import type { RideDispute } from '@tricigo/types';
 

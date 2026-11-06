@@ -14,7 +14,7 @@ import { locationService } from '@tricigo/api/services/location';
 import { formatCUP, getErrorMessage, cubaTimeZone } from '@tricigo/utils';
 import type { RideWithDriver, RidePricingSnapshot, RideLocationEvent, RideDispute, LostItem } from '@tricigo/types';
 import { RideMapView } from '@/components/RideMapView';
-import { TintedCard } from '@/components/TintedCard';
+import { TintedCard } from '@tricigo/ui/TintedCard';
 
 export default function TripDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
