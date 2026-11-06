@@ -17,7 +17,7 @@
 // caller's with the app's Tailwind config through NativeWind's own compiler,
 // and reports each background or border color from className that loses, in
 // light or dark mode, or that the theme does not define. A card that needs
-// its own color is a TintedCard (src/components/TintedCard.tsx), which has no
+// its own color is a TintedCard (packages/ui/src/TintedCard.tsx), which has no
 // color to lose to and is only checked for colors the theme does not define.
 // ============================================================
 

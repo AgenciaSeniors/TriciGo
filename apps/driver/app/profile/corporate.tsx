@@ -35,7 +35,7 @@ import { useDriverStore } from '@/stores/driver.store';
 import { useAuthStore } from '@/stores/auth.store';
 import FleetRequestForm from '@/components/FleetRequestForm';
 import FleetMembersList from '@/components/FleetMembersList';
-import { TintedCard } from '@/components/TintedCard';
+import { TintedCard } from '@tricigo/ui/TintedCard';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import {
   canAddFleetDrivers,

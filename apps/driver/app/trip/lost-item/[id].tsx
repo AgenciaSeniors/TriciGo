@@ -10,7 +10,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { lostItemService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
 import { useAuthStore } from '@/stores/auth.store';
-import { TintedCard } from '@/components/TintedCard';
+import { TintedCard } from '@tricigo/ui/TintedCard';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@tricigo/theme';
 import { formatCUP } from '@tricigo/utils';

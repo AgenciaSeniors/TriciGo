@@ -31,6 +31,7 @@
     "./StatusBadge": "./src/StatusBadge.tsx",
     "./StatusStepper": "./src/StatusStepper.tsx",
     "./Text": "./src/Text.tsx",
+    "./TintedCard": "./src/TintedCard.tsx",
     "./Skeleton": "./src/Skeleton.tsx",
     "./AnimatedCard": "./src/AnimatedCard.tsx",
     "./hooks/useResponsive": "./src/hooks/useResponsive.ts",
