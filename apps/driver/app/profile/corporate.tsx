@@ -12,7 +12,7 @@
 // the driver was rejected, the admin's reason and the form to apply
 // again show below any fleets they drive for. Until both reads have
 // succeeded once, the screen shows a skeleton or an error with retry,
-// never the form: see src/utils/corporateScreen.ts.
+// never the form: see packages/utils/src/fleet/corporateScreen.ts.
 // ============================================================
 
 import React, { useState, useEffect, useCallback, useReducer, useRef } from 'react';
@@ -45,7 +45,7 @@ import {
   initialCorporateState,
   rejectionReason,
   type CorporateAction,
-} from '@/utils/corporateScreen';
+} from '@tricigo/utils/fleet/corporateScreen';
 
 export default function CorporateScreen() {
   const { t } = useTranslation('driver');
