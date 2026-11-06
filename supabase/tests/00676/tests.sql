@@ -34,7 +34,7 @@ INSERT INTO t.ids VALUES
 
 CREATE VIEW t.sms AS
   SELECT q.id, q.url, q.headers, q.body ->> 'phone' AS phone, q.body ->> 'body' AS text,
-         q.body ->> 'user_id' AS user_id, q.body ->> 'event_type' AS event_type
+         q.body ->> 'user_id' AS user_id, q.body ->> 'event_type' AS event_type, q.body -> 'gsm7' AS gsm7
   FROM net.http_request_queue q JOIN public.cron_http_calls c ON c.request_id = q.id
   WHERE c.jobname = 'fleet-invite-sms';
 CREATE VIEW t.push AS
@@ -485,13 +485,22 @@ SELECT t.case('E10 the driver''s pushes with an owner with no name', 'Ahora eres
   $$SELECT text FROM t.push WHERE event = 'added_to_fleet'$$,
   $$SELECT text FROM t.push WHERE event = 'removed_from_fleet'$$);
 SELECT t.case('E11 the call is what send-sms expects, through cron_http_post',
-  'https://lqaufszburqvlslpcuac.supabase.co/functions/v1/send-sms;test-service-key;Bearer test-service-key;fleet_invite;<null>',
+  'https://lqaufszburqvlslpcuac.supabase.co/functions/v1/send-sms;test-service-key;Bearer test-service-key;fleet_invite;<null>;true',
   $$UPDATE public.fleet_members SET status = 'approved' WHERE id = '{b1}'$$,
   $$SELECT url FROM t.sms$$,
   $$SELECT headers ->> 'apikey' FROM t.sms$$,
   $$SELECT headers ->> 'Authorization' FROM t.sms$$,
   $$SELECT event_type FROM t.sms$$,
-  $$SELECT user_id FROM t.sms$$);
+  $$SELECT user_id FROM t.sms$$,
+  $$SELECT gsm7 FROM t.sms$$);
+SELECT t.case('E12 every SMS asks send-sms for GSM-7 with a JSON true, the resend too', 'true;2;2',
+  $$UPDATE public.fleet_members SET status = 'approved' WHERE id = '{b1}'$$,
+  $$UPDATE public.fleet_invite_sends SET sent_at = sent_at - interval '25 hours'$$,
+  '@{beto}',
+  $$SELECT public.resend_fleet_invite('{b1}') ->> 'success'$$,
+  '@db',
+  $$SELECT count(*) FROM t.sms$$,
+  $$SELECT count(*) FROM t.sms WHERE gsm7 = 'true'::jsonb$$);
 
 -- ── F. Resending ─────────────────────────────────────────────
 SELECT t.case('F1 after 24 hours the owner resends', 'true;2;sms:review,sms:resend',

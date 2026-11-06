@@ -275,6 +275,8 @@ variant('no_daily_cap', ('>= c_daily_sms THEN', '>= 1000000 THEN'), loose=True)
 variant('resends_while_pending', ("  IF v_company IS DISTINCT FROM 'approved' OR v_driver IS NOT NULL\n", '  IF v_driver IS NOT NULL\n'), loose=True)
 variant('anyone_leaves', ("  IF v_driver IS DISTINCT FROM v_me THEN\n    RETURN jsonb_build_object('error', 'forbidden');\n  END IF;\n", ''), loose=True)
 variant('anyone_resends', ("  IF v_owner IS DISTINCT FROM v_me THEN\n    RETURN jsonb_build_object('error', 'forbidden');\n  END IF;\n", ''), loose=True)
+variant('no_gsm7_flag', ("'event_type', 'fleet_invite', 'gsm7', true));", "'event_type', 'fleet_invite'));"), loose=True)
+variant('gsm7_as_text', ("'event_type', 'fleet_invite', 'gsm7', true));", "'event_type', 'fleet_invite', 'gsm7', 'true'));"), loose=True)
 variant('any_number', ("  IF v_phone !~ '^[+]53[56][0-9]{7}$' THEN\n    RETURN 'not_cuban_mobile';\n  END IF;\n", ''), loose=True)
 PYEOF
   [ -f "$T/any_number.sql" ] || { ko "the broken copies were written" "see the python error above"; echo "== $PASS passed, $FAIL failed =="; exit 1; }
@@ -361,6 +363,8 @@ PYEOF
   flips "X18 anyone resends (F4)" anyone_resends "F4"
   flips "X19 any number gets the SMS (G1)" any_number "G1"
   flips "X20 a first contact that ignores a resend (D9)" review_ignores_resends "D9"
+  flips "X21 an SMS that does not ask for GSM-7 (E11)" no_gsm7_flag "E11"
+  flips "X22 a flag sent as a string, which send-sms would not read as true (E12)" gsm7_as_text "E12"
   $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS $D" >/dev/null 2>&1
   rm -rf "$T"
 fi
