@@ -840,6 +840,20 @@
     "load_error_body": "Verifique sua conexão com a internet e tente novamente.",
     "rejected_title": "Solicitação recusada",
     "rejected_reason": "Motivo: {{reason}}",
-    "rejected_resubmit": "Você pode corrigir os dados e enviar a solicitação novamente."
+    "rejected_resubmit": "Você pode corrigir os dados e enviar a solicitação novamente.",
+    "add_driver": "Adicionar motorista",
+    "add_driver_intro": "A TriciGo faz a revisão, e o motorista entra na sua frota ao se cadastrar com este telefone.",
+    "add_driver_name": "Nome completo *",
+    "add_driver_name_required": "Digite o nome do motorista.",
+    "add_driver_phone": "Telefone *",
+    "add_driver_phone_required": "Digite o telefone do motorista.",
+    "add_driver_phone_invalid": "Digite um celular cubano: 8 dígitos começando com 5 ou 6.",
+    "add_driver_email": "E-mail",
+    "add_driver_license": "Nº da carteira de motorista",
+    "add_driver_id_number": "Documento de identidade",
+    "add_driver_done": "Motorista adicionado",
+    "add_driver_fix_fields": "Confira os campos marcados.",
+    "add_driver_exists": "Esse telefone já está na sua frota.",
+    "add_driver_failed": "Não foi possível adicionar o motorista. Verifique sua conexão e tente novamente."
   }
 }

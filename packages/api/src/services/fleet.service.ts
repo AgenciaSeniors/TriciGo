@@ -11,13 +11,28 @@ import type {
   DriverFleet,
   FleetMember,
   FleetMemberInput,
+  FleetMemberStatus,
   FleetWithMembers,
   ReviewedFleetMember,
 } from '@tricigo/types';
+import { normalizeCubanPhone } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
+import { AppError } from '../errors';
 import { onboardingService } from './onboarding.service';
 
 type OwnerAccount = Pick<CorporateAccount, 'id' | 'name' | 'status' | 'commission_percent' | 'suspended_reason'>;
+
+// An invitation in one of these no longer holds a place in the fleet, so the
+// owner can invite that number again.
+const REINVITABLE_STATUSES: FleetMemberStatus[] = ['rejected', 'inactive'];
+
+// A rejected or suspended company keeps its pending drivers, but they are no
+// work for the team: the same two statuses the owner can add drivers in.
+const REVIEWABLE_ACCOUNT_STATUSES: CorporateAccountStatus[] = ['pending', 'approved'];
+
+function fleetMemberExists(): AppError {
+  return new AppError('Ese teléfono ya está en tu flota.', 'FLEET_MEMBER_EXISTS');
+}
 
 /** PostgREST's "column does not exist" for exactly driver_fleets.city (00602). */
 function isMissingCityColumn(err: { code?: string; message?: string } | null | undefined): boolean {
@@ -125,6 +140,58 @@ export const fleetService = {
   },
 
   /**
+   * Add one driver to a fleet already sent, as a new invitation to review:
+   * tg_fleet_members_protect forces pending_review for the owner whatever
+   * this sends.
+   *
+   * The request form saves the number as typed and the unique key is on that
+   * raw value, so the rows are compared by their normalized number and the new
+   * one is saved in full. A number that holds a place in the fleet is refused
+   * with AppError FLEET_MEMBER_EXISTS. A rejected or inactive invitation is
+   * frozen for the owner (00600), so it is deleted and the driver invited
+   * again, which sends the new data to review. The two steps are not atomic:
+   * if the insert fails the old invitation is gone, and the owner just retries.
+   * Throws when the fleet cannot be read, so a failed read is never taken for
+   * "not in the fleet".
+   */
+  async addMember(fleetId: string, member: FleetMemberInput): Promise<void> {
+    const supabase = getSupabaseClient();
+    const phone = normalizeCubanPhone(member.driver_phone);
+
+    const { data: rows, error: readErr } = await supabase
+      .from('fleet_members')
+      .select('id, driver_phone, status')
+      .eq('fleet_id', fleetId);
+    if (readErr) throw new Error(`Fleet members lookup failed: ${readErr.message}`);
+
+    const sameNumber = ((rows ?? []) as Pick<FleetMember, 'id' | 'driver_phone' | 'status'>[]).filter(
+      (m) => normalizeCubanPhone(m.driver_phone) === phone,
+    );
+    if (sameNumber.some((m) => !REINVITABLE_STATUSES.includes(m.status))) throw fleetMemberExists();
+
+    if (sameNumber.length > 0) {
+      const { error: deleteErr } = await supabase
+        .from('fleet_members')
+        .delete()
+        .in('id', sameNumber.map((m) => m.id))
+        .in('status', REINVITABLE_STATUSES);
+      if (deleteErr) throw new Error(`Fleet member replacement failed: ${deleteErr.message}`);
+    }
+
+    const { error: insertErr } = await supabase.from('fleet_members').insert({
+      fleet_id: fleetId,
+      driver_name: member.driver_name,
+      driver_phone: phone,
+      driver_email: member.driver_email ?? null,
+      driver_license_number: member.driver_license_number ?? null,
+      driver_id_number: member.driver_id_number ?? null,
+      status: 'pending_review' as const,
+    });
+    if (insertErr?.code === '23505') throw fleetMemberExists();
+    if (insertErr) throw new Error(`Fleet member insertion failed: ${insertErr.message}`);
+  },
+
+  /**
    * Owner-side query: the fleet (with members) of a corporate account the
    * user created, or NULL when none of their accounts has a fleet.
    *
@@ -212,6 +279,45 @@ export const fleetService = {
     return new Set(
       ((data ?? []) as Pick<DriverFleet, 'corporate_account_id'>[]).map((f) => f.corporate_account_id),
     );
+  },
+
+  /**
+   * How many drivers wait for review in each of the accounts, for the admin
+   * list. Nothing else tells the team about a driver added to a company it
+   * already approved. A company with none, or one that is rejected or
+   * suspended, is left out. Throws when a read fails, so a failed read is
+   * never taken for "nothing to review".
+   */
+  async getPendingMemberCounts(
+    accounts: Pick<CorporateAccount, 'id' | 'status'>[],
+  ): Promise<Map<string, number>> {
+    const counts = new Map<string, number>();
+    const accountIds = accounts.filter((a) => REVIEWABLE_ACCOUNT_STATUSES.includes(a.status)).map((a) => a.id);
+    if (accountIds.length === 0) return counts;
+    const supabase = getSupabaseClient();
+
+    const { data: fleets, error: fleetsErr } = await supabase
+      .from('driver_fleets')
+      .select('id, corporate_account_id')
+      .in('corporate_account_id', accountIds);
+    if (fleetsErr) throw new Error(`Fleet lookup failed: ${fleetsErr.message}`);
+    const accountByFleet = new Map(
+      ((fleets ?? []) as Pick<DriverFleet, 'id' | 'corporate_account_id'>[]).map((f) => [f.id, f.corporate_account_id]),
+    );
+    if (accountByFleet.size === 0) return counts;
+
+    const { data: pending, error: pendingErr } = await supabase
+      .from('fleet_members')
+      .select('fleet_id')
+      .in('fleet_id', [...accountByFleet.keys()])
+      .eq('status', 'pending_review');
+    if (pendingErr) throw new Error(`Fleet members lookup failed: ${pendingErr.message}`);
+
+    for (const { fleet_id } of (pending ?? []) as Pick<FleetMember, 'fleet_id'>[]) {
+      const accountId = accountByFleet.get(fleet_id);
+      if (accountId) counts.set(accountId, (counts.get(accountId) ?? 0) + 1);
+    }
+    return counts;
   },
 
   /**

@@ -43,6 +43,10 @@ const UNIQUE_KEYS: Record<Table, string[][]> = {
 let db: Record<Table, Row[]> = { corporate_accounts: [], driver_fleets: [], fleet_members: [], admin_actions: [] };
 let failures: Partial<Record<Table, QueryError>> = {};
 let missingColumns: Partial<Record<Table, string[]>> = {};
+// Fails only the writes on a table, so a test can read and then lose a race.
+let writeFailures: Partial<Record<Table, QueryError>> = {};
+// Runs right before each write, so a test can change a row after the read.
+let beforeWrite: (() => void) | null = null;
 let generatedIds = 0;
 
 function rowsOf(table: string): Row[] {
@@ -141,6 +145,11 @@ function updateRows(table: string, values: Row, matches: (row: Row) => boolean):
   return { data: null, error: null };
 }
 
+function deleteRows(table: string, matches: (row: Row) => boolean): Result {
+  db[table as Table] = rowsOf(table).filter((row) => !matches(row));
+  return { data: null, error: null };
+}
+
 function query(table: string) {
   const filters: Array<(row: Row) => boolean> = [];
   const orderBy: Array<{ column: string; ascending: boolean }> = [];
@@ -155,6 +164,9 @@ function query(table: string) {
     const failure = failures[table as Table];
     if (failure) return { data: null, error: failure };
     if (write) {
+      beforeWrite?.();
+      const writeFailure = writeFailures[table as Table];
+      if (writeFailure) return { data: null, error: writeFailure };
       const written = write();
       // An update without select() resolves data null: no rows to project.
       return written.error || written.data === null
@@ -221,6 +233,10 @@ function query(table: string) {
     },
     upsert: (rows: Row | Row[], options?: { onConflict?: string; ignoreDuplicates?: boolean }) => {
       write = () => upsertRows(table, rows, options ?? {});
+      return builder;
+    },
+    delete: () => {
+      write = () => deleteRows(table, (row) => filters.every((keep) => keep(row)));
       return builder;
     },
     single: () => Promise.resolve(one(false)),
@@ -315,6 +331,8 @@ beforeEach(() => {
   db = { corporate_accounts: [], driver_fleets: [], fleet_members: [], admin_actions: [] };
   failures = {};
   missingColumns = {};
+  writeFailures = {};
+  beforeWrite = null;
   generatedIds = 0;
 });
 
@@ -612,6 +630,235 @@ describe('fleetService.submitFleetRequest', () => {
       expect(db.driver_fleets).toEqual([]);
     });
   });
+});
+
+describe('fleetService.addMember', () => {
+  const newDriver = { driver_name: 'Ana Díaz', driver_phone: '52345678' };
+
+  beforeEach(() => {
+    seed('corporate_accounts', account({ status: 'approved' }));
+    seed('driver_fleets', fleet({}));
+  });
+
+  it('adds the driver to the fleet pending review, with the number in full', async () => {
+    await fleetService.addMember(FLEET_A, {
+      ...newDriver,
+      driver_email: 'ana@example.com',
+      driver_license_number: 'L-123',
+      driver_id_number: '90010112345',
+    });
+
+    expect(db.fleet_members).toHaveLength(1);
+    expect(db.fleet_members[0]).toMatchObject({
+      fleet_id: FLEET_A,
+      driver_name: 'Ana Díaz',
+      driver_phone: '+5352345678',
+      driver_email: 'ana@example.com',
+      driver_license_number: 'L-123',
+      driver_id_number: '90010112345',
+      status: 'pending_review',
+    });
+  });
+
+  it('stores null for the optional fields left out', async () => {
+    await fleetService.addMember(FLEET_A, newDriver);
+
+    expect(db.fleet_members[0]).toMatchObject({
+      driver_email: null,
+      driver_license_number: null,
+      driver_id_number: null,
+    });
+  });
+
+  it.each(['pending_review', 'approved', 'pending_signup', 'active'] as const)(
+    'refuses a number already in the fleet as %s, leaving that driver as they are',
+    async (status) => {
+      const current = member({ driver_phone: '+5352345678', status });
+      seed('fleet_members', current);
+
+      await expect(fleetService.addMember(FLEET_A, newDriver)).rejects.toMatchObject({
+        code: 'FLEET_MEMBER_EXISTS',
+      });
+
+      expect(db.fleet_members).toEqual([current]);
+    },
+  );
+
+  it('recognizes the number when the request form saved it without the country code', async () => {
+    // The request form keeps the number as typed, so 5234 5678 and +5352345678
+    // are two rows for the unique key but one person.
+    seed('fleet_members', member({ driver_phone: '5234 5678', status: 'active' }));
+
+    await expect(
+      fleetService.addMember(FLEET_A, { ...newDriver, driver_phone: '+53 5234 5678' }),
+    ).rejects.toMatchObject({ code: 'FLEET_MEMBER_EXISTS' });
+
+    expect(db.fleet_members).toHaveLength(1);
+  });
+
+  it.each(['rejected', 'inactive'] as const)(
+    'invites again a driver whose invitation is %s, as a new one to review',
+    async (status) => {
+      seed(
+        'fleet_members',
+        member({
+          id: 'old-invitation',
+          driver_name: 'Ana Dias',
+          driver_phone: '52345678',
+          status,
+          rejected_reason: 'Nombre mal escrito',
+        }),
+      );
+
+      await fleetService.addMember(FLEET_A, newDriver);
+
+      expect(db.fleet_members).toHaveLength(1);
+      const [invited] = db.fleet_members;
+      expect(invited).toMatchObject({
+        driver_name: 'Ana Díaz',
+        driver_phone: '+5352345678',
+        status: 'pending_review',
+      });
+      expect(invited?.id).not.toBe('old-invitation');
+      expect(invited?.rejected_reason).toBeUndefined();
+    },
+  );
+
+  it('keeps the rejected invitation when it cannot be replaced', async () => {
+    seed('fleet_members', member({ driver_phone: '52345678', status: 'rejected' }));
+    writeFailures.fleet_members = CONNECTION_LOST;
+
+    await expect(fleetService.addMember(FLEET_A, newDriver)).rejects.toThrow('connection failure');
+
+    expect(db.fleet_members).toHaveLength(1);
+    expect(db.fleet_members[0]).toMatchObject({ driver_phone: '52345678', status: 'rejected' });
+  });
+
+  it('keeps a driver an admin approved while the owner was inviting them again', async () => {
+    seed('fleet_members', member({ driver_phone: '+5352345678', status: 'rejected' }));
+    beforeWrite = () => {
+      for (const row of db.fleet_members) row.status = 'approved';
+    };
+
+    await expect(fleetService.addMember(FLEET_A, newDriver)).rejects.toMatchObject({
+      code: 'FLEET_MEMBER_EXISTS',
+    });
+
+    expect(db.fleet_members).toHaveLength(1);
+    expect(db.fleet_members[0]).toMatchObject({ status: 'approved' });
+  });
+
+  it('leaves alone the drivers with another number', async () => {
+    const other = member({ driver_phone: '+5351111111', status: 'rejected' });
+    seed('fleet_members', other);
+
+    await fleetService.addMember(FLEET_A, newDriver);
+
+    expect(db.fleet_members).toHaveLength(2);
+    expect(db.fleet_members).toContainEqual(other);
+  });
+
+  it('adds a driver who is in the fleet of another company', async () => {
+    seed('driver_fleets', fleet({ id: FLEET_B, corporate_account_id: ACCOUNT_B }));
+    const elsewhere = member({ fleet_id: FLEET_B, driver_phone: '+5352345678', status: 'active' });
+    seed('fleet_members', elsewhere);
+
+    await fleetService.addMember(FLEET_A, newDriver);
+
+    expect(db.fleet_members).toHaveLength(2);
+    expect(db.fleet_members).toContainEqual(elsewhere);
+  });
+
+  it('says the driver is already there when someone else saved the number first', async () => {
+    writeFailures.fleet_members = queryError('23505', 'duplicate key value violates unique constraint');
+
+    await expect(fleetService.addMember(FLEET_A, newDriver)).rejects.toMatchObject({
+      code: 'FLEET_MEMBER_EXISTS',
+    });
+  });
+
+  it('writes nothing when it cannot read who is in the fleet', async () => {
+    seed('fleet_members', member({ driver_phone: '52345678', status: 'rejected' }));
+    failures.fleet_members = CONNECTION_LOST;
+
+    await expect(fleetService.addMember(FLEET_A, newDriver)).rejects.toThrow('connection failure');
+
+    expect(db.fleet_members).toHaveLength(1);
+  });
+
+  it('throws when the driver cannot be saved', async () => {
+    writeFailures.fleet_members = CONNECTION_LOST;
+
+    await expect(fleetService.addMember(FLEET_A, newDriver)).rejects.toThrow('connection failure');
+  });
+});
+
+describe('fleetService.getPendingMemberCounts', () => {
+  const companyA = { id: ACCOUNT_A, status: 'approved' } as const;
+  const companyB = { id: ACCOUNT_B, status: 'pending' } as const;
+
+  beforeEach(() => {
+    seed(
+      'driver_fleets',
+      fleet({ id: FLEET_A, corporate_account_id: ACCOUNT_A }),
+      fleet({ id: FLEET_B, corporate_account_id: ACCOUNT_B }),
+    );
+  });
+
+  it('counts the drivers waiting for review in each company', async () => {
+    seed(
+      'fleet_members',
+      member({ id: 'a1', fleet_id: FLEET_A, driver_phone: '+5351111111' }),
+      member({ id: 'a2', fleet_id: FLEET_A, driver_phone: '+5351111112' }),
+      member({ id: 'b1', fleet_id: FLEET_B, driver_phone: '+5351111113' }),
+    );
+
+    const counts = await fleetService.getPendingMemberCounts([companyA, companyB]);
+
+    expect(counts).toEqual(new Map([[ACCOUNT_A, 2], [ACCOUNT_B, 1]]));
+  });
+
+  it.each(['rejected', 'suspended'] as const)(
+    'leaves out a %s company, whose pending drivers are no work for the team',
+    async (status) => {
+      seed('fleet_members', member({ fleet_id: FLEET_A, driver_phone: '+5351111111' }));
+
+      expect(await fleetService.getPendingMemberCounts([{ id: ACCOUNT_A, status }])).toEqual(new Map());
+    },
+  );
+
+  it('leaves out the drivers already reviewed', async () => {
+    seed(
+      'fleet_members',
+      member({ id: 'a1', driver_phone: '+5351111111', status: 'approved' }),
+      member({ id: 'a2', driver_phone: '+5351111112', status: 'rejected' }),
+      member({ id: 'a3', driver_phone: '+5351111113', status: 'active' }),
+    );
+
+    expect(await fleetService.getPendingMemberCounts([companyA])).toEqual(new Map());
+  });
+
+  it('counts only the companies it was asked about', async () => {
+    seed('fleet_members', member({ fleet_id: FLEET_B, driver_phone: '+5351111113' }));
+
+    expect(await fleetService.getPendingMemberCounts([companyA])).toEqual(new Map());
+  });
+
+  it('answers an empty list without reading anything', async () => {
+    failures.driver_fleets = CONNECTION_LOST;
+    failures.fleet_members = CONNECTION_LOST;
+
+    expect(await fleetService.getPendingMemberCounts([])).toEqual(new Map());
+  });
+
+  it.each(['driver_fleets', 'fleet_members'] as const)(
+    'throws instead of reporting nothing to review when %s cannot be read',
+    async (table) => {
+      failures[table] = CONNECTION_LOST;
+
+      await expect(fleetService.getPendingMemberCounts([companyA])).rejects.toThrow('connection failure');
+    },
+  );
 });
 
 describe('fleetService.getAccountIdsWithFleet', () => {

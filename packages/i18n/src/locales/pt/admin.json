@@ -1702,6 +1702,8 @@
     "reject_reason": "Motivo da rejeição",
     "suspend_reason": "Motivo da suspensão",
     "not_found": "Empresa não encontrada",
+    "pending_drivers_one": "{{count}} motorista para revisar",
+    "pending_drivers_other": "{{count}} motoristas para revisar",
     "page_eyebrow": "Crescimento · aliados",
     "page_description": "Contas corporativas do TriciGo: viagens com orçamento mensal e frota compartilhada.",
     "load_error": "Não foi possível carregar as empresas.",
