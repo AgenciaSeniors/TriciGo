@@ -172,6 +172,23 @@ export function FleetReview({ corporateAccountId, canReview = true }: Props) {
     }
   };
 
+  // The tab opens inside the click, before awaiting, or the browser blocks it.
+  // The signed URL lasts 5 minutes, so it is fetched on click and never on render.
+  const openLicense = async (path: string) => {
+    const tab = window.open('about:blank', '_blank');
+    if (!tab) {
+      showToast('error', 'El navegador bloqueó la pestaña nueva. Permite las ventanas emergentes e inténtalo de nuevo.');
+      return;
+    }
+    tab.opener = null;
+    try {
+      tab.location.href = await fleetService.getMemberLicenseUrl(path);
+    } catch (e) {
+      tab.close();
+      showToast('error', opsErrorMessage(e, t));
+    }
+  };
+
   if (loading) {
     return <p className="text-sm text-ink-muted">Cargando flota…</p>;
   }
@@ -225,7 +242,14 @@ export function FleetReview({ corporateAccountId, canReview = true }: Props) {
                   <td className="py-2 pr-2 text-ink-muted">
                     {m.driver_license_number ?? '—'}
                     {m.license_doc_path && (
-                      <span className="ml-2 text-[10px] uppercase tracking-wide text-green-700">doc ✓</span>
+                      <button
+                        type="button"
+                        className="ml-2 text-[10px] uppercase tracking-wide text-green-700 underline underline-offset-2 hover:text-green-800 disabled:opacity-50"
+                        aria-label={`Abrir la licencia de ${m.driver_name}`}
+                        onClick={() => openLicense(m.license_doc_path as string)}
+                      >
+                        doc ✓
+                      </button>
                     )}
                   </td>
                   <td className="py-2 pr-2">
