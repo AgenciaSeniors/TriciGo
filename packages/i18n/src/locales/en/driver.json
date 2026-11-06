@@ -841,6 +841,8 @@
     "rejected_title": "Request rejected",
     "rejected_reason": "Reason: {{reason}}",
     "rejected_resubmit": "You can correct the details and send the request again.",
+    "suspended_reason": "Your fleet was suspended. Reason: {{reason}}",
+    "start_own_fleet": "Set up my own fleet",
     "add_driver": "Add driver",
     "add_driver_intro": "TriciGo reviews them, and they join your fleet when they sign up with this phone number.",
     "add_driver_name": "Full name *",

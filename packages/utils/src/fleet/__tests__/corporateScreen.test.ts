@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { FleetMembership, FleetWithMembers } from '@tricigo/types';
 import {
   canAddFleetDrivers,
+  canStartOwnFleet,
   corporateReducer,
   deriveCorporateView,
   fleetStatusBadge,
@@ -333,5 +334,29 @@ describe('membershipCard', () => {
     for (const status of ['inactive', 'rejected', 'pending_review'] as const) {
       expect(membershipCard(member({ status })).canLeave).toBe(false);
     }
+  });
+});
+
+describe('canStartOwnFleet', () => {
+  const ready = (memberships: FleetMembership[], ownedFleet: FleetWithMembers | null) =>
+    deriveCorporateView(load(initialCorporateState, 0, ok(memberships), ok(ownedFleet)));
+
+  it('offers it to someone who only drives for another owner fleet', () => {
+    expect(canStartOwnFleet(ready([member()], null))).toBe(true);
+  });
+
+  it('does not offer it while the request form already shows', () => {
+    expect(canStartOwnFleet(ready([], null))).toBe(false);
+    expect(canStartOwnFleet(ready([member()], owned('rejected')))).toBe(false);
+  });
+
+  it('does not offer it to someone who owns a fleet', () => {
+    expect(canStartOwnFleet(ready([member()], owned('approved')))).toBe(false);
+    expect(canStartOwnFleet(ready([member()], owned('suspended')))).toBe(false);
+  });
+
+  it('does not offer it while loading or after a failed read', () => {
+    expect(canStartOwnFleet(deriveCorporateView(initialCorporateState))).toBe(false);
+    expect(canStartOwnFleet({ kind: 'error' })).toBe(false);
   });
 });
