@@ -34,7 +34,8 @@ import { ErrorState } from '../ErrorState';
 import { ProfileScreenHeader } from '../ProfileScreenHeader';
 import { TintedCard } from '../TintedCard';
 import { FleetRequestForm } from './FleetRequestForm';
-import { FleetMembersList } from './FleetMembersList';
+import { FleetMembersList, type FleetLicensePicker, type FleetNotify } from './FleetMembersList';
+import type { DriverFleet } from '@tricigo/types';
 import type { FleetScreen } from './useFleetScreen';
 
 export interface FleetDashboardProps {
@@ -44,7 +45,13 @@ export interface FleetDashboardProps {
   /** Saved as the contact phone of a new fleet request. */
   ownerPhone: string;
   onBack: () => void;
-  onAddDriver: (fleetId: string) => void;
+  onAddDriver: (fleet: DriverFleet) => void;
+  /** Opens the screen that edits the fleet's details (FleetEditForm). */
+  onEditFleet: () => void;
+  /** Opens the app's picker for a licence photo or PDF; null when cancelled. */
+  onPickLicense: FleetLicensePicker;
+  /** Shows how an owner action went, as a toast. */
+  onNotify: FleetNotify;
   /**
    * Background of the screen. Left out, the screen looks like the driver app's
    * other profile screens. The passenger app passes 'cuban', like its own. The
@@ -56,13 +63,23 @@ export interface FleetDashboardProps {
 // What corporate_accounts.commission_percent is compared with on screen.
 const STANDARD_COMMISSION_PERCENT = 15;
 
-export function FleetDashboard({ screen, userId, ownerPhone, onBack, onAddDriver, screenBg }: FleetDashboardProps) {
+export function FleetDashboard({
+  screen,
+  userId,
+  ownerPhone,
+  onBack,
+  onAddDriver,
+  onEditFleet,
+  onPickLicense,
+  onNotify,
+  screenBg,
+}: FleetDashboardProps) {
   const { t } = useTranslation('driver');
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const palette = isDark ? cubanDark : cubanLight;
 
-  const { view, refreshing, reload, pullToRefresh, requestSubmitted } = screen;
+  const { view, sends, refreshing, reload, pullToRefresh, requestSubmitted } = screen;
   const ready = view.kind === 'ready' ? view : null;
   const memberships = ready?.memberships ?? [];
   const ownerFleet = ready?.ownerFleet ?? null;
@@ -192,16 +209,32 @@ export function FleetDashboard({ screen, userId, ownerPhone, onBack, onAddDriver
               {t('fleet.drivers_heading', { defaultValue: 'Conductores' })}
             </Text>
             <Card variant="outlined" padding="lg" className="mb-4">
-              <FleetMembersList members={ownerFleet.members} />
+              <FleetMembersList
+                members={ownerFleet.members}
+                sends={sends}
+                fleetStatus={ownerFleet.account.status}
+                corporateAccountId={ownerFleet.fleet.corporate_account_id}
+                onPickLicense={onPickLicense}
+                onNotify={onNotify}
+                onChanged={reload}
+              />
             </Card>
 
             {canAddFleetDrivers(ownerFleet.account.status) && (
-              <Button
-                title={t('fleet.add_driver', { defaultValue: 'Agregar conductor' })}
-                variant="outline"
-                fullWidth
-                onPress={() => onAddDriver(ownerFleet.fleet.id)}
-              />
+              <View className="gap-3">
+                <Button
+                  title={t('fleet.add_driver', { defaultValue: 'Agregar conductor' })}
+                  variant="outline"
+                  fullWidth
+                  onPress={() => onAddDriver(ownerFleet.fleet)}
+                />
+                <Button
+                  title={t('fleet.edit_fleet', { defaultValue: 'Editar datos de la flota' })}
+                  variant="ghost"
+                  fullWidth
+                  onPress={onEditFleet}
+                />
+              </View>
             )}
           </>
         )}
