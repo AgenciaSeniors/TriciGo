@@ -517,6 +517,31 @@ export default function CorporateProfileScreen() {
         onBack={() => router.back()}
       />
 
+      {/* A fleet of drivers is separate from a company for rides, so this stays
+          whatever the state of the request or the accounts below. */}
+      <Pressable
+        onPress={() => router.push('/profile/fleet')}
+        accessibilityRole="button"
+        accessibilityLabel={t('driver:fleet.entry_title', { defaultValue: 'Flota de conductores' })}
+        accessibilityHint={t('driver:fleet.entry_subtitle', { defaultValue: 'Registra tu flota o mira tus conductores' })}
+        style={{ minHeight: 44, marginTop: 16 }}
+      >
+        <Card variant="outlined" padding="lg">
+          <View className="flex-row items-center gap-3">
+            <Ionicons name="car-sport-outline" size={22} color={colors.primary[500]} />
+            <View className="flex-1">
+              <Text variant="body" className="font-semibold">
+                {t('driver:fleet.entry_title', { defaultValue: 'Flota de conductores' })}
+              </Text>
+              <Text variant="caption" color="secondary">
+                {t('driver:fleet.entry_subtitle', { defaultValue: 'Registra tu flota o mira tus conductores' })}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.neutral[400]} />
+          </View>
+        </Card>
+      </Pressable>
+
       {loading && (
         <Text variant="body" color="secondary" className="text-center mt-8">
           {t('common:loading', { defaultValue: 'Cargando...' })}
