@@ -1,5 +1,5 @@
 // ============================================================
-// TriciGo Driver — state of the Corporativo screen
+// TriciGo — state of the Corporativo screen
 // The screen reads the fleets the driver drives for (fleet_members)
 // and the fleet they own (driver_fleets). On a bad connection
 // either read can fail, so each one is `undefined` until it
@@ -8,7 +8,7 @@
 // creates a new corporate account and would duplicate a fleet the
 // owner already has.
 //
-// Plain TypeScript, so the driver's vitest setup can test it.
+// Plain TypeScript, so vitest can test it without a renderer.
 // ============================================================
 
 import type { CorporateAccountStatus, FleetMember, FleetWithMembers } from '@tricigo/types';

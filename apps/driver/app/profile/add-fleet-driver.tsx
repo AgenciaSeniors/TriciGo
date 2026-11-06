@@ -27,7 +27,7 @@ import {
   parseFleetMemberForm,
   type FleetMemberFormErrors,
   type FleetMemberFormValues,
-} from '@/utils/fleetMemberForm';
+} from '@tricigo/utils/fleet/fleetMemberForm';
 
 // A message that appears on screen is silent for a screen reader. Queued so
 // VoiceOver does not cut it off to read the button the driver just tapped.

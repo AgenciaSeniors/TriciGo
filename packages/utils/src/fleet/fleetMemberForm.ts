@@ -1,12 +1,12 @@
 // ============================================================
-// TriciGo Driver — the form that adds a driver to a fleet
-// Plain TypeScript, so the driver's vitest setup can test it. The
+// TriciGo — the form that adds a driver to a fleet
+// Plain TypeScript, so vitest can test it without a renderer. The
 // duplicate check is not here: it needs the fleet's rows, so
 // fleetService.addMember does it.
 // ============================================================
 
 import type { FleetMemberInput } from '@tricigo/types';
-import { isValidCubanPhone } from '@tricigo/utils';
+import { isValidCubanPhone } from '../validation';
 
 export interface FleetMemberFormValues {
   name: string;
