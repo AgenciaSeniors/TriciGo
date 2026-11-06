@@ -915,6 +915,9 @@
     "request_driver_row": "Motorista {{row}}",
     "request_remove_driver": "Remover motorista",
     "request_license_hint": "Você poderá enviar a foto da carteira de motorista pela lista de motoristas enquanto ele estiver em análise.",
+    "request_email_invalid": "Digite um e-mail válido, como nome@exemplo.com.",
+    "request_hours_start_invalid": "Hora de início: use o formato HH:MM, por exemplo 06:00.",
+    "request_hours_end_invalid": "Hora de término: use o formato HH:MM, por exemplo 22:00.",
     "request_submit": "Enviar solicitação de frota",
     "request_submitting": "Enviando…",
     "request_limits": "Mínimo de 1 motorista · Máximo de {{max}} por solicitação"
