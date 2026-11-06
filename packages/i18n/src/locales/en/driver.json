@@ -915,6 +915,9 @@
     "request_driver_row": "Driver {{row}}",
     "request_remove_driver": "Remove driver",
     "request_license_hint": "You can upload a photo of their license from the driver list while they are under review.",
+    "request_email_invalid": "Enter a valid email, like name@example.com.",
+    "request_hours_start_invalid": "Start time: use the HH:MM format, for example 06:00.",
+    "request_hours_end_invalid": "End time: use the HH:MM format, for example 22:00.",
     "request_submit": "Send fleet request",
     "request_submitting": "Sending…",
     "request_limits": "Minimum 1 driver · Maximum {{max}} per request"

@@ -2,7 +2,8 @@
 // TriciGo — Fleet registration form (Phase 4)
 // The owner fills in the fleet, its vehicles and a repeatable list
 // of drivers (min 1, max 30). Submitting creates corporate_account +
-// driver_fleets + fleet_members in one go.
+// driver_fleets + fleet_members in one go, once the checks in
+// packages/utils/src/fleet/fleetRequestForm.ts pass.
 // ============================================================
 
 import React, { useState } from 'react';
@@ -13,10 +14,19 @@ import { useTranslation } from '@tricigo/i18n';
 import { getErrorMessage } from '@tricigo/utils';
 import type { FleetMemberInput } from '@tricigo/types';
 import { buildFleetRequest, createFleetRequestSubmission } from '@tricigo/api';
+import {
+  fleetRequestAnnouncement,
+  fleetRequestErrorTexts,
+  noFleetRequestErrors,
+  validateFleetRequestForm,
+  type FleetRequestFormErrors,
+  type FleetRequestRowErrors,
+} from '@tricigo/utils/fleet/fleetRequestForm';
 import { Text } from '../Text';
 import { Card } from '../Card';
 import { Button } from '../Button';
 import { Input } from '../Input';
+import { announce } from './announce';
 
 // Each label is the Spanish default of fleet.vehicle_type.<id>.
 const VEHICLE_TYPES = [
@@ -27,6 +37,13 @@ const VEHICLE_TYPES = [
 ];
 
 const MAX_MEMBERS = 30;
+
+// The row fields that can show an error.
+const ROW_ERROR_FIELDS: Partial<Record<keyof FleetMemberInput, keyof FleetRequestRowErrors>> = {
+  driver_name: 'name',
+  driver_phone: 'phone',
+  driver_email: 'email',
+};
 
 interface Props {
   ownerUserId: string;
@@ -59,6 +76,8 @@ export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props
     { driver_name: '', driver_phone: '', driver_email: '', driver_license_number: '', driver_id_number: '' },
   ]);
 
+  const [errors, setErrors] = useState<FleetRequestFormErrors>(noFleetRequestErrors);
+  const [showFixFields, setShowFixFields] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   // Remembers the account a failed attempt created, so a retry reuses it.
   const [submission] = useState(createFleetRequestSubmission);
@@ -69,10 +88,27 @@ export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props
     );
   };
 
+  // Typing in a field takes its error away, as in the add driver form.
+  const checkedField =
+    (field: 'responsibleEmail' | 'hoursStart' | 'hoursEnd', setValue: (value: string) => void) =>
+    (value: string) => {
+      setValue(value);
+      setErrors((prev) => ({ ...prev, [field]: undefined }));
+      setShowFixFields(false);
+    };
+
   const updateMember = (index: number, field: keyof FleetMemberInput, value: string) => {
     setMembers((prev) =>
       prev.map((m, i) => (i === index ? { ...m, [field]: value } : m)),
     );
+    const errorField = ROW_ERROR_FIELDS[field];
+    if (errorField) {
+      setErrors((prev) => ({
+        ...prev,
+        members: prev.members.map((row, i) => (i === index ? { ...row, [errorField]: undefined } : row)),
+      }));
+    }
+    setShowFixFields(false);
   };
 
   const addMember = () => {
@@ -86,6 +122,9 @@ export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props
   const removeMember = (index: number) => {
     if (members.length <= 1) return;
     setMembers((prev) => prev.filter((_, i) => i !== index));
+    // The errors of the rows below move up with them.
+    setErrors((prev) => ({ ...prev, members: prev.members.filter((_, i) => i !== index) }));
+    setShowFixFields(false);
   };
 
   const validMembers = members.filter((m) => m.driver_name.trim() && m.driver_phone.trim());
@@ -98,6 +137,16 @@ export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props
 
   const handleSubmit = async () => {
     if (!ownerUserId) return;
+    const found = validateFleetRequestForm({ responsibleEmail, hoursStart, hoursEnd, members });
+    if (found) {
+      setErrors(found);
+      // The fields at fault can be out of view: this line sits by the button.
+      setShowFixFields(true);
+      announce(fleetRequestAnnouncement(found, t));
+      return;
+    }
+    setErrors(noFleetRequestErrors);
+    setShowFixFields(false);
     setSubmitting(true);
     try {
       const { account, fleet } = buildFleetRequest({
@@ -125,6 +174,8 @@ export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props
       setSubmitting(false);
     }
   };
+
+  const errorTexts = fleetRequestErrorTexts(errors, t);
 
   const Chip = ({ selected, onPress, label }: { selected: boolean; onPress: () => void; label: string }) => (
     <Pressable
@@ -183,9 +234,11 @@ export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props
         <Input
           label={t('fleet.request_contact_email', { defaultValue: 'Email de contacto' })}
           value={responsibleEmail}
-          onChangeText={setResponsibleEmail}
+          onChangeText={checkedField('responsibleEmail', setResponsibleEmail)}
           keyboardType="email-address"
           autoCapitalize="none"
+          error={errorTexts.responsibleEmail}
+          accessibilityHint={errorTexts.responsibleEmail}
         />
       </Card>
 
@@ -228,13 +281,26 @@ export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props
         <Text variant="caption" color="secondary" className="mb-1">
           {t('fleet.request_hours', { defaultValue: 'Horario habitual (HH:MM)' })}
         </Text>
-        <View className="flex-row items-center gap-2 mb-3">
+        {/* Aligned at the top: an error under one field must not move the other */}
+        <View className="flex-row items-start gap-2 mb-3">
           <View className="flex-1">
-            <Input value={hoursStart} onChangeText={setHoursStart} placeholder="06:00" />
+            <Input
+              value={hoursStart}
+              onChangeText={checkedField('hoursStart', setHoursStart)}
+              placeholder="06:00"
+              error={errorTexts.hoursStart}
+              accessibilityHint={errorTexts.hoursStart}
+            />
           </View>
-          <Text variant="body" color="secondary">—</Text>
+          <Text variant="body" color="secondary" className="mt-3">—</Text>
           <View className="flex-1">
-            <Input value={hoursEnd} onChangeText={setHoursEnd} placeholder="22:00" />
+            <Input
+              value={hoursEnd}
+              onChangeText={checkedField('hoursEnd', setHoursEnd)}
+              placeholder="22:00"
+              error={errorTexts.hoursEnd}
+              accessibilityHint={errorTexts.hoursEnd}
+            />
           </View>
         </View>
         <Input
@@ -285,6 +351,8 @@ export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props
               label={t('fleet.add_driver_name', { defaultValue: 'Nombre completo *' })}
               value={m.driver_name}
               onChangeText={(v) => updateMember(i, 'driver_name', v)}
+              error={errorTexts.members[i]?.name}
+              accessibilityHint={errorTexts.members[i]?.name}
             />
             <View className="h-2" />
             <Input
@@ -293,6 +361,8 @@ export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props
               onChangeText={(v) => updateMember(i, 'driver_phone', v)}
               keyboardType="phone-pad"
               placeholder={t('fleet.phone_placeholder', { defaultValue: '+53 5XXXXXXX o 6XXXXXXX' })}
+              error={errorTexts.members[i]?.phone}
+              accessibilityHint={errorTexts.members[i]?.phone}
             />
             <View className="h-2" />
             <Input
@@ -301,6 +371,8 @@ export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props
               onChangeText={(v) => updateMember(i, 'driver_email', v)}
               keyboardType="email-address"
               autoCapitalize="none"
+              error={errorTexts.members[i]?.email}
+              accessibilityHint={errorTexts.members[i]?.email}
             />
             <View className="h-2" />
             <Input
@@ -322,6 +394,12 @@ export function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted }: Props
           </View>
         ))}
       </Card>
+
+      {showFixFields && (
+        <Text variant="bodySmall" color="error" className="mb-3">
+          {t('fleet.add_driver_fix_fields', { defaultValue: 'Revisa los campos marcados.' })}
+        </Text>
+      )}
 
       <Button
         title={

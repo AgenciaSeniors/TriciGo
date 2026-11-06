@@ -23,6 +23,7 @@
     "./fareCalculator": "./src/fareCalculator.ts",
     "./fleet/corporateScreen": "./src/fleet/corporateScreen.ts",
     "./fleet/fleetMemberForm": "./src/fleet/fleetMemberForm.ts",
+    "./fleet/fleetRequestForm": "./src/fleet/fleetRequestForm.ts",
     "./geo": "./src/geo.ts",
     "./haptics": "./src/haptics.ts",
     "./htmlSafety": "./src/htmlSafety.ts",

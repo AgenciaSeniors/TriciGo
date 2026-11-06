@@ -915,6 +915,9 @@
     "request_driver_row": "Conductor {{row}}",
     "request_remove_driver": "Quitar conductor",
     "request_license_hint": "Podrás subir la foto de su licencia desde la lista de conductores mientras esté en revisión.",
+    "request_email_invalid": "Escribe un email válido, como nombre@ejemplo.com.",
+    "request_hours_start_invalid": "Hora de inicio: usa el formato HH:MM, por ejemplo 06:00.",
+    "request_hours_end_invalid": "Hora de cierre: usa el formato HH:MM, por ejemplo 22:00.",
     "request_submit": "Enviar solicitud de flota",
     "request_submitting": "Enviando…",
     "request_limits": "Mínimo 1 conductor · Máximo {{max}} por solicitud"
