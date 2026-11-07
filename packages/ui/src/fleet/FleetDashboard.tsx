@@ -1,0 +1,411 @@
+// ============================================================
+// TriciGo — Corporate / Fleet screen, shared by both apps
+// Three states for the signed-in user:
+//   1. Belongs to one or more fleets (auto-linked or manually added)
+//      → show one row per fleet with status + commission info.
+//   2. Is the fleet owner (registered the fleet themselves) →
+//      show fleet dashboard with members list + status, and add
+//      drivers while the fleet is in review or approved.
+//   3. None of the above → show FleetRequestForm so the user can
+//      submit a new fleet request.
+// A fleet that was rejected is not a dashboard: when every request of
+// the user was rejected, the admin's reason and the form to apply
+// again show below any fleets they drive for. Until both reads have
+// succeeded once, the screen shows a skeleton or an error with retry,
+// never the form: see packages/utils/src/fleet/corporateScreen.ts.
+//
+// The route supplies what only the app knows: who the user is, the
+// result of useFleetScreen, and where the buttons lead.
+// ============================================================
+
+import React, { useRef, useState } from 'react';
+import { Alert, Pressable, View, RefreshControl, useColorScheme } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { cubanLight, cubanDark, colors } from '@tricigo/theme';
+import { fleetService } from '@tricigo/api';
+import { useTranslation } from '@tricigo/i18n';
+import {
+  canAddFleetDrivers,
+  canStartOwnFleet,
+  fleetStatusBadge,
+  membershipCard,
+  rejectionReason,
+} from '@tricigo/utils/fleet/corporateScreen';
+import { Screen, type ScreenProps } from '../Screen';
+import { Text } from '../Text';
+import { Button } from '../Button';
+import { Card } from '../Card';
+import { StatusBadge } from '../StatusBadge';
+import { SkeletonCard } from '../Skeleton';
+import { ErrorState } from '../ErrorState';
+import { ProfileScreenHeader } from '../ProfileScreenHeader';
+import { TintedCard } from '../TintedCard';
+import { FleetRequestForm } from './FleetRequestForm';
+import { FleetMembersList, type FleetLicensePicker, type FleetNotify } from './FleetMembersList';
+import { announce } from './announce';
+import type { DriverFleet, FleetMembership } from '@tricigo/types';
+import type { FleetScreen } from './useFleetScreen';
+
+export interface FleetDashboardProps {
+  /** What useFleetScreen returned for this user. */
+  screen: FleetScreen;
+  userId: string | undefined;
+  /** Saved as the contact phone of a new fleet request. */
+  ownerPhone: string;
+  onBack: () => void;
+  onAddDriver: (fleet: DriverFleet) => void;
+  /** Opens the screen that edits the fleet's details (FleetEditForm). */
+  onEditFleet: () => void;
+  /** Opens the app's picker for a licence photo or PDF; null when cancelled. */
+  onPickLicense: FleetLicensePicker;
+  /** Shows how an owner action went, as a toast. */
+  onNotify: FleetNotify;
+  /**
+   * Background of the screen. Left out, the screen looks like the driver app's
+   * other profile screens. The passenger app passes 'cuban', like its own. The
+   * panel inside paints the same paper color, so with 'cuban' it does not show.
+   */
+  screenBg?: ScreenProps['bg'];
+}
+
+const ownFormIntroDefault =
+  'Registra tu flota para que tus conductores se vinculen automáticamente cuando descarguen TriciGo Driver con su número de teléfono.';
+
+// What corporate_accounts.commission_percent is compared with on screen.
+const STANDARD_COMMISSION_PERCENT = 15;
+
+export function FleetDashboard({
+  screen,
+  userId,
+  ownerPhone,
+  onBack,
+  onAddDriver,
+  onEditFleet,
+  onPickLicense,
+  onNotify,
+  screenBg,
+}: FleetDashboardProps) {
+  const { t } = useTranslation('driver');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const palette = isDark ? cubanDark : cubanLight;
+
+  const { view, sends, refreshing, reload, pullToRefresh, requestSubmitted } = screen;
+  // One "Salir de la flota" at a time. The ref answers a second tap in the same frame,
+  // before the state has re-rendered the button as disabled.
+  const [leavingId, setLeavingId] = useState<string | null>(null);
+  const leaving = useRef(false);
+  // A driver of someone else's fleet asked to set up their own: opens the request form.
+  const [ownFormOpen, setOwnFormOpen] = useState(false);
+  const ready = view.kind === 'ready' ? view : null;
+  const memberships = ready?.memberships ?? [];
+  const ownerFleet = ready?.ownerFleet ?? null;
+  const rejectedRequest = ready?.rejectedRequest ?? null;
+  const inSeveralFleets = memberships.length > 1;
+  const ownerBadge = ownerFleet ? fleetStatusBadge(ownerFleet.account.status) : null;
+  const reason = rejectedRequest ? rejectionReason(rejectedRequest.account.suspended_reason) : null;
+  const suspendedReason =
+    ownerFleet?.account.status === 'suspended' ? rejectionReason(ownerFleet.account.suspended_reason) : null;
+  const offerOwnFleet = canStartOwnFleet(view) && !ownFormOpen;
+  const showForm = !!ready && (ready.showRequestForm || (ownFormOpen && ready.ownerFleet === null));
+
+  const openOwnForm = () => {
+    setOwnFormOpen(true);
+    announce(t('fleet.request_intro', { defaultValue: ownFormIntroDefault }));
+  };
+
+  const leave = async (m: FleetMembership) => {
+    if (leaving.current) return;
+    leaving.current = true;
+    setLeavingId(m.member_id);
+    try {
+      await fleetService.leaveFleet(m.member_id);
+      const done = t('fleet.left_done', { defaultValue: 'Saliste de la flota.' });
+      onNotify('success', done);
+      announce(done);
+      await reload();
+    } catch {
+      const message = t('fleet.error_leave_failed', {
+        defaultValue: 'No pudimos sacarte de la flota. Revisa tu conexión e inténtalo de nuevo.',
+      });
+      onNotify('error', message);
+      announce(message);
+    } finally {
+      leaving.current = false;
+      setLeavingId(null);
+    }
+  };
+
+  const confirmLeave = (m: FleetMembership, title: string | null) => {
+    if (leaving.current) return;
+    Alert.alert(
+      t('fleet.leave_confirm_title', { defaultValue: '¿Salir de la flota?' }),
+      title
+        ? t('fleet.leave_confirm_body_named', {
+            defaultValue:
+              'Dejarás de recibir los viajes de la flota {{name}}. Podrás volver si su dueño te invita de nuevo.',
+            name: title,
+          })
+        : t('fleet.leave_confirm_body', {
+            defaultValue: 'Dejarás de recibir los viajes de esta flota. Podrás volver si su dueño te invita de nuevo.',
+          }),
+      [
+        { text: t('fleet.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
+        {
+          text: t('fleet.leave_fleet', { defaultValue: 'Salir de la flota' }),
+          style: 'destructive',
+          onPress: () => {
+            void leave(m);
+          },
+        },
+      ],
+    );
+  };
+
+  return (
+    <Screen
+      scroll
+      bg={screenBg ?? (isDark ? 'dark' : 'white')}
+      statusBarStyle={isDark ? 'light-content' : 'dark-content'}
+      padded
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} tintColor={colors.brand.orange} />
+      }
+    >
+      <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
+      <View className="pt-4 pb-8">
+        <ProfileScreenHeader
+          title={t('fleet.screen_title', { defaultValue: 'Corporativo' })}
+          onBack={onBack}
+          backAccessibilityLabel={t('common:back', { defaultValue: 'Volver' })}
+        />
+
+        {view.kind === 'loading' && (
+          <View className="gap-3">
+            <SkeletonCard />
+            <SkeletonCard />
+          </View>
+        )}
+
+        {/* A read never succeeded, so "no fleet" is unknown: retry, never the form */}
+        {view.kind === 'error' && (
+          <ErrorState
+            title={t('fleet.load_error_title', { defaultValue: 'No pudimos cargar tu información corporativa' })}
+            description={t('fleet.load_error_body', { defaultValue: 'Revisa tu conexión a internet e inténtalo de nuevo.' })}
+            retryLabel={t('common:retry', { defaultValue: 'Reintentar' })}
+            onRetry={() => { void reload(); }}
+          />
+        )}
+
+        {/* Member view: one row per fleet, since a driver can be in several */}
+        {memberships.length > 0 && (
+          <Card variant="outlined" padding="lg" className="mb-4">
+            <Text variant="h4" className="mb-3">
+              {inSeveralFleets
+                ? t('fleet.your_fleets', { defaultValue: 'Tus flotas' })
+                : t('fleet.your_fleet', { defaultValue: 'Tu flota' })}
+            </Text>
+            <Text variant="bodySmall" color="secondary" className="mb-3">
+              {inSeveralFleets
+                ? t('fleet.linked_driver_many', {
+                    defaultValue: 'Estás vinculado como conductor en {{total}} flotas.',
+                    total: memberships.length,
+                  })
+                : t('fleet.linked_driver', { defaultValue: 'Estás vinculado como conductor.' })}{' '}
+              {t('fleet.linked_commission', {
+                defaultValue:
+                  'Tus viajes corporativos aplicarán comisión reducida automáticamente — el pasajero paga menos y tú cobras lo mismo de siempre.',
+              })}
+            </Text>
+            <View className="gap-3">
+              {memberships.map((m) => {
+                const card = membershipCard(m);
+                const leavingThis = leavingId === m.member_id;
+                return (
+                  <View key={m.member_id} className="border-t border-neutral-100 dark:border-neutral-800 pt-3">
+                    {/* The name and the owner are other people's text: drawn as is, never interpreted */}
+                    <Text variant="body" className="font-medium">
+                      {card.title ?? t('fleet.member_fleet_generic', { defaultValue: 'Flota de conductores' })}
+                    </Text>
+                    {card.ownerLabel && (
+                      <Text variant="bodySmall" color="secondary">
+                        {t('fleet.member_run_by', { defaultValue: 'La maneja {{owner}}', owner: card.ownerLabel })}
+                      </Text>
+                    )}
+                    <View className="flex-row items-center justify-between mt-2">
+                      <View className="flex-1 mr-2">
+                        <Text variant="caption" color="secondary">
+                          {t('fleet.registered_as', { defaultValue: 'Registrado como' })}
+                        </Text>
+                        <Text variant="body">{m.driver_name}</Text>
+                        <Text variant="bodySmall" color="secondary">{m.driver_phone}</Text>
+                      </View>
+                      <StatusBadge
+                        label={
+                          m.status === 'active'
+                            ? t('fleet.membership_active', { defaultValue: 'Activo' })
+                            : t('fleet.membership_pending', { defaultValue: 'Pendiente' })
+                        }
+                        variant={m.status === 'active' ? 'success' : 'warning'}
+                      />
+                    </View>
+                    {card.canLeave && (
+                      <Pressable
+                        onPress={() => confirmLeave(m, card.title)}
+                        disabled={leavingId !== null}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          card.title
+                            ? t('fleet.leave_fleet_for', { defaultValue: 'Salir de la flota {{name}}', name: card.title })
+                            : t('fleet.leave_fleet', { defaultValue: 'Salir de la flota' })
+                        }
+                        accessibilityState={{ disabled: leavingId !== null, busy: leavingThis }}
+                        style={{ minHeight: 44, minWidth: 44, alignSelf: 'flex-start' }}
+                      >
+                        {({ pressed }) => (
+                          <View
+                            style={{
+                              minHeight: 44,
+                              minWidth: 44,
+                              justifyContent: 'center',
+                              opacity: leavingId !== null ? 0.4 : pressed ? 0.6 : 1,
+                            }}
+                          >
+                            <Text variant="label" color="error">
+                              {t('fleet.leave_fleet', { defaultValue: 'Salir de la flota' })}
+                            </Text>
+                          </View>
+                        )}
+                      </Pressable>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          </Card>
+        )}
+
+        {/* A driver of another owner's fleet can still set up their own */}
+        {offerOwnFleet && (
+          <View className="mb-4">
+            <Button
+              title={t('fleet.start_own_fleet', { defaultValue: 'Montar mi propia flota' })}
+              variant="outline"
+              fullWidth
+              onPress={openOwnForm}
+            />
+          </View>
+        )}
+
+        {/* Owner dashboard */}
+        {ownerFleet && ownerBadge && (
+          <>
+            <Card variant="outlined" padding="lg" className="mb-4">
+              <View className="flex-row items-center justify-between mb-3">
+                <Text variant="h4">{ownerFleet.fleet.name}</Text>
+                <StatusBadge
+                  label={t(ownerBadge.labelKey, { defaultValue: ownerBadge.label })}
+                  variant={ownerBadge.variant}
+                />
+              </View>
+              {suspendedReason && (
+                <Text variant="bodySmall" color="secondary" className="mb-3">
+                  {t('fleet.suspended_reason', {
+                    defaultValue: 'Tu flota fue suspendida. Motivo: {{reason}}',
+                    reason: suspendedReason,
+                  })}
+                </Text>
+              )}
+              {ownerFleet.account.status === 'pending' && (
+                <Text variant="bodySmall" color="secondary" className="mb-3">
+                  {t('fleet.owner_in_review', {
+                    defaultValue:
+                      'Tu flota está en revisión. Recibirás una notificación cuando el equipo TriciGo la apruebe. Los conductores listados serán vinculados automáticamente cuando se registren con su número de teléfono.',
+                  })}
+                </Text>
+              )}
+              {ownerFleet.account.status === 'approved' && ownerFleet.account.commission_percent !== null && (
+                <View className="border-t border-neutral-100 dark:border-neutral-800 pt-3 mb-2">
+                  <Text variant="caption" color="secondary">
+                    {t('fleet.commission_assigned', { defaultValue: 'Comisión asignada' })}
+                  </Text>
+                  <Text variant="h4" color="accent">{ownerFleet.account.commission_percent}%</Text>
+                  <Text variant="caption" color="secondary">
+                    {t('fleet.commission_reduced', {
+                      defaultValue: 'Reducida vs. el {{standard}}% estándar — pasajeros pagan menos.',
+                      standard: STANDARD_COMMISSION_PERCENT,
+                    })}
+                  </Text>
+                </View>
+              )}
+            </Card>
+
+            <Text variant="label" color="secondary" className="mb-2 ml-1">
+              {t('fleet.drivers_heading', { defaultValue: 'Conductores' })}
+            </Text>
+            <Card variant="outlined" padding="lg" className="mb-4">
+              <FleetMembersList
+                members={ownerFleet.members}
+                sends={sends}
+                fleetStatus={ownerFleet.account.status}
+                corporateAccountId={ownerFleet.fleet.corporate_account_id}
+                onPickLicense={onPickLicense}
+                onNotify={onNotify}
+                onChanged={reload}
+              />
+            </Card>
+
+            {canAddFleetDrivers(ownerFleet.account.status) && (
+              <View className="gap-3">
+                <Button
+                  title={t('fleet.add_driver', { defaultValue: 'Agregar conductor' })}
+                  variant="outline"
+                  fullWidth
+                  onPress={() => onAddDriver(ownerFleet.fleet)}
+                />
+                <Button
+                  title={t('fleet.edit_fleet', { defaultValue: 'Editar datos de la flota' })}
+                  variant="ghost"
+                  fullWidth
+                  onPress={onEditFleet}
+                />
+              </View>
+            )}
+          </>
+        )}
+
+        {/* Every request was rejected: the admin's reason, then the form to apply again */}
+        {rejectedRequest && (
+          <TintedCard padding="lg" className="mb-3 bg-error-light dark:bg-error/20">
+            <View className="flex-row items-center gap-2 mb-2">
+              <Ionicons name="close-circle-outline" size={20} color={colors.error.DEFAULT} />
+              <Text variant="h4" color="error">
+                {t('fleet.rejected_title', { defaultValue: 'Solicitud rechazada' })}
+              </Text>
+            </View>
+            {reason && (
+              <Text variant="bodySmall" color="secondary">
+                {t('fleet.rejected_reason', { defaultValue: 'Motivo: {{reason}}', reason })}
+              </Text>
+            )}
+            <Text variant="bodySmall" color="secondary" className="mt-2">
+              {t('fleet.rejected_resubmit', {
+                defaultValue: 'Puedes corregir los datos y volver a enviar la solicitud.',
+              })}
+            </Text>
+          </TintedCard>
+        )}
+
+        {/* No fleet, or a rejected request → form */}
+        {showForm && userId && (
+          <FleetRequestForm
+            ownerUserId={userId}
+            ownerPhone={ownerPhone}
+            onSubmitted={requestSubmitted}
+          />
+        )}
+      </View>
+      </View>
+    </Screen>
+  );
+}

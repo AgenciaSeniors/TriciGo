@@ -125,14 +125,25 @@ export function WebFooter() {
       </div>
 
       <div className="footer-copy">
-        TriciGo &copy; {new Date().getFullYear()} &middot;{' '}
+        TriciGo &copy; {new Date().getFullYear()} &middot; {t('footer.download')}:{' '}
         <a
           href="https://play.google.com/store/apps/details?id=app.tricigo.client"
           target="_blank"
           rel="noopener noreferrer"
           className="footer-link"
         >
-          {t('footer.download')}
+          Google Play
+        </a>
+        {' '}&middot;{' '}
+        {/* iPhone users need a direct link: App Store search autocorrects
+            "TriciGo" to "trivago" in many storefronts. */}
+        <a
+          href="https://apps.apple.com/app/id6785157005"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="footer-link"
+        >
+          App Store
         </a>
       </div>
       <div className="footer-copy" style={{ marginTop: '0.5rem', fontSize: '0.75rem', opacity: 0.85 }}>

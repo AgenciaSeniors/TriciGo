@@ -25,9 +25,13 @@ const D7_URL = 'https://api.d7networks.com/messages/v1/send';
 /**
  * Send a single SMS via D7 Networks.
  *
- * Uses unicode (UCS-2) data coding so accented Spanish (ó, ñ, ¿)
- * renders correctly — GSM-7 ('text' coding without unicode) would
- * mangle "código" to "c?digo" on delivery.
+ * Uses unicode (UCS-2) data coding by default, because Spanish text
+ * breaks in GSM-7 ('text' coding): "código" arrives as "c?digo". The
+ * price is length: UCS-2 fits 70 characters in one SMS and 67 per part
+ * when it is split, against 160 and 153 in GSM-7.
+ *
+ * `opts.dataCoding: 'text'` sends GSM-7. A caller opts in only with
+ * text it knows fits GSM-7: anything else arrives mangled.
  *
  * When `opts.tracker` (a service-role Supabase client) is provided,
  * inserts an sms_deliveries row (status 'sent') for DLR correlation.
@@ -35,7 +39,7 @@ const D7_URL = 'https://api.d7networks.com/messages/v1/send';
 export async function sendSmsViaD7(
   phone: string,
   body: string,
-  opts?: { tracker?: SupabaseClient; eventType?: string },
+  opts?: { tracker?: SupabaseClient; eventType?: string; dataCoding?: 'text' | 'unicode' },
 ): Promise<D7SendResult> {
   const token = Deno.env.get('D7_API_TOKEN');
   if (!token) {
@@ -59,7 +63,7 @@ export async function sendSmsViaD7(
           recipients: [phone],
           content: body,
           msg_type: 'text',
-          data_coding: 'unicode',
+          data_coding: opts?.dataCoding ?? 'unicode',
         }],
         message_globals: { originator: sender },
       }),
