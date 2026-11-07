@@ -26,6 +26,9 @@ export const metadata: Metadata = {
       'Convierte tu vehículo en una fuente de ingreso. Tú eliges cuándo manejar y qué viajes aceptar.',
     url: `${SITE}/conductores`,
   },
+  // Smart App Banner points at the driver app here (the root layout uses the
+  // passenger app).
+  itunes: { appId: '6785157051' },
 };
 
 const STEPS = [
