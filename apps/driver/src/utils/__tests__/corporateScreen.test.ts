@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { FleetMember, FleetWithMembers } from '@tricigo/types';
 import {
+  canAddFleetDrivers,
   corporateReducer,
   deriveCorporateView,
   fleetStatusBadge,
@@ -277,6 +278,17 @@ describe('fleetStatusBadge', () => {
     ['rejected', 'Rechazada', 'error'],
   ] as const)('labels the %s status "%s"', (status, label, variant) => {
     expect(fleetStatusBadge(status)).toEqual({ labelKey: `fleet.status.${status}`, label, variant });
+  });
+});
+
+describe('canAddFleetDrivers', () => {
+  it.each([
+    ['pending', true],
+    ['approved', true],
+    ['suspended', false],
+    ['rejected', false],
+  ] as const)('for a %s fleet answers %s', (status, allowed) => {
+    expect(canAddFleetDrivers(status)).toBe(allowed);
   });
 });
 

@@ -840,6 +840,20 @@
     "load_error_body": "Check your internet connection and try again.",
     "rejected_title": "Request rejected",
     "rejected_reason": "Reason: {{reason}}",
-    "rejected_resubmit": "You can correct the details and send the request again."
+    "rejected_resubmit": "You can correct the details and send the request again.",
+    "add_driver": "Add driver",
+    "add_driver_intro": "TriciGo reviews them, and they join your fleet when they sign up with this phone number.",
+    "add_driver_name": "Full name *",
+    "add_driver_name_required": "Enter the driver's name.",
+    "add_driver_phone": "Phone *",
+    "add_driver_phone_required": "Enter the driver's phone number.",
+    "add_driver_phone_invalid": "Enter a Cuban mobile number: 8 digits starting with 5 or 6.",
+    "add_driver_email": "Email",
+    "add_driver_license": "License number",
+    "add_driver_id_number": "ID card number",
+    "add_driver_done": "Driver added",
+    "add_driver_fix_fields": "Check the marked fields.",
+    "add_driver_exists": "That phone number is already in your fleet.",
+    "add_driver_failed": "The driver could not be added. Check your connection and try again."
   }
 }

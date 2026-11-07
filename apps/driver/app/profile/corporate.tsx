@@ -4,7 +4,8 @@
 //   1. Belongs to one or more fleets (auto-linked or manually added)
 //      → show one row per fleet with status + commission info.
 //   2. Is the fleet owner (registered the fleet themselves) →
-//      show fleet dashboard with members list + status.
+//      show fleet dashboard with members list + status, and add
+//      drivers while the fleet is in review or approved.
 //   3. None of the above → show FleetRequestForm so the driver
 //      can submit a new fleet request.
 // A fleet that was rejected is not a dashboard: when every request of
@@ -20,6 +21,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
+import { Button } from '@tricigo/ui/Button';
 import { Card } from '@tricigo/ui/Card';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
@@ -34,7 +36,9 @@ import { useAuthStore } from '@/stores/auth.store';
 import FleetRequestForm from '@/components/FleetRequestForm';
 import FleetMembersList from '@/components/FleetMembersList';
 import { TintedCard } from '@/components/TintedCard';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import {
+  canAddFleetDrivers,
   corporateReducer,
   deriveCorporateView,
   fleetStatusBadge,
@@ -92,6 +96,9 @@ export default function CorporateScreen() {
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
+
+  // Coming back from add-fleet-driver shows the driver just added.
+  useRefreshOnFocus(fetchData);
 
   // The pull-to-refresh spinner stops once no load is running.
   useEffect(() => {
@@ -210,6 +217,17 @@ export default function CorporateScreen() {
             <Card variant="outlined" padding="lg" className="mb-4">
               <FleetMembersList members={ownerFleet.members} />
             </Card>
+
+            {canAddFleetDrivers(ownerFleet.account.status) && (
+              <Button
+                title={t('fleet.add_driver', { defaultValue: 'Agregar conductor' })}
+                variant="outline"
+                fullWidth
+                onPress={() =>
+                  router.push({ pathname: '/profile/add-fleet-driver', params: { fleetId: ownerFleet.fleet.id } })
+                }
+              />
+            )}
           </>
         )}
 
