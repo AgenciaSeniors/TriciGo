@@ -25,6 +25,14 @@
 -- estimate. It is patched to skip the final snapshot, so the receipt stays as it was.
 -- handle_corporate_ride_completion itself does not change.
 --
+-- Two behaviours do change, both toward what the app shows:
+--   * A company rate above the platform default (the panel allows 0 to 15 %, so this needs
+--     platform_config.commission_rate set below a company's rate) was charged at the company's
+--     rate by the ledger and shown at the default by the app. It is now charged at the default.
+--   * Resolving a dispute moves the ride from disputed back to completed and sends the receipt
+--     again. That second receipt took its breakdown from the final snapshot; it now takes the
+--     estimate, like the first one.
+--
 -- What it does not change: a corporate ride completed without complete_ride_and_pay (a direct
 -- UPDATE) still has no final snapshot and keeps the old fallback. Every app and panel path goes
 -- through complete_ride_and_pay (admin_complete_active_ride included). Prod has 0 companies with
@@ -115,8 +123,8 @@ BEGIN
 END
 $patch$;
 
--- Self-check: the snapshot goes in first, nothing else of the function moved, and the trigger
--- that reads it is the one this was written against.
+-- Self-check: the snapshot goes in right before the ride is completed, the receipt skips it, and
+-- the trigger that reads it is the one this was written against.
 DO $check$
 DECLARE
   v_src text;
@@ -126,11 +134,18 @@ BEGIN
   IF md5(v_src) <> '40bdf6f4b152c317d4b0f199f3115d94' THEN
     RAISE EXCEPTION '00678: complete_ride_and_pay has md5 %', md5(v_src);
   END IF;
-  IF position('INSERT INTO ride_pricing_snapshots' IN v_src) > position('UPDATE rides SET' IN v_src) THEN
-    RAISE EXCEPTION '00678: the final snapshot still goes in after the ride is completed';
+  -- The snapshot insert ends right where the completing update begins.
+  IF position(array_to_string(ARRAY[
+       '    v_eff_min_fare, v_corp_commission_rate, v_default_commission_rate',
+       '  );',
+       '',
+       '  UPDATE rides SET',
+       '    status = ''completed'','], chr(10)) IN v_src) = 0 THEN
+    RAISE EXCEPTION '00678: the final snapshot does not go in right before the ride is completed';
   END IF;
-  IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.send_ride_receipt_email()'::regprocedure)
-       <> '41ecd20713dc554384c356291012c478' THEN
+  SELECT prosrc INTO v_src FROM pg_proc WHERE oid = 'public.send_ride_receipt_email()'::regprocedure;
+  IF md5(v_src) <> '41ecd20713dc554384c356291012c478'
+     OR position('AND snapshot_type <> ''final''' IN v_src) = 0 THEN
     RAISE EXCEPTION '00678: send_ride_receipt_email does not skip the final snapshot';
   END IF;
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.handle_corporate_ride_completion()'::regprocedure)
