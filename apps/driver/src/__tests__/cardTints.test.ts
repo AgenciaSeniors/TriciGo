@@ -13,11 +13,12 @@
 // inline style, which beats every class. Nothing fails, the tint just never
 // shows, so this is checked here instead of by eye.
 //
-// For every <Card> in the driver app this compiles Card's classes and the
+// For every <Card> in the driver app and in the fleet screens it shares with
+// the passenger app (packages/ui/src/fleet) this compiles Card's classes and the
 // caller's with the app's Tailwind config through NativeWind's own compiler,
 // and reports each background or border color from className that loses, in
 // light or dark mode, or that the theme does not define. A card that needs
-// its own color is a TintedCard (src/components/TintedCard.tsx), which has no
+// its own color is a TintedCard (packages/ui/src/TintedCard.tsx), which has no
 // color to lose to and is only checked for colors the theme does not define.
 // ============================================================
 
@@ -33,6 +34,7 @@ import { cssToReactNativeRuntime } from 'react-native-css-interop/dist/css-to-rn
 
 const DRIVER = fileURLToPath(new URL('../..', import.meta.url));
 const CARD_SOURCE = path.resolve(DRIVER, '../../packages/ui/src/Card.tsx');
+const FLEET_SCREENS = path.resolve(DRIVER, '../../packages/ui/src/fleet');
 // tailwind.config.js is CommonJS, as Metro and NativeWind load it.
 const tailwindConfig = createRequire(import.meta.url)('../../tailwind.config.js') as Config;
 
@@ -85,7 +87,7 @@ function stringsIn(node: ts.Node): string[] {
 function cardUsages(): CardUsage[] {
   const card = readCard();
   const usages: CardUsage[] = [];
-  for (const file of [...walk(path.join(DRIVER, 'app')), ...walk(path.join(DRIVER, 'src'))]) {
+  for (const file of [...walk(path.join(DRIVER, 'app')), ...walk(path.join(DRIVER, 'src')), ...walk(FLEET_SCREENS)]) {
     const sf = ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     const visit = (node: ts.Node) => {
       const tag = ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node) ? node : null;
@@ -164,6 +166,9 @@ describe('colors passed to <Card> through className', () => {
   it('are the colors that render', async () => {
     const usages = cardUsages();
     expect(usages.length).toBeGreaterThan(50); // the parser found the cards
+    // The shared screens are in the scan: a wrong path there would pass unnoticed.
+    const fleetFolder = path.relative(DRIVER, FLEET_SCREENS);
+    expect(usages.filter((u) => u.where.startsWith(fleetFolder)).length).toBeGreaterThan(5);
 
     const { generated, colorRule } = await compile([...new Set(usages.flatMap((u) => [...u.base, ...u.extra]))]);
     const problems: string[] = [];

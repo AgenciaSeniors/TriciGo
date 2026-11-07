@@ -42,6 +42,8 @@ export default defineConfig({
       '../../supabase/functions/send-sms-otp/*.test.ts',
       '../../supabase/functions/verify-otp/*.test.ts',
       '../../supabase/functions/link-phone/*.test.ts',
+      // send-sms (00676): supabase-js and the D7 sender replaced with vi.mock, Deno stubbed.
+      '../../supabase/functions/send-sms/*.test.ts',
       // delete-account (00657) and admin-delete-pending-account: supabase-js replaced
       // with vi.mock (Storage kept in memory), Deno stubbed.
       '../../supabase/functions/delete-account/*.test.ts',
