@@ -12,7 +12,11 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
   test: {
     globals: true,
-    include: ['src/**/*.test.ts'],
+    // plugins/ is included on purpose: the Expo config plugins are build
+    // logic that only runs during prebuild, so a bug there surfaces as a broken
+    // APK rather than a failing test. with-user-leave-hint-safe already shipped
+    // one (an anchor that matched outside the class body on SDK 55).
+    include: ['src/**/*.test.ts', 'plugins/**/*.test.ts'],
   },
   resolve: {
     alias: {
