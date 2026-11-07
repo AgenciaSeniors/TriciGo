@@ -16,9 +16,14 @@
 -- and pays the driver final fare minus that: the same numbers the app shows.
 --
 -- The fix moves the snapshot insert above the UPDATE. Every value it writes is computed before
--- the UPDATE, and the UPDATE and the distance check between them change none. No trigger reads
--- or writes ride_pricing_snapshots, and handle_corporate_ride_completion is the only trigger
--- that reads the final snapshot. handle_corporate_ride_completion itself does not change.
+-- the UPDATE, and the UPDATE and the distance check between them change none. No trigger writes
+-- ride_pricing_snapshots. Two triggers fired by that UPDATE read it with no type filter or for
+-- the final one: handle_corporate_ride_completion, the point of this, and
+-- send_ride_receipt_email, which takes the latest snapshot for the breakdown of the emailed
+-- receipt. Until now that was always the estimate, because the final one came later; with the
+-- final in place it would show the actual distance and time against a fare charged from the
+-- estimate. It is patched to skip the final snapshot, so the receipt stays as it was.
+-- handle_corporate_ride_completion itself does not change.
 --
 -- What it does not change: a corporate ride completed without complete_ride_and_pay (a direct
 -- UPDATE) still has no final snapshot and keeps the old fallback. Every app and panel path goes
@@ -95,6 +100,18 @@ BEGIN
           c_complete],
     ARRAY['',
           c_comment || chr(10) || c_snapshot || chr(10) || chr(10) || c_complete]);
+
+  -- The emailed receipt keeps reading the snapshots that existed before the final one.
+  PERFORM pg_temp.m00678_patch('public.send_ride_receipt_email()',
+    'b232f9685b4dd2e88effa68f7ee677d1', '41ecd20713dc554384c356291012c478',
+    ARRAY[array_to_string(ARRAY['  WHERE ride_id = NEW.id', '  ORDER BY created_at DESC'], chr(10))],
+    ARRAY[array_to_string(ARRAY[
+      '  WHERE ride_id = NEW.id',
+      '    -- 00678: complete_ride_and_pay now writes the final snapshot before this',
+      '    -- fires. The receipt keeps the breakdown it always had, which it took',
+      '    -- from the snapshots that existed before the final one.',
+      '    AND snapshot_type <> ''final''',
+      '  ORDER BY created_at DESC'], chr(10))]);
 END
 $patch$;
 
@@ -111,6 +128,10 @@ BEGIN
   END IF;
   IF position('INSERT INTO ride_pricing_snapshots' IN v_src) > position('UPDATE rides SET' IN v_src) THEN
     RAISE EXCEPTION '00678: the final snapshot still goes in after the ride is completed';
+  END IF;
+  IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.send_ride_receipt_email()'::regprocedure)
+       <> '41ecd20713dc554384c356291012c478' THEN
+    RAISE EXCEPTION '00678: send_ride_receipt_email does not skip the final snapshot';
   END IF;
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.handle_corporate_ride_completion()'::regprocedure)
        <> 'b9aad3bb14cd7a3f25ff0f64a35b2d89' THEN
