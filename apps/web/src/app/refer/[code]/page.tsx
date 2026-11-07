@@ -231,21 +231,35 @@ export default function ReferralLandingPage() {
         <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)', marginTop: 'var(--space-md)' }}>
           {t('refer.no_app', { defaultValue: '¿No tienes la app? Descárgala desde la App Store o Google Play.' })}
         </p>
-        <a
-          href="https://play.google.com/store/apps/details?id=app.tricigo.client"
-          target="_blank"
-          rel="noopener noreferrer"
+        {/* Both store links: App Store search autocorrects "TriciGo" to
+            "trivago" in many storefronts, and in-app browsers (WhatsApp)
+            don't show the Smart App Banner, so iPhone users need a link. */}
+        <div
           style={{
-            fontSize: 'var(--text-sm)',
-            color: 'var(--primary)',
-            fontWeight: 600,
-            textDecoration: 'none',
+            display: 'flex',
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+            gap: 'var(--space-md)',
             marginTop: 'var(--space-sm)',
-            display: 'inline-block',
           }}
         >
-          {t('refer.download_play', { defaultValue: 'Descargar en Google Play' })}
-        </a>
+          <a
+            href="https://play.google.com/store/apps/details?id=app.tricigo.client"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={storeLinkStyle}
+          >
+            {t('refer.download_play', { defaultValue: 'Descargar en Google Play' })}
+          </a>
+          <a
+            href="https://apps.apple.com/app/id6785157005"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={storeLinkStyle}
+          >
+            {t('refer.download_app_store', { defaultValue: 'Descargar en la App Store' })}
+          </a>
+        </div>
         <Link
           href="/"
           style={{
@@ -276,4 +290,12 @@ const primaryCtaStyle: CSSProperties = {
   borderRadius: 'var(--radius-lg)',
   fontSize: 'var(--text-lg)',
   marginBottom: 'var(--space-sm)',
+};
+
+/** Text-style store links under the "no app?" note. */
+const storeLinkStyle: CSSProperties = {
+  fontSize: 'var(--text-sm)',
+  color: 'var(--primary)',
+  fontWeight: 600,
+  textDecoration: 'none',
 };
