@@ -67,6 +67,11 @@ export const metadata: Metadata = {
     // so pointing es/en at the same URL was misleading. Re-add real hreflang
     // only when localized /en routes exist.
   },
+  // Smart App Banner for iPhone Safari visitors (passenger app). App Store
+  // search autocorrects "TriciGo" to "trivago" in the US, CA, GB and most of
+  // Latin America, so a direct install path from the site matters.
+  // /conductores overrides this with the driver app.
+  itunes: { appId: '6785157005' },
 };
 
 const organizationJsonLd = {
