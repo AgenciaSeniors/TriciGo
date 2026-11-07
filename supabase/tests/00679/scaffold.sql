@@ -13,6 +13,7 @@ GRANT anon, authenticated, service_role, postgres TO CURRENT_USER;
 GRANT anon, authenticated, service_role TO postgres;
 
 CREATE SCHEMA auth AUTHORIZATION postgres;
+CREATE SCHEMA cron AUTHORIZATION postgres;
 GRANT USAGE ON SCHEMA public, auth TO anon, authenticated, service_role;
 GRANT CREATE ON SCHEMA public TO postgres;
 
@@ -20,6 +21,22 @@ SET ROLE postgres;
 -- Until 2026-10-30 Supabase grants every new function and table of public to the API roles.
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+
+-- pg_cron stub (as in supabase/tests/00628): the job table and schedule(), which updates a job of the
+-- same name like pg_cron does.
+CREATE TABLE cron.job (
+  jobid bigserial PRIMARY KEY,
+  schedule text NOT NULL,
+  command text NOT NULL,
+  active boolean NOT NULL DEFAULT true,
+  jobname text UNIQUE
+);
+CREATE FUNCTION cron.schedule(job_name text, schedule text, command text) RETURNS bigint
+LANGUAGE sql AS $f$
+  INSERT INTO cron.job (jobname, schedule, command) VALUES (job_name, schedule, command)
+  ON CONFLICT (jobname) DO UPDATE SET schedule = EXCLUDED.schedule, command = EXCLUDED.command
+  RETURNING jobid
+$f$;
 
 CREATE OR REPLACE FUNCTION auth.uid()
  RETURNS uuid

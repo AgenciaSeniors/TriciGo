@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Rehearsal runner for migration 00679 (one owner per assisted ride, and the support number from the
-# operator on shift). Builds prod's tables (tables.sql) and the helpers 00679 calls, byte for byte
-# (live-bodies.sql), on the roles and stubs of scaffold.sql.
+# operator on shift). Builds prod's tables (tables.sql) and the bodies 00679 calls or patches, byte
+# for byte (live-bodies.sql), on the roles and stubs of scaffold.sql (pushes land in test_pushes).
+# A cases: part 1 (staff, shifts, the contact). B cases: part 2 (owners, the help number, handover,
+# the tick and the automatic off-shift).
 #   supabase/tests/00679/run.sh none
 #       -> prod as captured + tests (RED: support_staff and the shift functions do not exist)
 #   supabase/tests/00679/run.sh supabase/migrations/00679_support_ride_owner.sql
@@ -75,19 +77,27 @@ ON_BOTH="INSERT INTO public.support_staff (user_id, whatsapp_phone, on_shift, sh
 
 CREATED_LIST="'_support_staff_on_shift','_support_pick_owner','get_support_contact','ops_set_support_shift',
   'ops_support_shift_status'"
+# Part 2: the functions it creates, and the live bodies it patches.
+CREATED2_LIST="'_support_alert_text','_support_send','_support_phone_for_ride','_support_handoff_rides_of',
+  '_support_pickup_for','support_handoff_tick'"
+PATCHED_LIST="'_support_alert','request_ride_help'"
 BODIES="SELECT string_agg(p.proname || '=' || md5(p.prosrc), ',' ORDER BY p.proname) FROM pg_proc p
-  WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ($CREATED_LIST)"
+  WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ($CREATED_LIST, $CREATED2_LIST, $PATCHED_LIST)"
 OTHERS="SELECT md5(string_agg(p.oid::regprocedure::text || md5(p.prosrc) || coalesce(p.proacl::text, ''), ',' ORDER BY p.oid::regprocedure::text))
-  FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname NOT IN ($CREATED_LIST)"
+  FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace
+   AND p.proname NOT IN ($CREATED_LIST, $CREATED2_LIST, $PATCHED_LIST)"
 HELPERS="SELECT string_agg(p.proname || '=' || md5(p.prosrc), ',' ORDER BY p.proname) FROM pg_proc p
   WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ('current_user_role', 'is_admin', 'is_operator',
-  'is_ops_staff', '_ride_short_code', '_ride_type_label', 'get_platform_config_numeric', 'log_rpc_attempt')"
+  'is_ops_staff', '_ride_short_code', '_ride_type_label', 'get_platform_config_numeric', 'log_rpc_attempt',
+  '_html_escape', 'get_platform_config_text', '_support_alert', 'request_ride_help', 'notify_support_waiting_rides')"
 # md5 of prosrc in prod on 2026-11-07.
-PROD_HELPERS="_ride_short_code=7dae14319bfae57a2ac8b4317e928513,_ride_type_label=6334b65ed6bc08e91f9d4cfdee97976e,current_user_role=cb4a7c12d4e21fe2997135833f141e25,get_platform_config_numeric=13d2587037eca74854cf2394ba42a90c,is_admin=22cb75e91980d512498034cd33e1eda2,is_operator=16438eb527af61eaa2d0b3d9a53f08f9,is_ops_staff=d6774e4677be1072e66b247492e9cb9a,log_rpc_attempt=0a902c34a1148dac5686403a7c941bc0"
+PROD_HELPERS="_html_escape=11824274e20a4bc4e469ca12e4dc7c10,_ride_short_code=7dae14319bfae57a2ac8b4317e928513,_ride_type_label=6334b65ed6bc08e91f9d4cfdee97976e,_support_alert=992c2ce11b664d72e437a683170abb97,current_user_role=cb4a7c12d4e21fe2997135833f141e25,get_platform_config_numeric=13d2587037eca74854cf2394ba42a90c,get_platform_config_text=407a7b835c527164a4aa8b3aa8525ba5,is_admin=22cb75e91980d512498034cd33e1eda2,is_operator=16438eb527af61eaa2d0b3d9a53f08f9,is_ops_staff=d6774e4677be1072e66b247492e9cb9a,log_rpc_attempt=0a902c34a1148dac5686403a7c941bc0,notify_support_waiting_rides=c69e1ca717436dad23eada26af46e0ce,request_ride_help=0568a44a41e6b9ef925ae1b2b2799cb1"
+# md5 of prosrc of the two bodies 00679 patches, after the patch.
+PATCHED_MD5="_support_alert=2e0ae1a5219e5e3ec8772124f1b50767,request_ride_help=2b9faf1390909d63ae02696105d78090"
 
 mkdb $DB
 run $DB "$SEED" >/dev/null
-val "F0 the scaffold has prod's helper bodies" "$HELPERS" "$PROD_HELPERS"
+val "F0 the scaffold has prod's bodies (the helpers, the two 00679 patches, the wait-alert cron)" "$HELPERS" "$PROD_HELPERS"
 OTHERS_BEFORE=$(run $DB "$OTHERS")
 
 if [ "$MIG" != none ]; then
@@ -98,6 +108,9 @@ if [ "$MIG" != none ]; then
       "SELECT value FROM public.platform_config WHERE key = 'support_handoff_after_s';
        UPDATE public.platform_config SET value = '60'::jsonb WHERE key = 'support_handoff_after_s';" "90"
   val "M4 no other function changed" "$OTHERS" "$OTHERS_BEFORE"
+  val "M5 the two patched bodies carry their 00679 md5" \
+      "SELECT string_agg(p.proname || '=' || md5(p.prosrc), ',' ORDER BY p.proname) FROM pg_proc p
+        WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ($PATCHED_LIST)" "$PATCHED_MD5"
 fi
 
 # ── The switch ────────────────────────────────────────────────
@@ -263,6 +276,193 @@ val "A16 support_staff's shape, and the two settings" \
       WHERE key IN ('support_handoff_after_s', 'support_auto_offshift_misses')" \
     "user_id:uuid:NO:-,whatsapp_phone:text:YES:-,on_shift:boolean:NO:false,shift_started_at:timestamp with time zone:YES:-,shift_ended_at:timestamp with time zone:YES:-,missed_in_a_row:integer:NO:0,last_assigned_at:timestamp with time zone:YES:-,updated_at:timestamp with time zone:NO:now();CHECK ((whatsapp_phone ~ '^\\+[1-9][0-9]{7,14}\$'::text)) / FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE / PRIMARY KEY (user_id);support_auto_offshift_misses=2,support_handoff_after_s=60"
 
+# ══ Part 2: one owner per ride, the help number, handover and off-shift ══
+# OP1 alone on shift with a number, written directly.
+ON1="INSERT INTO public.support_staff (user_id, whatsapp_phone, on_shift, shift_started_at) VALUES
+  ('$OP1', '+5355123456', true, now());"
+# alerted RIDE help|wait: the ride_assist row of a ride whose help (or wait) alert just went out.
+alerted(){ echo "INSERT INTO public.ride_assist (ride_id, ${2}_alert_sent_at) VALUES ('$1', now());"; }
+# owned RIDE OWNER SECONDS: a ride whose wait alert went out SECONDS ago and made OWNER its owner.
+owned(){ echo "INSERT INTO public.ride_assist (ride_id, wait_alert_sent_at, owner_id, owner_assigned_at, owners_tried)
+  VALUES ('$1', now() - interval '$3 seconds', '$2', now() - interval '$3 seconds', ARRAY['$2']::uuid[]);"; }
+# The name of the ride's owner, or none.
+owner(){ echo "SELECT coalesce((SELECT u.full_name FROM public.ride_assist ra JOIN public.users u ON u.id = ra.owner_id
+  WHERE ra.ride_id = '$1'), 'none');"; }
+# The pushes sent, in order: label:recipients (names, sorted); their titles; their data.event.
+PUSHES="SELECT coalesce(string_agg(p.label || ':' || coalesce((SELECT string_agg(u.full_name, '+' ORDER BY u.full_name)
+    FROM jsonb_array_elements_text(p.body -> 'user_ids') AS t(v) JOIN public.users u ON u.id = t.v::uuid), '-'),
+    ',' ORDER BY p.id), 'none')
+  FROM public.test_pushes p;"
+TITLES="SELECT coalesce(string_agg(p.body ->> 'title', ',' ORDER BY p.id), 'none') FROM public.test_pushes p;"
+EVENTS="SELECT coalesce(string_agg(p.body -> 'data' ->> 'event', ',' ORDER BY p.id), 'none') FROM public.test_pushes p;"
+MISSED="SELECT string_agg(u.full_name || '=' || s.missed_in_a_row, ',' ORDER BY u.full_name)
+  FROM public.support_staff s JOIN public.users u ON u.id = s.user_id;"
+# The result of the switch: handed_over,kept.
+toggle(){ echo "$(call $1 "j ->> 'handed_over' || ',' || (j ->> 'kept') FROM (SELECT public.ops_set_support_shift($2) AS j) x")"; }
+ALL3="Ana Admin+Lete+Melanye"
+TITLE_HELP="Pasajero pide ayuda · Triciclo · B6790000"
+TITLE_WAIT="Viaje sin conductor · Triciclo · B6790000"
+
+val "B0 part 2's functions: SECURITY DEFINER with search_path; helpers and tick closed; the patched keep prod's grants" \
+    "SELECT p.proname || ':' || has_function_privilege('anon', p.oid, 'EXECUTE')::int
+              || has_function_privilege('authenticated', p.oid, 'EXECUTE')::int
+              || has_function_privilege('service_role', p.oid, 'EXECUTE')::int
+              || ':' || p.prosecdef || ':' || array_to_string(p.proconfig, ' ')
+       FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ($CREATED2_LIST, $PATCHED_LIST)
+      ORDER BY p.proname" \
+    "_support_alert:001:true:search_path=public, pg_catalog;_support_alert_text:000:true:search_path=public, pg_catalog;_support_handoff_rides_of:000:true:search_path=public, pg_catalog;_support_phone_for_ride:000:true:search_path=public, pg_catalog;_support_pickup_for:000:true:search_path=public, pg_catalog;_support_send:000:true:search_path=public, pg_catalog;request_ride_help:011:true:search_path=public, pg_catalog;support_handoff_tick:000:true:search_path=public, pg_catalog"
+
+# ── Who an alert goes to ──────────────────────────────────────
+val "B1 one operator on shift: the alert makes her the owner and pushes only her (Te toca)" \
+    "$(tx "$ON1 $(alerted $R1 help)
+      SELECT public._support_alert('$R1', 'help');
+      $(owner $R1)
+      SELECT (owner_assigned_at = now()) || ',' || (owner_opened_at IS NULL) || ',' || (all_missed_alert_at IS NULL)
+             || ',' || array_to_string(owners_tried, ' ')
+        FROM public.ride_assist WHERE ride_id = '$R1';
+      $PUSHES $TITLES
+      SELECT (body -> 'data' ->> 'event') || ',' || (body -> 'data' ->> 'ride_id') || ',' || (body -> 'data' ->> 'url')
+             || ',' || (body ->> 'category')
+        FROM public.test_pushes;")" \
+    "Lete;true,true,true,$OP1;support-owner-alert:Lete;Te toca · $TITLE_HELP;support_owner,$R1,https://admin.tricigo.com/rides/$R1/assist,system"
+val "B2 nobody on shift: no owner, and every active ops staff account gets the push, as today" \
+    "$(tx "$(alerted $R1 help) $(alerted $R2 wait)
+      SELECT public._support_alert('$R1', 'help'); SELECT public._support_alert('$R2', 'wait');
+      $(owner $R1) $(owner $R2) $PUSHES $TITLES $EVENTS")" \
+    "none;none;support-help-alert:$ALL3,support-wait-alert:$ALL3;$TITLE_HELP,$TITLE_WAIT;support_help,support_wait"
+val "B3 two on shift, two alerts in the same transaction: one each" \
+    "$(tx "$ON_BOTH $(alerted $R1 wait) $(alerted $R2 wait)
+      SELECT public._support_alert('$R1', 'wait'); SELECT public._support_alert('$R2', 'wait');
+      $(owner $R1) $(owner $R2) $PUSHES")" \
+    "Lete;Melanye;support-owner-alert:Lete,support-owner-alert:Melanye"
+val "B3b the cron's wait alerts (notify_support_waiting_rides) take turns between the two" \
+    "$(tx "$ON_BOTH
+      UPDATE public.rides SET created_at = now() - CASE id WHEN '$R1' THEN interval '4 minutes'
+        WHEN '$R2' THEN interval '3 minutes' WHEN '$R3' THEN interval '2 minutes' ELSE interval '100 seconds' END;
+      SELECT public.notify_support_waiting_rides();
+      $(owner $R1) $(owner $R2) $(owner $R3) $(owner $R4) $PUSHES")" \
+    "4;Lete;Melanye;Lete;Melanye;support-owner-alert:Lete,support-owner-alert:Melanye,support-owner-alert:Lete,support-owner-alert:Melanye"
+val "B9 never on oneself: the only one on shift is the rider, so no owner and everyone gets the push" \
+    "$(tx "$ON1 UPDATE public.rides SET customer_id = '$OP1' WHERE id = '$R3';
+      $(alerted $R3 wait) SELECT public._support_alert('$R3', 'wait'); $(owner $R3) $PUSHES")" \
+    "none;support-wait-alert:$ALL3"
+
+# ── The rider's number ────────────────────────────────────────
+val "B4 request_ride_help gives the owner's number; nobody on shift: the last one off; capped: a number, no owner" \
+    "$(tx "$ON1 $(call $CUS "public.request_ride_help('$R1') ->> 'support_phone'") $(owner $R1) $PUSHES")
+     $(tx "INSERT INTO public.support_staff (user_id, whatsapp_phone, on_shift, shift_ended_at) VALUES
+         ('$OP1', '+5355123456', false, now() - interval '10 minutes'), ('$OP2', '+5355123457', false, now() - interval '1 minute');
+       $(call $CUS "public.request_ride_help('$R1') ->> 'support_phone'") $(owner $R1) $PUSHES")
+     $(tx "$ON1
+       INSERT INTO public.ride_assist (ride_id, help_alert_sent_at) VALUES
+         ('$R2', now() - interval '10 minutes'), ('$R3', now() - interval '20 minutes'), ('$R4', now() - interval '30 minutes');
+       $(call $CUS "public.request_ride_help('$R1')::text") $(owner $R1) $PUSHES
+       SELECT outcome FROM public.rpc_attempt_log;")" \
+    "+5355123456;Lete;support-owner-alert:Lete;+5355123457;none;support-help-alert:$ALL3;{\"code\": \"B6790000\", \"success\": true, \"support_phone\": \"+5355123456\"};none;none;help_alert_capped"
+# OP1 goes off a minute before OP2's shift ends, so the support contact is OP2's, not the owner's.
+val "B5 an owner who went off shift alone keeps the ride; a help request then pushes everyone and gives the support contact" \
+    "$(tx "$(call $OP1 "public.ops_set_support_shift(true, '+5355123456') ->> 'on_shift'")
+      $(alerted $R1 wait) SELECT public._support_alert('$R1', 'wait');
+      $(toggle $OP1 false)
+      UPDATE public.support_staff SET shift_ended_at = shift_ended_at - interval '1 minute' WHERE user_id = '$OP1';
+      INSERT INTO public.support_staff (user_id, whatsapp_phone, on_shift, shift_ended_at) VALUES ('$OP2', '+5355123457', false, now());
+      $(call $CUS "public.request_ride_help('$R1') ->> 'support_phone'")
+      $(anon_call "public.get_support_contact() ->> 'phone'")
+      $(owner $R1) $PUSHES")" \
+    "true;0,1;+5355123457;+5355123457;Lete;support-owner-alert:Lete,support-help-alert:$ALL3"
+val "B5b an owner off shift and someone else on: the next alert passes the ride to her" \
+    "$(tx "INSERT INTO public.support_staff (user_id, whatsapp_phone, on_shift, shift_ended_at) VALUES
+        ('$OP1', '+5355123456', false, now()), ('$OP2', '+5355123457', true, NULL);
+      $(owned $R1 $OP1 10)
+      $(call $CUS "public.request_ride_help('$R1') ->> 'support_phone'")
+      $(owner $R1) SELECT array_to_string(owners_tried, ' ') FROM public.ride_assist WHERE ride_id = '$R1';
+      $PUSHES")" \
+    "+5355123457;Melanye;$OP1 $OP2;support-owner-alert:Melanye"
+val "B6 the help button twice: the same number both times, one push" \
+    "$(tx "$ON1 $(call $CUS "public.request_ride_help('$R1') ->> 'support_phone'")
+      $(call $CUS "public.request_ride_help('$R1') ->> 'support_phone'") $PUSHES")" \
+    "+5355123456;+5355123456;support-owner-alert:Lete"
+
+# ── The handover tick ─────────────────────────────────────────
+val "B7 not opened in 60 s: the tick passes it to the other one on shift (push) and counts her miss; at 59 s nothing" \
+    "$(tx "$ON_BOTH $(owned $R1 $OP1 61)
+      SELECT public.support_handoff_tick();
+      $(owner $R1)
+      SELECT (owner_assigned_at = now()) || ',' || (owner_opened_at IS NULL) || ',' || array_to_string(owners_tried, ' ')
+        FROM public.ride_assist WHERE ride_id = '$R1';
+      $PUSHES $TITLES $EVENTS $MISSED")
+     $(tx "$ON_BOTH $(owned $R1 $OP1 59) SELECT public.support_handoff_tick(); $(owner $R1) $PUSHES $MISSED")" \
+    "1;Melanye;true,true,$OP1 $OP2;support-handoff:Melanye;Te pasamos un viaje · $TITLE_WAIT;support_handoff;Lete=1,Melanye=0;0;Lete;none;Lete=0,Melanye=0"
+val "B8 alone on shift: the ride stays hers, everyone gets one push, her miss counts; a second miss takes her off shift" \
+    "$(tx "$ON1 $(owned $R1 $OP1 61)
+      SELECT public.support_handoff_tick();
+      $(owner $R1) SELECT (all_missed_alert_at = now())::text FROM public.ride_assist WHERE ride_id = '$R1';
+      $PUSHES $MISSED
+      SELECT public.support_handoff_tick(); SELECT count(*) FROM public.test_pushes; $MISSED
+      $(owned $R2 $OP1 61)
+      SELECT public.support_handoff_tick();
+      SELECT on_shift || ',' || (shift_ended_at = now()) FROM public.support_staff WHERE user_id = '$OP1';
+      $(owner $R1) $(owner $R2) $PUSHES $TITLES $EVENTS
+      SELECT body ->> 'body' FROM public.test_pushes WHERE label = 'support-auto-offshift';
+      SELECT action || ',' || admin_id || ',' || target_type || ',' || target_id || ',' || (new_values ->> 'on_shift')
+             || ',' || (new_values ->> 'kept')
+        FROM public.admin_actions;")" \
+    "1;Lete;true;support-all-missed:$ALL3;Lete=1;0;1;Lete=1;1;false,true;Lete;Lete;support-all-missed:$ALL3,support-all-missed:$ALL3,support-auto-offshift:Lete;Nadie abrió el viaje · $TITLE_WAIT,Nadie abrió el viaje · $TITLE_WAIT,Te sacamos de turno;support_all_missed,support_all_missed,support_offshift;No abriste 2 viajes seguidos. Actívalo de nuevo cuando puedas.;support_shift_auto_off,$OP1,support_staff,$OP1,false,2"
+val "B10 the tick leaves a ride that is no longer searching, and one its owner opened" \
+    "$(tx "$ON_BOTH $(owned $R1 $OP1 61) $(owned $R2 $OP1 61)
+      UPDATE public.rides SET status = 'accepted' WHERE id = '$R1';
+      UPDATE public.ride_assist SET owner_opened_at = now() WHERE ride_id = '$R2';
+      SELECT public.support_handoff_tick(); $(owner $R1) $(owner $R2) $PUSHES $MISSED")" \
+    "0;Lete;Lete;none;Lete=0,Melanye=0"
+val "B16 the settings have floors: 30 s to open the ride, 1 miss" \
+    "$(tx "UPDATE public.platform_config SET value = '10'::jsonb WHERE key = 'support_handoff_after_s';
+      UPDATE public.platform_config SET value = '0'::jsonb WHERE key = 'support_auto_offshift_misses';
+      $ON_BOTH $(owned $R1 $OP1 29) SELECT public.support_handoff_tick();
+      UPDATE public.ride_assist SET owner_assigned_at = now() - interval '31 seconds' WHERE ride_id = '$R1';
+      SELECT public.support_handoff_tick(); $(owner $R1)
+      SELECT on_shift::text FROM public.support_staff WHERE user_id = '$OP1'; $PUSHES")" \
+    "0;1;Melanye;false;support-handoff:Melanye,support-auto-offshift:Lete"
+val "B15 the tick runs every 20 seconds (pg_cron)" \
+    "SELECT schedule || '|' || command FROM cron.job WHERE jobname = 'support-handoff-tick'" \
+    "20 seconds|SELECT public.support_handoff_tick()"
+
+# ── Going off and coming on ───────────────────────────────────
+val "B11 going off with open rides: they pass to the other one on shift (a push each); alone, they stay hers" \
+    "$(tx "$ON_BOTH $(owned $R1 $OP1 10) $(owned $R2 $OP1 10)
+      UPDATE public.ride_assist SET owner_opened_at = now() WHERE ride_id = '$R2';
+      $(toggle $OP1 false)
+      $(owner $R1) $(owner $R2) SELECT (owner_opened_at IS NULL)::text FROM public.ride_assist WHERE ride_id = '$R2';
+      $PUSHES
+      SELECT (new_values ->> 'handed_over') || ',' || (new_values ->> 'kept') FROM public.admin_actions
+       WHERE action = 'support_shift_off';")
+     $(tx "INSERT INTO public.support_staff (user_id, whatsapp_phone, on_shift, shift_started_at) VALUES
+        ('$OP2', '+5355123457', true, now());
+      $(owned $R1 $OP2 10) $(toggle $OP2 false) $(owner $R1) $PUSHES")" \
+    "2,0;Melanye;Melanye;true;support-handoff:Melanye,support-handoff:Melanye;2,0;0,1;Melanye;none"
+# R4 alerted with no owner; R1 owned by OP1 (off) never opened; R2 owned by OP1 (off) and opened;
+# R3 asked for help but its alert was capped (not alerted).
+val "B12 coming on shift picks up the alerted rides with no owner, or an off-shift owner who never opened them" \
+    "$(tx "INSERT INTO public.support_staff (user_id, whatsapp_phone, on_shift, shift_ended_at) VALUES
+        ('$OP1', '+5355123456', false, now()), ('$OP2', '+5355123457', false, now());
+      $(alerted $R4 wait) $(owned $R1 $OP1 300) $(owned $R2 $OP1 300)
+      UPDATE public.ride_assist SET owner_opened_at = now() - interval '4 minutes' WHERE ride_id = '$R2';
+      INSERT INTO public.ride_assist (ride_id, help_requested_at) VALUES ('$R3', now());
+      $(toggle $OP2 true)
+      $(owner $R1) $(owner $R2) $(owner $R3) $(owner $R4) $PUSHES $TITLES")" \
+    "2,0;Melanye;Lete;none;Melanye;support-owner-alert:Melanye,support-owner-alert:Melanye;Te toca · $TITLE_WAIT,Te toca · $TITLE_WAIT"
+
+# ── A push that fails ─────────────────────────────────────────
+val "B13 a push that fails keeps the assignment and the handover, and logs alert_failed" \
+    "$(tx "SET LOCAL client_min_messages = error; SET LOCAL test.http_fail = '1';
+      $ON1 $(alerted $R1 help) SELECT public._support_alert('$R1', 'help');
+      $(owner $R1) $PUSHES
+      SELECT outcome || ',' || target_id || ',' || (metadata ->> 'label') FROM public.rpc_attempt_log;")
+     $(tx "SET LOCAL client_min_messages = error; SET LOCAL test.http_fail = '1';
+      $ON_BOTH $(owned $R1 $OP1 61) SELECT public.support_handoff_tick();
+      $(owner $R1) $PUSHES
+      SELECT outcome || ',' || target_id || ',' || (metadata ->> 'label') FROM public.rpc_attempt_log;")" \
+    "Lete;none;alert_failed,$R1,support-owner-alert;1;Melanye;none;alert_failed,$R1,support-handoff"
+
 # ── At the same time (committed state, several sessions) ──────
 # The sessions are ordered by state, not by timing. Each one starts only once the one before has
 # picked (it says so with setval, which other sessions see at once), is waiting on a lock, or is
@@ -332,6 +532,62 @@ else
     && ok "A18 an operator turning on while picks wait: every call finishes, no deadlock; the next pick gets her" \
     || ko "A18 an operator turning on while picks wait: every call finishes, no deadlock; the next pick gets her" \
           "expected [1:Melanye,2:Melanye,3:Lete|on:true|ordered:000|errors:0], got [$r] $(outs)"
+fi
+
+# B14 (lock order): a session holds the ride_assist rows of R1 (OP1's) and R3 (OP2's, unopened for
+# 61 s), as an alert or an assist action would. OP1 going off and the tick skip those rows instead of
+# waiting for them (lock_timeout would turn a wait into an ERROR): R2 passes to OP2, R1 stays OP1's,
+# R3 stays OP2's. Once the rows are free, the next tick takes R3 (nobody else on: all missed).
+B14="B14 a ride whose ride_assist row another session holds is skipped by the handover and the tick, not waited for"
+conc_db "$ON_BOTH $(owned $R1 $OP1 10) $(owned $R2 $OP1 10) $(owned $R3 $OP2 61)"
+if [ "$(run $CDB "SELECT to_regprocedure('public.support_handoff_tick()') IS NOT NULL")" != t ]; then
+  ko "$B14" "no support_handoff_tick"
+  ko "B14b a help request and an operator coming on at once: no deadlock" "no support_handoff_tick"
+else
+  : > "$O1"
+  run $CDB "SET application_name = 'holder'; BEGIN;
+    SELECT 1 FROM public.ride_assist WHERE ride_id IN ('$R1', '$R3') FOR UPDATE;
+    $(signal test_picked)
+    DO \$\$ BEGIN FOR i IN 1..600 LOOP EXIT WHEN (SELECT is_called FROM public.test_go); PERFORM pg_sleep(0.05); END LOOP; END \$\$;
+    COMMIT;" > "$O1" &
+  await "SELECT is_called FROM public.test_picked"
+  off=$(run $CDB "SET lock_timeout = '3s'; BEGIN; $(as_user $OP1)
+    SELECT j ->> 'handed_over' || ',' || (j ->> 'kept') FROM (SELECT public.ops_set_support_shift(false) AS j) x; COMMIT;")
+  tick=$(run $CDB "SET lock_timeout = '3s'; SELECT public.support_handoff_tick();")
+  held=$(run $CDB "$(owner $R1) $(owner $R2) $(owner $R3)")
+  run $CDB "SELECT setval('public.test_go', 1)" >/dev/null
+  wait
+  after=$(run $CDB "SET lock_timeout = '3s'; SELECT public.support_handoff_tick();
+    SELECT string_agg(label, ',' ORDER BY id) FROM public.test_pushes;")
+  r="off:$off|tick:$tick|owners:$held|then:$after|errors:$(grep -o ERROR "$O1" | wc -l | tr -d ' ')"
+  want="off:1,1|tick:0|owners:Lete;Melanye;Melanye|then:1;support-handoff,support-all-missed|errors:0"
+  [ "$r" = "$want" ] && ok "$B14" || ko "$B14" "expected [$want], got [$r] $(cat "$O1")"
+
+  # B14b (the deadlock the lock order prevents): R1 was wait-alerted while nobody was on shift (no
+  # owner). Melanye's switch has taken the support lock ('on' holds it, as ops_set_support_shift
+  # does before its pickup). The rider taps help: request_ride_help holds R1's ride_assist row and
+  # waits for the lock in _support_pick_owner. Then the pickup runs: it must skip R1, not wait for
+  # it. Once she commits, the help alert gets the lock and gives R1 to her.
+  B14b="B14b a help request and an operator coming on at once: no deadlock; the help alert gives her the ride"
+  conc_db "INSERT INTO public.support_staff (user_id, whatsapp_phone, on_shift) VALUES
+      ('$OP1', '+5355123456', false), ('$OP2', '+5355123457', false);
+    $(alerted $R1 wait)"
+  : > "$O1"; : > "$O2"
+  run $CDB "SET application_name = 'on'; BEGIN;
+    SELECT pg_advisory_xact_lock(6790000000001);
+    $(signal test_picked)
+    DO \$\$ BEGIN FOR i IN 1..600 LOOP EXIT WHEN (SELECT is_called FROM public.test_go); PERFORM pg_sleep(0.05); END LOOP; END \$\$;
+    $(as_user $OP2) SELECT public.ops_set_support_shift(true) ->> 'handed_over'; COMMIT;" > "$O1" &
+  await "SELECT is_called FROM public.test_picked"
+  run $CDB "SET application_name = 'help'; BEGIN; $(as_user $CUS)
+    SELECT public.request_ride_help('$R1') ->> 'support_phone'; COMMIT;" > "$O2" &
+  await "$(waiting help)"; wh=$?
+  run $CDB "SELECT setval('public.test_go', 1)" >/dev/null
+  wait
+  r="on:$(grep -v ERROR "$O1" | paste -sd' ' -)|help:$(grep -v ERROR "$O2" | paste -sd' ' -)|help waited:$([ $wh -eq 0 ] && echo yes || echo no)"
+  r="$r|owner:$(run $CDB "$(owner $R1)")|pushes:$(run $CDB "$PUSHES")|errors:$(cat "$O1" "$O2" | grep -o ERROR | wc -l | tr -d ' ')"
+  want="on:0|help:+5355123457|help waited:yes|owner:Melanye|pushes:support-owner-alert:Melanye|errors:0"
+  [ "$r" = "$want" ] && ok "$B14b" || ko "$B14b" "expected [$want], got [$r] $(cat "$O1" "$O2" | paste -sd' ' -)"
 fi
 rm -f "$O1" "$O2" "$O3" "$O4"
 dropdb $CDB
