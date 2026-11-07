@@ -71,16 +71,14 @@ Date: 2026-11-07 · Status: draft, answers from the founder in chat · Target: a
   - `request_ride_help` returns `get_support_contact()` (an operator on shift, else the last one), not the owner's number.
   - The banner and the assist page still show her as the owner, so nobody acts on it by surprise.
 - **Coming on shift** *(Claude's call)*. When an operator turns "En turno" on, she gets, by the assignment rule and with a push each, every searching ride that has no owner, or whose owner is off shift and never opened it. A ride its owner already opened stays hers: she may be handling it on WhatsApp.
-- **Ownership guard.** Every assist action refuses with `ride_owned_by_other` when the ride has another owner: the six 00628 actions, the three 00660 actions and `admin_cancel_ride`. Admins too: they take the ride first. With no owner, the action makes the caller the owner.
+- **Ownership guard.** Every assist action refuses with `ride_owned_by_other` when the ride has another owner: offer, assign and change type (00628), release, advance and complete (00660), and `admin_cancel_ride`. Admins too: they take the ride first. With no owner, the action makes the caller the owner.
 - **Never on oneself** stays as today: an operator never owns a ride she is part of. The assignment skips her for such a ride.
 
 ## Server design (one migration)
 
 Next free number on 2026-11-07: **00679** (00676 and 00677 are in PR 1192, 00678 in PR 1194). Re-check master and every open PR right before writing it.
 
-**Order with 00677** *(Claude's call)*. 00677 (PR 1192, rehearsed, not applied yet) patches `admin_assign_ride_to_driver` and `admin_ride_assist_candidates` behind md5 guards. The ownership guard here also patches `admin_assign_ride_to_driver`, so whichever applies second would fail the other's md5 check.
-- This migration goes after 00677, and its guard is written against the body 00677 leaves.
-- If PR 1192 is still not applied when this one is ready to apply, ask the founder before changing either guard.
+**Order with 00677.** 00677 (PR 1192) patches `admin_assign_ride_to_driver` and `admin_ride_assist_candidates` behind md5 guards, and so does the ownership guard here. 00676-00678 were applied in prod on 2026-11-07 (`schema_migrations`), and the live bodies carry 00677's md5. This migration is written against those live bodies; re-running 00677 stays a no-op, because its guard returns early on its own new md5.
 
 Every function follows the operator-role rules (00668, 00671-00673): SECURITY DEFINER, `search_path` set, gated by `is_ops_staff()` unless stated, EXECUTE revoked from `PUBLIC` and `anon` and granted only where listed, logged to `admin_actions`, md5 guards on every live body patched in place, and the self-check block at the end.
 
@@ -135,8 +133,7 @@ The founder should check these:
 6. The assignment picks the operator with the fewest open rides, then the one assigned least recently.
 7. `get_support_contact` returns only a number, never the operator's name.
 8. The handover check runs every 20 s, so a ride passes 60 to 80 s after it was assigned.
-9. This migration applies after 00677 (PR 1192).
-10. Nothing hardcodes a support number afterwards. With no number known, the screens offer e-mail and tickets.
+9. Nothing hardcodes a support number afterwards. With no number known, the screens offer e-mail and tickets.
 
 ## Out of scope
 
