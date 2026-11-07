@@ -20,8 +20,9 @@
 --
 -- Rules (spec, and 00668 / 00671-00673): SECURITY DEFINER, search_path set, EXECUTE revoked from
 -- PUBLIC and anon; the panel's RPCs open to authenticated, get_support_contact to anon too, the
--- helpers to nobody. Refusals are {error} objects. Lock order: rides, then ride_assist, then
--- support_staff. No DELETE, DROP or TRUNCATE statements (an MCP apply waits for approval on them).
+-- helpers to nobody. Refusals are {error} objects. Lock order: rides, then ride_assist, then the
+-- support lock (an advisory lock, see _support_pick_owner), then support_staff rows. No DELETE, DROP
+-- or TRUNCATE statements (an MCP apply waits for approval on them).
 -- Re-applying the file changes nothing.
 
 -- ── A. Settings ─────────────────────────────────────────────
@@ -97,6 +98,15 @@ $function$;
 -- the one with the fewest open rides she owns (searching or active), then the one assigned least
 -- recently (never first). Takes her turn: stamps last_assigned_at. NULL when nobody qualifies.
 -- get_support_contact ranks the same way: keep the two ORDER BYs in step.
+--
+-- The support lock: pg_advisory_xact_lock(6790000000001), held until the transaction ends (the key
+-- is above the int4 range, so it never meets a hashtext() key like 00209's). Every function that
+-- locks or writes support_staff rows takes it first, before its first support_staff row: this one,
+-- ops_set_support_shift, and the handover, pickup and cron tick that build on them. In the lock
+-- order it sits after rides and ride_assist. With it, a second pick waits until the first commits,
+-- then ranks on a new snapshot that sees the first one's last_assigned_at, so two alerts at once go
+-- to two people; and no two transactions ever lock support_staff rows in different orders (a staff
+-- member turning on between a pick's locks and its ranking deadlocked an earlier draft).
 CREATE OR REPLACE FUNCTION public._support_pick_owner(p_ride_id uuid, p_exclude uuid[])
  RETURNS uuid
  LANGUAGE plpgsql
@@ -104,20 +114,17 @@ CREATE OR REPLACE FUNCTION public._support_pick_owner(p_ride_id uuid, p_exclude 
  SET search_path TO 'public', 'pg_catalog'
 AS $function$
 DECLARE
+  c_support_lock CONSTANT bigint := 6790000000001;  -- the support lock (see the comment above)
   v_rider  uuid;
   v_driver uuid;
   v_pick   uuid;
 BEGIN
+  PERFORM pg_advisory_xact_lock(c_support_lock);
+
   SELECT r.customer_id, dp.user_id INTO v_rider, v_driver
   FROM public.rides r
   LEFT JOIN public.driver_profiles dp ON dp.id = r.driver_id
   WHERE r.id = p_ride_id;
-
-  -- Lock every row on shift, in one order, before ranking. A second pick waits here until the
-  -- first commits, then ranks on a new snapshot that sees the first one's last_assigned_at, so two
-  -- alerts at once go to two people. Locking only the chosen row would not do it: after the wait,
-  -- Postgres rechecks that row's WHERE but not the ORDER BY, and both alerts get the same person.
-  PERFORM 1 FROM public.support_staff WHERE on_shift ORDER BY user_id FOR UPDATE;
 
   SELECT s.user_id INTO v_pick
   FROM public.support_staff s
@@ -202,6 +209,7 @@ DECLARE
   v_row    public.support_staff%ROWTYPE;
   v_handed integer := 0;
   v_kept   integer := 0;
+  c_support_lock CONSTANT bigint := 6790000000001;  -- the support lock (see _support_pick_owner)
 BEGIN
   IF v_me IS NULL OR NOT public.is_ops_staff() THEN
     RETURN jsonb_build_object('error', 'forbidden');
@@ -213,6 +221,8 @@ BEGIN
     RETURN jsonb_build_object('error', 'invalid_whatsapp');
   END IF;
 
+  -- Before her row: the refusals above touch no support_staff row, so they never wait for it.
+  PERFORM pg_advisory_xact_lock(c_support_lock);
   SELECT * INTO v_old FROM public.support_staff WHERE user_id = v_me FOR UPDATE;
   IF p_on AND COALESCE(v_new, v_old.whatsapp_phone) IS NULL THEN
     RETURN jsonb_build_object('error', 'whatsapp_required');

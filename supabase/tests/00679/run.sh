@@ -263,23 +263,78 @@ val "A16 support_staff's shape, and the two settings" \
       WHERE key IN ('support_handoff_after_s', 'support_auto_offshift_misses')" \
     "user_id:uuid:NO:-,whatsapp_phone:text:YES:-,on_shift:boolean:NO:false,shift_started_at:timestamp with time zone:YES:-,shift_ended_at:timestamp with time zone:YES:-,missed_in_a_row:integer:NO:0,last_assigned_at:timestamp with time zone:YES:-,updated_at:timestamp with time zone:NO:now();CHECK ((whatsapp_phone ~ '^\\+[1-9][0-9]{7,14}\$'::text)) / FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE / PRIMARY KEY (user_id);support_auto_offshift_misses=2,support_handoff_after_s=60"
 
-# ── Two alerts at once (committed state, two sessions) ────────
-# The first pick holds its transaction open 3 s; the second starts 1 s in, waits for it, and must
-# get the other operator.
-mkdb ${DB}conc
-run ${DB}conc "$SEED" >/dev/null
-[ "$MIG" != none ] && apply ${DB}conc "$FILE" >/dev/null
-run ${DB}conc "CREATE TABLE public.test_picks (who text PRIMARY KEY, picked uuid, done_at timestamptz); $ON_BOTH" >/dev/null
-run ${DB}conc "BEGIN; INSERT INTO public.test_picks VALUES ('first', public._support_pick_owner('$R1', '{}'), clock_timestamp());
-  SELECT pg_sleep(3); COMMIT;" >/dev/null &
-run ${DB}conc "SELECT pg_sleep(1); BEGIN; INSERT INTO public.test_picks VALUES ('second', public._support_pick_owner('$R2', '{}'), NULL);
-  UPDATE public.test_picks SET done_at = clock_timestamp() WHERE who = 'second'; COMMIT;" >/dev/null &
-wait
-val "A17 two picks at once go to two operators (the second waited for the first)" \
-    "SELECT string_agg(coalesce(u.full_name, 'none'), ',' ORDER BY t.who) FROM public.test_picks t LEFT JOIN public.users u ON u.id = t.picked;
-     SELECT (SELECT done_at FROM public.test_picks WHERE who = 'second') - (SELECT done_at FROM public.test_picks WHERE who = 'first') > interval '2 seconds'" \
-    "Lete,Melanye;t" ${DB}conc
-dropdb ${DB}conc
+# ── At the same time (committed state, several sessions) ──────
+# The sessions are ordered by state, not by timing. Each one starts only once the one before has
+# picked (it says so with setval, which other sessions see at once), is waiting on a lock, or is
+# done (pg_stat_activity). The first pick keeps its transaction open until released (setval again).
+CDB=${DB}conc
+conc_db(){ # conc_db SQL: a fresh database with the migration and SQL committed
+  mkdb $CDB
+  run $CDB "$SEED" >/dev/null
+  [ "$MIG" != none ] && apply $CDB "$FILE" >/dev/null
+  run $CDB "CREATE TABLE public.test_picks (who text PRIMARY KEY, picked uuid);
+    CREATE SEQUENCE public.test_picked; CREATE SEQUENCE public.test_started; CREATE SEQUENCE public.test_go; $1" >/dev/null
+}
+await(){ # await SQL: poll until it returns t (gives up after 100 tries)
+  local i=0
+  until [ "$(run $CDB "$1")" = t ]; do i=$((i+1)); [ $i -ge 100 ] && return 1; sleep 0.1; done
+}
+waiting(){ echo "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE application_name = '$1' AND wait_event_type = 'Lock')"; }
+signal(){ echo "DO \$\$ BEGIN PERFORM setval('public.$1', 1); END \$\$;"; }
+FIRST="SET application_name = 'p1'; BEGIN;
+  INSERT INTO public.test_picks VALUES ('1', public._support_pick_owner('$R1', '{}'));
+  $(signal test_picked)
+  DO \$\$ BEGIN FOR i IN 1..600 LOOP EXIT WHEN (SELECT is_called FROM public.test_go); PERFORM pg_sleep(0.05); END LOOP; END \$\$;
+  COMMIT;"
+later_pick(){ echo "SET application_name = '$1'; INSERT INTO public.test_picks VALUES ('$2', public._support_pick_owner('$3', '{}'));"; }
+PICKS="SELECT string_agg(t.who || ':' || coalesce(u.full_name, 'none'), ',' ORDER BY t.who) FROM public.test_picks t LEFT JOIN public.users u ON u.id = t.picked"
+O1=$(mktemp); O2=$(mktemp); O3=$(mktemp); O4=$(mktemp)
+outs(){ cat "$O1" "$O2" "$O3" "$O4" | paste -sd' ' -; }
+conc_db "$ON_BOTH"
+if [ "$(run $CDB "SELECT to_regprocedure('public._support_pick_owner(uuid,uuid[])') IS NOT NULL")" != t ]; then
+  ko "A17 two picks at once go to two operators" "no _support_pick_owner"
+  ko "A18 an operator turning on while picks wait: no deadlock" "no _support_pick_owner"
+else
+  # A17: both on shift, nobody assigned yet. The second pick starts while the first holds its
+  # transaction, waits for it, and must get the other operator.
+  : > "$O1"; : > "$O2"; : > "$O3"; : > "$O4"
+  run $CDB "$FIRST" > "$O1" &
+  await "SELECT is_called FROM public.test_picked"
+  run $CDB "$(later_pick p2 2 $R2)" > "$O2" &
+  await "$(waiting p2)"; w2=$?
+  run $CDB "SELECT setval('public.test_go', 1)" >/dev/null
+  wait
+  r="$(run $CDB "$PICKS")|p2 waited:$([ $w2 -eq 0 ] && echo yes || echo no)|errors:$(outs | grep -o ERROR | wc -l | tr -d ' ')"
+  [ "$r" = "1:Lete,2:Melanye|p2 waited:yes|errors:0" ] && ok "A17 two picks at once go to two operators (the second waited for the first)" \
+    || ko "A17 two picks at once go to two operators (the second waited for the first)" "expected [1:Lete,2:Melanye|p2 waited:yes|errors:0], got [$r] $(outs)"
+
+  # A18 (the reviewer's case): Melanye alone on shift with an open ride; Lete, whose id sorts first,
+  # has a number but is off. Pick 1 holds; pick 2 waits; Lete turns on; pick 3 starts; then pick 1
+  # commits. Every call must finish, none with a deadlock, and the pick after Lete's turn gets her.
+  conc_db "INSERT INTO public.support_staff (user_id, whatsapp_phone, on_shift) VALUES
+      ('$OP1', '+5355123456', false), ('$OP2', '+5355123457', true);
+    INSERT INTO public.ride_assist (ride_id, owner_id) VALUES ('$R4', '$OP2');"
+  : > "$O1"; : > "$O2"; : > "$O3"; : > "$O4"
+  run $CDB "$FIRST" > "$O1" &
+  await "SELECT is_called FROM public.test_picked"
+  run $CDB "$(later_pick p2 2 $R2)" > "$O2" &
+  await "$(waiting p2)"; w2=$?
+  run $CDB "SET application_name = 'on'; $(signal test_started)
+    BEGIN; $(as_user $OP1) SELECT public.ops_set_support_shift(true) ->> 'on_shift'; COMMIT;" > "$O3" &
+  await "SELECT (SELECT is_called FROM public.test_started) AND NOT EXISTS (SELECT 1 FROM pg_stat_activity
+           WHERE application_name = 'on' AND wait_event_type IS DISTINCT FROM 'Lock')"; w3=$?
+  run $CDB "$(later_pick p3 3 $R3)" > "$O4" &
+  await "$(waiting p3)"; w4=$?
+  run $CDB "SELECT setval('public.test_go', 1)" >/dev/null
+  wait
+  r="$(run $CDB "$PICKS")|on:$(cat "$O3")|ordered:$w2$w3$w4|errors:$(outs | grep -o ERROR | wc -l | tr -d ' ')"
+  [ "$r" = "1:Melanye,2:Melanye,3:Lete|on:true|ordered:000|errors:0" ] \
+    && ok "A18 an operator turning on while picks wait: every call finishes, no deadlock; the next pick gets her" \
+    || ko "A18 an operator turning on while picks wait: every call finishes, no deadlock; the next pick gets her" \
+          "expected [1:Melanye,2:Melanye,3:Lete|on:true|ordered:000|errors:0], got [$r] $(outs)"
+fi
+rm -f "$O1" "$O2" "$O3" "$O4"
+dropdb $CDB
 
 if [ "$MIG" != none ]; then
   CRLF=$(mktemp); sed 's/$/\r/' "$FILE" > "$CRLF"
