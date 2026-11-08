@@ -127,7 +127,7 @@ val "A2 a number not in E.164: invalid_whatsapp (the panel normalizes)" \
     "invalid_whatsapp;invalid_whatsapp;invalid_whatsapp;0"
 val "A3 on with a number: stored, on shift, one support_shift_on; on again with NULL reuses it and resets the misses" \
     "$(tx "$(call $OP1 "public.ops_set_support_shift(true, '+5355123456')
-                        = '{\"success\": true, \"on_shift\": true, \"whatsapp_phone\": \"+5355123456\", \"handed_over\": 0, \"kept\": 0}'::jsonb")
+                        = '{\"success\": true, \"on_shift\": true, \"whatsapp_phone\": \"+5355123456\", \"handed_over\": 0, \"kept\": 0, \"picked_up\": 0}'::jsonb")
       SELECT on_shift || ',' || whatsapp_phone || ',' || (shift_started_at IS NOT NULL) || ',' || missed_in_a_row
         FROM public.support_staff WHERE user_id = '$OP1';
       SELECT action || ',' || admin_id || ',' || target_type || ',' || target_id || ',' || (new_values ->> 'whatsapp_phone')
@@ -297,8 +297,9 @@ TITLES="SELECT coalesce(string_agg(p.body ->> 'title', ',' ORDER BY p.id), 'none
 EVENTS="SELECT coalesce(string_agg(p.body -> 'data' ->> 'event', ',' ORDER BY p.id), 'none') FROM public.test_pushes p;"
 MISSED="SELECT string_agg(u.full_name || '=' || s.missed_in_a_row, ',' ORDER BY u.full_name)
   FROM public.support_staff s JOIN public.users u ON u.id = s.user_id;"
-# The result of the switch: handed_over,kept.
-toggle(){ echo "$(call $1 "j ->> 'handed_over' || ',' || (j ->> 'kept') FROM (SELECT public.ops_set_support_shift($2) AS j) x")"; }
+# The result of the switch: handed_over,kept,picked_up.
+toggle(){ echo "$(call $1 "j ->> 'handed_over' || ',' || (j ->> 'kept') || ',' || (j ->> 'picked_up')
+  FROM (SELECT public.ops_set_support_shift($2) AS j) x")"; }
 ALL3="Ana Admin+Lete+Melanye"
 TITLE_HELP="Pasajero pide ayuda · Triciclo · B6790000"
 TITLE_WAIT="Viaje sin conductor · Triciclo · B6790000"
@@ -369,7 +370,7 @@ val "B5 an owner who went off shift alone keeps the ride; a help request then pu
       $(call $CUS "public.request_ride_help('$R1') ->> 'support_phone'")
       $(anon_call "public.get_support_contact() ->> 'phone'")
       $(owner $R1) $PUSHES")" \
-    "true;0,1;+5355123457;+5355123457;Lete;support-owner-alert:Lete,support-help-alert:$ALL3"
+    "true;0,1,0;+5355123457;+5355123457;Lete;support-owner-alert:Lete,support-help-alert:$ALL3"
 val "B5b an owner off shift and someone else on: the next alert passes the ride to her" \
     "$(tx "INSERT INTO public.support_staff (user_id, whatsapp_phone, on_shift, shift_ended_at) VALUES
         ('$OP1', '+5355123456', false, now()), ('$OP2', '+5355123457', true, NULL);
@@ -438,7 +439,7 @@ val "B11 going off with open rides: they pass to the other one on shift (a push 
      $(tx "INSERT INTO public.support_staff (user_id, whatsapp_phone, on_shift, shift_started_at) VALUES
         ('$OP2', '+5355123457', true, now());
       $(owned $R1 $OP2 10) $(toggle $OP2 false) $(owner $R1) $PUSHES")" \
-    "2,0;Melanye;Melanye;true;support-handoff:Melanye,support-handoff:Melanye;2,0;0,1;Melanye;none"
+    "2,0,0;Melanye;Melanye;true;support-handoff:Melanye,support-handoff:Melanye;2,0;0,1,0;Melanye;none"
 # R4 alerted with no owner; R1 owned by OP1 (off) never opened; R2 owned by OP1 (off) and opened;
 # R3 asked for help but its alert was capped (not alerted).
 val "B12 coming on shift picks up the alerted rides with no owner, or an off-shift owner who never opened them" \
@@ -449,7 +450,33 @@ val "B12 coming on shift picks up the alerted rides with no owner, or an off-shi
       INSERT INTO public.ride_assist (ride_id, help_requested_at) VALUES ('$R3', now());
       $(toggle $OP2 true)
       $(owner $R1) $(owner $R2) $(owner $R3) $(owner $R4) $PUSHES $TITLES")" \
-    "2,0;Melanye;Lete;none;Melanye;support-owner-alert:Melanye,support-owner-alert:Melanye;Te toca · $TITLE_WAIT,Te toca · $TITLE_WAIT"
+    "0,0,2;Melanye;Lete;none;Melanye;support-owner-alert:Melanye,support-owner-alert:Melanye;Te toca · $TITLE_WAIT,Te toca · $TITLE_WAIT"
+# Ruling 8. OP1, alone, goes off keeping R1 and R2 (assigned 6 min ago in her earlier shift, never
+# opened) and comes back on: the pickup gives them to her again with a fresh minute, so a tick right
+# away counts no miss. Only a ride then left unopened a fresh 61 s counts one (R1; R2 at 59 s not).
+val "B17 coming back on: the rides she kept unopened restart their minute; no miss until a fresh 60 s" \
+    "$(tx "INSERT INTO public.support_staff (user_id, whatsapp_phone, on_shift, shift_started_at) VALUES
+        ('$OP1', '+5355123456', true, now() - interval '10 minutes');
+      $(owned $R1 $OP1 360) $(owned $R2 $OP1 360)
+      $(toggle $OP1 false)
+      $(toggle $OP1 true)
+      SELECT string_agg((owner_assigned_at = now())::text, ',' ORDER BY ride_id) FROM public.ride_assist;
+      SELECT public.support_handoff_tick();
+      SELECT on_shift || ',' || missed_in_a_row FROM public.support_staff WHERE user_id = '$OP1';
+      UPDATE public.ride_assist
+         SET owner_assigned_at = now() - CASE ride_id WHEN '$R1' THEN interval '61 seconds' ELSE interval '59 seconds' END;
+      SELECT public.support_handoff_tick();
+      SELECT on_shift || ',' || missed_in_a_row FROM public.support_staff WHERE user_id = '$OP1';
+      $(owner $R1) $(owner $R2) $PUSHES")" \
+    "0,2,0;0,0,2;true,true;0;true,0;1;true,1;Lete;Lete;support-owner-alert:Lete,support-owner-alert:Lete,support-all-missed:$ALL3"
+val "B17b a repeated on (already on shift) does not restart the minute of a ride of this shift" \
+    "$(tx "INSERT INTO public.support_staff (user_id, whatsapp_phone, on_shift, shift_started_at) VALUES
+        ('$OP1', '+5355123456', true, now() - interval '10 minutes');
+      $(owned $R1 $OP1 61)
+      $(toggle $OP1 true)
+      SELECT public.support_handoff_tick();
+      SELECT missed_in_a_row FROM public.support_staff WHERE user_id = '$OP1'; $PUSHES")" \
+    "0,0,0;1;1;support-all-missed:$ALL3"
 
 # ── A push that fails ─────────────────────────────────────────
 val "B13 a push that fails keeps the assignment and the handover, and logs alert_failed" \
@@ -577,7 +604,7 @@ else
     SELECT pg_advisory_xact_lock(6790000000001);
     $(signal test_picked)
     DO \$\$ BEGIN FOR i IN 1..600 LOOP EXIT WHEN (SELECT is_called FROM public.test_go); PERFORM pg_sleep(0.05); END LOOP; END \$\$;
-    $(as_user $OP2) SELECT public.ops_set_support_shift(true) ->> 'handed_over'; COMMIT;" > "$O1" &
+    $(as_user $OP2) SELECT public.ops_set_support_shift(true) ->> 'picked_up'; COMMIT;" > "$O1" &
   await "SELECT is_called FROM public.test_picked"
   run $CDB "SET application_name = 'help'; BEGIN; $(as_user $CUS)
     SELECT public.request_ride_help('$R1') ->> 'support_phone'; COMMIT;" > "$O2" &

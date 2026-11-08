@@ -209,9 +209,9 @@ $function$;
 -- format never reaches riders unchecked. A number given while turning off is stored too. Turning on
 -- resets the missed rides. Each change is logged (support_shift_on / support_shift_off).
 -- Turning off hands her open rides over (_support_handoff_rides_of: handed_over, and kept for those
--- with nobody to take them); turning on picks up the rides waiting for someone (_support_pickup_for,
--- counted in handed_over). Both run under the support lock and her row, so they touch ride_assist
--- only with SKIP LOCKED (see section E).
+-- with nobody to take them); turning on picks up the rides waiting for someone (_support_pickup_for:
+-- picked_up). Both run under the support lock and her row, so they touch ride_assist only with SKIP
+-- LOCKED (see section E).
 CREATE OR REPLACE FUNCTION public.ops_set_support_shift(p_on boolean, p_whatsapp text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -226,6 +226,7 @@ DECLARE
   v_res    jsonb;
   v_handed integer := 0;
   v_kept   integer := 0;
+  v_picked integer := 0;
   c_support_lock CONSTANT bigint := 6790000000001;  -- the support lock (see _support_pick_owner)
 BEGIN
   IF v_me IS NULL OR NOT public.is_ops_staff() THEN
@@ -259,7 +260,7 @@ BEGIN
   -- Her open rides pass to someone else on shift when she goes off; the rides waiting for someone
   -- are picked up when she comes on.
   IF p_on THEN
-    v_handed := public._support_pickup_for(v_me);
+    v_picked := public._support_pickup_for(v_me);
   ELSE
     v_res := public._support_handoff_rides_of(v_me);
     v_handed := (v_res ->> 'handed_over')::integer;
@@ -272,11 +273,11 @@ BEGIN
     VALUES (v_me, CASE WHEN p_on THEN 'support_shift_on' ELSE 'support_shift_off' END, 'support_staff', v_me::text,
             jsonb_build_object('on_shift', COALESCE(v_old.on_shift, false), 'whatsapp_phone', v_old.whatsapp_phone),
             jsonb_build_object('on_shift', v_row.on_shift, 'whatsapp_phone', v_row.whatsapp_phone,
-                               'handed_over', v_handed, 'kept', v_kept));
+                               'handed_over', v_handed, 'kept', v_kept, 'picked_up', v_picked));
   END IF;
 
   RETURN jsonb_build_object('success', true, 'on_shift', v_row.on_shift, 'whatsapp_phone', v_row.whatsapp_phone,
-                            'handed_over', v_handed, 'kept', v_kept);
+                            'handed_over', v_handed, 'kept', v_kept, 'picked_up', v_picked);
 END
 $function$;
 
@@ -467,8 +468,10 @@ $function$;
 
 -- When p_user comes on shift: every searching ride already alerted that has no owner, or whose owner
 -- is off shift and never opened it, gets an owner by the assignment rule (her, or someone on shift
--- with fewer open rides), with a push. A ride its owner opened stays hers: she may be on it by
--- WhatsApp. Returns how many were assigned.
+-- with fewer open rides), with a push. So do the rides she kept unopened while she was off (hers,
+-- assigned before this shift started): they get a fresh owner_assigned_at, so the time she was off
+-- never counts as a miss, and they may go back to her. A ride its owner opened stays hers: she may
+-- be on it by WhatsApp. Returns how many were assigned.
 CREATE OR REPLACE FUNCTION public._support_pickup_for(p_user uuid)
  RETURNS integer
  LANGUAGE plpgsql
@@ -477,6 +480,7 @@ CREATE OR REPLACE FUNCTION public._support_pickup_for(p_user uuid)
 AS $function$
 DECLARE
   c_support_lock CONSTANT bigint := 6790000000001;  -- the support lock (see _support_pick_owner)
+  v_started timestamptz;
   v_ids  uuid[];
   v_id   uuid;
   v_ra   public.ride_assist%ROWTYPE;
@@ -487,6 +491,9 @@ BEGIN
   IF NOT public._support_staff_on_shift(p_user) THEN
     RETURN 0;
   END IF;
+  -- When this shift started: a ride of hers assigned before it was kept while she was off. A
+  -- repeated "on" keeps the start, so it never restarts the minute of a ride of this shift.
+  SELECT s.shift_started_at INTO v_started FROM public.support_staff s WHERE s.user_id = p_user;
 
   -- SKIP LOCKED: the caller holds the support lock (section E).
   v_ids := ARRAY(
@@ -496,18 +503,24 @@ BEGIN
     WHERE r.status = 'searching'
       AND (ra.help_alert_sent_at IS NOT NULL OR ra.wait_alert_sent_at IS NOT NULL)
       AND (ra.owner_id IS NULL
-           OR (ra.owner_opened_at IS NULL AND NOT public._support_staff_on_shift(ra.owner_id)))
+           OR (ra.owner_opened_at IS NULL AND NOT public._support_staff_on_shift(ra.owner_id))
+           OR (ra.owner_id = p_user AND ra.owner_opened_at IS NULL
+               AND (ra.owner_assigned_at IS NULL OR ra.owner_assigned_at < v_started)))
     ORDER BY (ra.help_alert_sent_at IS NULL), GREATEST(r.created_at, r.scheduled_at), ra.ride_id
     FOR UPDATE OF ra SKIP LOCKED);
 
   PERFORM pg_advisory_xact_lock(c_support_lock);
   FOREACH v_id IN ARRAY v_ids LOOP
     SELECT * INTO v_ra FROM public.ride_assist WHERE ride_id = v_id;
-    v_new := public._support_pick_owner(v_id, v_ra.owners_tried);
+    -- Her own kept ride may go back to her: she is not excluded for having had it.
+    v_new := public._support_pick_owner(v_id, CASE WHEN v_ra.owner_id = p_user
+                                                   THEN array_remove(v_ra.owners_tried, p_user)
+                                                   ELSE v_ra.owners_tried END);
     IF v_new IS NOT NULL THEN
       UPDATE public.ride_assist
          SET owner_id = v_new, owner_assigned_at = now(), owner_opened_at = NULL,
-             all_missed_alert_at = NULL, owners_tried = owners_tried || v_new
+             all_missed_alert_at = NULL,
+             owners_tried = CASE WHEN v_new = ANY (owners_tried) THEN owners_tried ELSE owners_tried || v_new END
        WHERE ride_id = v_id;
       v_text := public._support_alert_text(v_id, CASE WHEN v_ra.help_alert_sent_at IS NOT NULL THEN 'help' ELSE 'wait' END);
       PERFORM public._support_send('support-owner-alert', ARRAY[v_new], 'Te toca · ' || (v_text ->> 'title'),
