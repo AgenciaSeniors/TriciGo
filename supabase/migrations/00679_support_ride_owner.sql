@@ -22,6 +22,8 @@
 --   _support_alert (patched)    an alert gives the ride an owner on shift and pushes only her; with
 --                               nobody to give it to, it pushes every ops staff account, as before
 --   request_ride_help (patched) also returns support_phone, the number the rider writes to
+--   notify_support_waiting_rides (patched)  the cron's wait alerts go out after every row it writes
+--   _support_ride_open          what an open ride is: searching, or active with its assist page opened
 --   _support_phone_for_ride     the owner's number while she is on shift, else the support contact
 --   _support_send               one support push (the call _support_alert made before)
 --   _support_alert_text         the title and body of a ride's support push
@@ -106,8 +108,24 @@ AS $function$
       AND u.role IN ('admin', 'super_admin', 'operator'));
 $function$;
 
+-- Whether a ride its owner has is open (the spec's "open"): still searching, or active (a driver
+-- took it) with its assist page opened by the owner. A closed ride (completed, canceled, disputed)
+-- never is. The one definition of an open ride: the pick's load, the support contact's order, and
+-- the handover (which rides pass on, and kept) all use it.
+CREATE OR REPLACE FUNCTION public._support_ride_open(p_status public.ride_status, p_owner_opened_at timestamptz)
+ RETURNS boolean
+ LANGUAGE sql
+ IMMUTABLE
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+  SELECT p_status = 'searching'
+      OR (p_status IN ('accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'arrived_at_destination')
+          AND p_owner_opened_at IS NOT NULL);
+$function$;
+
 -- Who gets a ride: among the staff on shift, not in p_exclude and not the ride's rider or driver,
--- the one with the fewest open rides she owns (searching or active), then the one assigned least
+-- the one with the fewest open rides she owns (_support_ride_open), then the one assigned least
 -- recently (never first). Takes her turn: stamps last_assigned_at. NULL when nobody qualifies.
 -- get_support_contact ranks the same way: keep the two ORDER BYs in step.
 --
@@ -147,8 +165,7 @@ BEGIN
   ORDER BY (SELECT count(*) FROM public.ride_assist ra
             JOIN public.rides r ON r.id = ra.ride_id
             WHERE ra.owner_id = s.user_id
-              AND r.status IN ('searching', 'accepted', 'driver_en_route', 'arrived_at_pickup',
-                               'in_progress', 'arrived_at_destination')),
+              AND public._support_ride_open(r.status, ra.owner_opened_at)),
            s.last_assigned_at NULLS FIRST,
            s.user_id
   LIMIT 1;
@@ -182,8 +199,7 @@ BEGIN
   ORDER BY (SELECT count(*) FROM public.ride_assist ra
             JOIN public.rides r ON r.id = ra.ride_id
             WHERE ra.owner_id = s.user_id
-              AND r.status IN ('searching', 'accepted', 'driver_en_route', 'arrived_at_pickup',
-                               'in_progress', 'arrived_at_destination')),
+              AND public._support_ride_open(r.status, ra.owner_opened_at)),
            s.last_assigned_at NULLS FIRST,
            s.user_id
   LIMIT 1;
@@ -314,7 +330,8 @@ $function$;
 -- ── E. Pushes and the rider's number ────────────────────────
 -- Locks in part 2. Alerts (request_ride_help and the cron's wait alert, through _support_alert)
 -- read the ride, hold its ride_assist row, then wait for the support lock in _support_pick_owner:
--- the order rides, ride_assist, support lock, support_staff. The handover and the pickup run inside
+-- the order rides, ride_assist, support lock, support_staff. The cron writes all of its ride_assist
+-- rows before its first alert (section G), so it never waits for a row while it holds the lock. The handover and the pickup run inside
 -- ops_set_support_shift, which already holds the lock and her row, and the tick's off-shift step
 -- holds staff rows: those take ride_assist rows only with FOR UPDATE SKIP LOCKED and never lock
 -- rides, so they never wait for an alert that waits for them. A ride skipped this way stays as it
@@ -410,9 +427,11 @@ END
 $function$;
 
 -- ── F. Handover, pickup and the tick ────────────────────────
--- Her open rides (searching or active) pass to someone else on shift by the assignment rule, never
--- back to someone who had them, each with a push; those nobody can take stay hers. Returns
--- {handed_over, kept}: kept counts every open ride still hers, a ride skipped as locked included.
+-- Her open rides (_support_ride_open: searching, or active and opened) pass to someone else on
+-- shift by the assignment rule, never back to someone who had them, each with a push; those nobody
+-- can take stay hers. An active ride she never opened is not hers to hand over: it stays, uncounted.
+-- Returns {handed_over, kept}: kept counts every open ride still hers, a ride skipped as locked
+-- included.
 CREATE OR REPLACE FUNCTION public._support_handoff_rides_of(p_user uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -424,8 +443,11 @@ DECLARE
   v_ids    uuid[];
   v_id     uuid;
   v_ra     public.ride_assist%ROWTYPE;
+  v_ride   public.rides%ROWTYPE;
   v_new    uuid;
   v_text   jsonb;
+  v_title  text;
+  v_body   text;
   v_handed integer := 0;
   v_kept   integer;
 BEGIN
@@ -435,8 +457,7 @@ BEGIN
     FROM public.ride_assist ra
     JOIN public.rides r ON r.id = ra.ride_id
     WHERE ra.owner_id = p_user
-      AND r.status IN ('searching', 'accepted', 'driver_en_route', 'arrived_at_pickup',
-                       'in_progress', 'arrived_at_destination')
+      AND public._support_ride_open(r.status, ra.owner_opened_at)
     ORDER BY ra.owner_assigned_at NULLS FIRST, ra.ride_id
     FOR UPDATE OF ra SKIP LOCKED);
 
@@ -449,9 +470,17 @@ BEGIN
          SET owner_id = v_new, owner_assigned_at = now(), owner_opened_at = NULL,
              all_missed_alert_at = NULL, owners_tried = owners_tried || v_new
        WHERE ride_id = v_id;
-      v_text := public._support_alert_text(v_id, CASE WHEN v_ra.help_alert_sent_at IS NOT NULL THEN 'help' ELSE 'wait' END);
-      PERFORM public._support_send('support-handoff', ARRAY[v_new], 'Te pasamos un viaje · ' || (v_text ->> 'title'),
-                                   v_text ->> 'body', 'support_handoff', v_id);
+      SELECT * INTO v_ride FROM public.rides WHERE id = v_id;
+      IF v_ride.status = 'searching' THEN
+        v_text := public._support_alert_text(v_id, CASE WHEN v_ra.help_alert_sent_at IS NOT NULL THEN 'help' ELSE 'wait' END);
+        v_title := 'Te pasamos un viaje · ' || (v_text ->> 'title');
+        v_body := v_text ->> 'body';
+      ELSE
+        -- A ride in progress has a driver and no wait to report: its code and its route.
+        v_title := 'Te pasamos un viaje en curso · #' || public._ride_short_code(v_id);
+        v_body := left(COALESCE(v_ride.pickup_address, '—'), 60) || ' → ' || left(COALESCE(v_ride.dropoff_address, '—'), 60);
+      END IF;
+      PERFORM public._support_send('support-handoff', ARRAY[v_new], v_title, v_body, 'support_handoff', v_id);
       v_handed := v_handed + 1;
     END IF;
   END LOOP;
@@ -460,8 +489,7 @@ BEGIN
   FROM public.ride_assist ra
   JOIN public.rides r ON r.id = ra.ride_id
   WHERE ra.owner_id = p_user
-    AND r.status IN ('searching', 'accepted', 'driver_en_route', 'arrived_at_pickup',
-                     'in_progress', 'arrived_at_destination');
+    AND public._support_ride_open(r.status, ra.owner_opened_at);
   RETURN jsonb_build_object('handed_over', v_handed, 'kept', v_kept);
 END
 $function$;
@@ -716,6 +744,38 @@ SELECT pg_temp.m00679_patch('public.request_ride_help(uuid)', '0568a44a41e6b9ef9
         || E'  RETURN jsonb_build_object(''success'', true, ''code'', public._ride_short_code(p_ride_id),\n'
         || E'                            ''support_phone'', public._support_phone_for_ride(p_ride_id));']);
 
+-- notify_support_waiting_rides (the cron's wait alert): the same stamps, digest and pushes, in a new
+-- order. _support_alert now takes the support lock and the run holds it until it commits, so every
+-- ride_assist row the run writes (the wait stamps, the digest's e-mail stamps) is written before
+-- its first alert, and the alerts go last. Before, the run took the lock alerting one ride and then
+-- waited for the next ride's row, which a rider's help request could hold while it waited for the
+-- lock: a deadlock that lost the help alert.
+SELECT pg_temp.m00679_patch('public.notify_support_waiting_rides()', 'c69e1ca717436dad23eada26af46e0ce',
+  'da6c10207da346fdc6f27114f6f125d6',
+  ARRAY[E'  v_wait_ids uuid[] := ''{}'';\n',
+        E'      IF FOUND THEN\n'
+        || E'        PERFORM public._support_alert(v_id, ''wait'');\n'
+        || E'        v_n := v_n + 1;\n'
+        || E'      END IF;',
+        E'  -- The digest, in a block of its own: a failure in it must not take back the pushes above.\n',
+        E'\n  RETURN v_n;\nEND;'],
+  ARRAY[E'  v_wait_ids uuid[] := ''{}'';\n'
+        || E'  v_alert_ids uuid[] := ''{}'';  -- 00679: the rides to alert, once every row is written\n',
+        E'      IF FOUND THEN\n'
+        || E'        v_alert_ids := v_alert_ids || v_id;  -- 00679: alerted at the end (see below)\n'
+        || E'        v_n := v_n + 1;\n'
+        || E'      END IF;',
+        E'  -- The digest, in a block of its own: a failure in it must not take back the wait stamps\n'
+        || E'  -- above nor stop the pushes below.\n',
+        E'\n'
+        || E'  -- 00679: the pushes last. _support_alert takes the support lock and this run holds it until\n'
+        || E'  -- it commits: every ride_assist row the run writes is written by now, so it never waits for\n'
+        || E'  -- a row while it holds the lock (a help request holds its row, then waits for the lock).\n'
+        || E'  FOREACH v_id IN ARRAY v_alert_ids LOOP\n'
+        || E'    PERFORM public._support_alert(v_id, ''wait'');\n'
+        || E'  END LOOP;\n'
+        || E'\n  RETURN v_n;\nEND;']);
+
 -- ── H. The handover tick in pg_cron ─────────────────────────
 -- Every 20 s (pg_cron 1.6.4 takes seconds): a ride passes 60 to 80 s after it was assigned.
 -- cron.schedule updates a job of the same name.
@@ -724,6 +784,7 @@ SELECT cron.schedule('support-handoff-tick', '20 seconds', 'SELECT public.suppor
 -- ── Permissions ─────────────────────────────────────────────
 -- The helpers and the tick (pg_cron runs it as the owner) to nobody.
 REVOKE ALL ON FUNCTION public._support_staff_on_shift(uuid),
+                       public._support_ride_open(public.ride_status, timestamptz),
                        public._support_pick_owner(uuid, uuid[]),
                        public._support_alert_text(uuid, text),
                        public._support_send(text, uuid[], text, text, text, uuid),
@@ -755,7 +816,7 @@ BEGIN
     'public.ops_support_shift_status()', 'public._support_alert_text(uuid,text)',
     'public._support_send(text,uuid[],text,text,text,uuid)', 'public._support_phone_for_ride(uuid)',
     'public._support_handoff_rides_of(uuid)', 'public._support_pickup_for(uuid)',
-    'public.support_handoff_tick()'
+    'public.support_handoff_tick()', 'public._support_ride_open(public.ride_status,timestamptz)'
   ]::regprocedure[] LOOP
     SELECT pg_get_functiondef(v_fn) INTO v_def;
     IF position(chr(13) IN v_def) > 0 THEN
@@ -791,7 +852,8 @@ BEGIN
       'public.ops_support_shift_status()', 'public._support_alert_text(uuid,text)',
       'public._support_send(text,uuid[],text,text,text,uuid)', 'public._support_phone_for_ride(uuid)',
       'public._support_handoff_rides_of(uuid)', 'public._support_pickup_for(uuid)',
-      'public.support_handoff_tick()', 'public._support_alert(uuid,text)', 'public.request_ride_help(uuid)'
+      'public.support_handoff_tick()', 'public._support_alert(uuid,text)', 'public.request_ride_help(uuid)',
+      'public.notify_support_waiting_rides()', 'public._support_ride_open(public.ride_status,timestamptz)'
     ]::regprocedure[])
   LOOP
     IF NOT v_row.prosecdef OR v_row.proconfig IS DISTINCT FROM ARRAY['search_path=public, pg_catalog'] THEN
@@ -805,7 +867,8 @@ BEGIN
       'public._support_staff_on_shift(uuid)', 'public._support_pick_owner(uuid,uuid[])',
       'public._support_alert_text(uuid,text)', 'public._support_send(text,uuid[],text,text,text,uuid)',
       'public._support_phone_for_ride(uuid)', 'public._support_handoff_rides_of(uuid)',
-      'public._support_pickup_for(uuid)', 'public.support_handoff_tick()'
+      'public._support_pickup_for(uuid)', 'public.support_handoff_tick()',
+      'public._support_ride_open(public.ride_status,timestamptz)'
     ]::regprocedure[]) AS f(fn)
   LOOP
     IF has_function_privilege('anon', v_row.fn, 'EXECUTE')
@@ -815,13 +878,14 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- The two patched bodies: the 00679 ones, with prod's grants (the alert closed to clients, the
-  -- help button open to signed-in riders).
+  -- The three patched bodies: the 00679 ones, with prod's grants (the alert and the cron closed to
+  -- clients, the help button open to signed-in riders).
   FOR v_row IN
     SELECT f.fn, f.want, md5(p.prosrc) AS got
     FROM (VALUES
       ('public._support_alert(uuid,text)'::regprocedure, '2e0ae1a5219e5e3ec8772124f1b50767'),
-      ('public.request_ride_help(uuid)', '2b9faf1390909d63ae02696105d78090')
+      ('public.request_ride_help(uuid)', '2b9faf1390909d63ae02696105d78090'),
+      ('public.notify_support_waiting_rides()', 'da6c10207da346fdc6f27114f6f125d6')
     ) AS f(fn, want)
     JOIN pg_proc p ON p.oid = f.fn
   LOOP
@@ -831,6 +895,8 @@ BEGIN
   END LOOP;
   IF has_function_privilege('anon', 'public._support_alert(uuid,text)', 'EXECUTE')
      OR has_function_privilege('authenticated', 'public._support_alert(uuid,text)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.notify_support_waiting_rides()', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.notify_support_waiting_rides()', 'EXECUTE')
      OR has_function_privilege('anon', 'public.request_ride_help(uuid)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.request_ride_help(uuid)', 'EXECUTE') THEN
     RAISE EXCEPTION '00679 check: the patched functions have the wrong grants';

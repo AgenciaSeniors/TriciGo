@@ -79,8 +79,8 @@ CREATED_LIST="'_support_staff_on_shift','_support_pick_owner','get_support_conta
   'ops_support_shift_status'"
 # Part 2: the functions it creates, and the live bodies it patches.
 CREATED2_LIST="'_support_alert_text','_support_send','_support_phone_for_ride','_support_handoff_rides_of',
-  '_support_pickup_for','support_handoff_tick'"
-PATCHED_LIST="'_support_alert','request_ride_help'"
+  '_support_pickup_for','support_handoff_tick','_support_ride_open'"
+PATCHED_LIST="'_support_alert','request_ride_help','notify_support_waiting_rides'"
 BODIES="SELECT string_agg(p.proname || '=' || md5(p.prosrc), ',' ORDER BY p.proname) FROM pg_proc p
   WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ($CREATED_LIST, $CREATED2_LIST, $PATCHED_LIST)"
 OTHERS="SELECT md5(string_agg(p.oid::regprocedure::text || md5(p.prosrc) || coalesce(p.proacl::text, ''), ',' ORDER BY p.oid::regprocedure::text))
@@ -92,13 +92,28 @@ HELPERS="SELECT string_agg(p.proname || '=' || md5(p.prosrc), ',' ORDER BY p.pro
   '_html_escape', 'get_platform_config_text', '_support_alert', 'request_ride_help', 'notify_support_waiting_rides')"
 # md5 of prosrc in prod on 2026-11-07.
 PROD_HELPERS="_html_escape=11824274e20a4bc4e469ca12e4dc7c10,_ride_short_code=7dae14319bfae57a2ac8b4317e928513,_ride_type_label=6334b65ed6bc08e91f9d4cfdee97976e,_support_alert=992c2ce11b664d72e437a683170abb97,current_user_role=cb4a7c12d4e21fe2997135833f141e25,get_platform_config_numeric=13d2587037eca74854cf2394ba42a90c,get_platform_config_text=407a7b835c527164a4aa8b3aa8525ba5,is_admin=22cb75e91980d512498034cd33e1eda2,is_operator=16438eb527af61eaa2d0b3d9a53f08f9,is_ops_staff=d6774e4677be1072e66b247492e9cb9a,log_rpc_attempt=0a902c34a1148dac5686403a7c941bc0,notify_support_waiting_rides=c69e1ca717436dad23eada26af46e0ce,request_ride_help=0568a44a41e6b9ef925ae1b2b2799cb1"
-# md5 of prosrc of the two bodies 00679 patches, after the patch.
-PATCHED_MD5="_support_alert=2e0ae1a5219e5e3ec8772124f1b50767,request_ride_help=2b9faf1390909d63ae02696105d78090"
+# md5 of prosrc of the three bodies 00679 patches, after the patch.
+PATCHED_MD5="_support_alert=2e0ae1a5219e5e3ec8772124f1b50767,notify_support_waiting_rides=da6c10207da346fdc6f27114f6f125d6,request_ride_help=2b9faf1390909d63ae02696105d78090"
+# The cron with nobody on shift: R1, R2 and R4 wait (R3 already asked for help), and the digest goes
+# to two addresses. Its return value, every push and e-mail (label and md5 of the body) and the
+# stamps it leaves. B19 compares the result after 00679 with the result before it.
+CRON_CASE="$(tx "INSERT INTO public.platform_config (key, value)
+    VALUES ('support_alert_email', '\"ops@tricigo.com, soporte@tricigo.com\"'::jsonb);
+  UPDATE public.rides SET created_at = now() - CASE id WHEN '$R1' THEN interval '4 minutes'
+    WHEN '$R2' THEN interval '3 minutes' ELSE interval '2 minutes' END;
+  INSERT INTO public.ride_assist (ride_id, help_requested_at, help_alert_sent_at) VALUES ('$R3', now(), now());
+  SELECT public.notify_support_waiting_rides();
+  SELECT string_agg(label || ':' || md5(body::text), ',' ORDER BY label, md5(body::text)) FROM public.test_pushes;
+  SELECT string_agg(right(ride_id::text, 1) || ':' || (wait_alert_sent_at IS NOT DISTINCT FROM now())
+                    || (help_email_sent_at IS NOT DISTINCT FROM now()) || (wait_email_sent_at IS NOT DISTINCT FROM now()),
+                    ',' ORDER BY ride_id)
+    FROM public.ride_assist;")"
 
 mkdb $DB
 run $DB "$SEED" >/dev/null
 val "F0 the scaffold has prod's bodies (the helpers, the two 00679 patches, the wait-alert cron)" "$HELPERS" "$PROD_HELPERS"
 OTHERS_BEFORE=$(run $DB "$OTHERS")
+CRON_BEFORE=$(run $DB "$CRON_CASE")
 
 if [ "$MIG" != none ]; then
   r=$(apply $DB "$FILE"); [ "$r" = applied ] && ok "M1 00679 applies (1st)" || ko "M1 00679 applies (1st)" "$r"
@@ -108,7 +123,7 @@ if [ "$MIG" != none ]; then
       "SELECT value FROM public.platform_config WHERE key = 'support_handoff_after_s';
        UPDATE public.platform_config SET value = '60'::jsonb WHERE key = 'support_handoff_after_s';" "90"
   val "M4 no other function changed" "$OTHERS" "$OTHERS_BEFORE"
-  val "M5 the two patched bodies carry their 00679 md5" \
+  val "M5 the three patched bodies carry their 00679 md5" \
       "SELECT string_agg(p.proname || '=' || md5(p.prosrc), ',' ORDER BY p.proname) FROM pg_proc p
         WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ($PATCHED_LIST)" "$PATCHED_MD5"
 fi
@@ -311,7 +326,13 @@ val "B0 part 2's functions: SECURITY DEFINER with search_path; helpers and tick 
               || ':' || p.prosecdef || ':' || array_to_string(p.proconfig, ' ')
        FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ($CREATED2_LIST, $PATCHED_LIST)
       ORDER BY p.proname" \
-    "_support_alert:001:true:search_path=public, pg_catalog;_support_alert_text:000:true:search_path=public, pg_catalog;_support_handoff_rides_of:000:true:search_path=public, pg_catalog;_support_phone_for_ride:000:true:search_path=public, pg_catalog;_support_pickup_for:000:true:search_path=public, pg_catalog;_support_send:000:true:search_path=public, pg_catalog;request_ride_help:011:true:search_path=public, pg_catalog;support_handoff_tick:000:true:search_path=public, pg_catalog"
+    "_support_alert:001:true:search_path=public, pg_catalog;_support_alert_text:000:true:search_path=public, pg_catalog;_support_handoff_rides_of:000:true:search_path=public, pg_catalog;_support_phone_for_ride:000:true:search_path=public, pg_catalog;_support_pickup_for:000:true:search_path=public, pg_catalog;_support_ride_open:000:true:search_path=public, pg_catalog;_support_send:000:true:search_path=public, pg_catalog;notify_support_waiting_rides:001:true:search_path=public, pg_catalog;request_ride_help:011:true:search_path=public, pg_catalog;support_handoff_tick:000:true:search_path=public, pg_catalog"
+case "$CRON_BEFORE" in
+  "3;support-alert-email:"*) val "B19 the cron's pushes, digest e-mails and stamps are the same as before 00679 (nobody on shift)" \
+                                 "$CRON_CASE" "$CRON_BEFORE" ;;
+  *) ko "B19 the cron's pushes, digest e-mails and stamps are the same as before 00679 (nobody on shift)" \
+        "the run before 00679 gave [$CRON_BEFORE]" ;;
+esac
 
 # ── Who an alert goes to ──────────────────────────────────────
 val "B1 one operator on shift: the alert makes her the owner and pushes only her (Te toca)" \
@@ -440,6 +461,39 @@ val "B11 going off with open rides: they pass to the other one on shift (a push 
         ('$OP2', '+5355123457', true, now());
       $(owned $R1 $OP2 10) $(toggle $OP2 false) $(owner $R1) $PUSHES")" \
     "2,0,0;Melanye;Melanye;true;support-handoff:Melanye,support-handoff:Melanye;2,0;0,1,0;Melanye;none"
+# Ruling 11. R1 in progress and opened by OP1; R2 accepted, never opened; R3 completed and R4
+# canceled (both opened). Only R1 is open: it passes on with the push of a ride in progress, R2 stays
+# hers without counting, R3 and R4 never count.
+val "B11b going off: an active ride she opened passes on (en curso push); one never opened stays, uncounted; closed never count" \
+    "$(tx "$ON_BOTH $(owned $R1 $OP1 10) $(owned $R2 $OP1 10) $(owned $R3 $OP1 10) $(owned $R4 $OP1 10)
+      UPDATE public.rides SET status = (CASE id WHEN '$R1' THEN 'in_progress' WHEN '$R2' THEN 'accepted'
+        WHEN '$R3' THEN 'completed' ELSE 'canceled' END)::public.ride_status;
+      UPDATE public.ride_assist SET owner_opened_at = now() WHERE ride_id IN ('$R1', '$R3', '$R4');
+      $(toggle $OP1 false)
+      $(owner $R1) $(owner $R2) $(owner $R3) $(owner $R4) $PUSHES $TITLES
+      SELECT body ->> 'body' FROM public.test_pushes;")
+     $(tx "INSERT INTO public.support_staff (user_id, whatsapp_phone, on_shift, shift_started_at) VALUES
+        ('$OP2', '+5355123457', true, now());
+      $(owned $R1 $OP2 10) $(owned $R2 $OP2 10) $(owned $R3 $OP2 10)
+      UPDATE public.rides SET status = (CASE id WHEN '$R1' THEN 'in_progress' WHEN '$R2' THEN 'accepted'
+        ELSE 'completed' END)::public.ride_status WHERE id IN ('$R1', '$R2', '$R3');
+      UPDATE public.ride_assist SET owner_opened_at = now() WHERE ride_id IN ('$R1', '$R3');
+      $(toggle $OP2 false) $PUSHES")" \
+    "1,0,0;Melanye;Lete;Lete;Lete;support-handoff:Melanye;Te pasamos un viaje en curso · #B6790000;Calle 23 entre L y M, Vedado → Obispo 104, Habana Vieja;0,1,0;none"
+# OP1 owns R1 accepted and never opened, R3 completed and R4 canceled (both opened): none is open, so
+# OP1 and OP2 tie and OP1 (first id) is picked and given out. Once she opens R1 it weighs: OP2.
+val "B18 open rides weigh in the pick and the contact: searching, or active and opened; never closed ones" \
+    "$(tx "$ON_BOTH $(owned $R1 $OP1 10) $(owned $R3 $OP1 10) $(owned $R4 $OP1 10)
+      UPDATE public.rides SET status = (CASE id WHEN '$R1' THEN 'accepted' WHEN '$R3' THEN 'completed'
+        ELSE 'canceled' END)::public.ride_status WHERE id IN ('$R1', '$R3', '$R4');
+      UPDATE public.ride_assist SET owner_opened_at = now() WHERE ride_id IN ('$R3', '$R4');
+      $(anon_call "public.get_support_contact() ->> 'phone'")
+      $(pick $R2 "'{}'")
+      UPDATE public.support_staff SET last_assigned_at = NULL;
+      UPDATE public.ride_assist SET owner_opened_at = now() WHERE ride_id = '$R1';
+      $(anon_call "public.get_support_contact() ->> 'phone'")
+      $(pick $R2 "'{}'")")" \
+    "+5355123456;Lete;+5355123457;Melanye"
 # R4 alerted with no owner; R1 owned by OP1 (off) never opened; R2 owned by OP1 (off) and opened;
 # R3 asked for help but its alert was capped (not alerted).
 val "B12 coming on shift picks up the alerted rides with no owner, or an off-shift owner who never opened them" \
@@ -570,6 +624,7 @@ conc_db "$ON_BOTH $(owned $R1 $OP1 10) $(owned $R2 $OP1 10) $(owned $R3 $OP2 61)
 if [ "$(run $CDB "SELECT to_regprocedure('public.support_handoff_tick()') IS NOT NULL")" != t ]; then
   ko "$B14" "no support_handoff_tick"
   ko "B14b a help request and an operator coming on at once: no deadlock" "no support_handoff_tick"
+  ko "B14c the cron's wait alerts and a help request on one of those rides at once: no deadlock" "no support_handoff_tick"
 else
   : > "$O1"
   run $CDB "SET application_name = 'holder'; BEGIN;
@@ -615,6 +670,34 @@ else
   r="$r|owner:$(run $CDB "$(owner $R1)")|pushes:$(run $CDB "$PUSHES")|errors:$(cat "$O1" "$O2" | grep -o ERROR | wc -l | tr -d ' ')"
   want="on:0|help:+5355123457|help waited:yes|owner:Melanye|pushes:support-owner-alert:Melanye|errors:0"
   [ "$r" = "$want" ] && ok "$B14b" || ko "$B14b" "expected [$want], got [$r] $(cat "$O1" "$O2" | paste -sd' ' -)"
+
+  # B14c (Ruling 10): the cron alerts R1 and R2 (both waiting, OP1 on shift) while R2's rider taps
+  # help. A session holds the support lock so the steps line up: the cron starts and waits for the
+  # lock, then the help request starts and waits too; then the lock is let go. Before the fix the
+  # cron took the lock alerting R1 and then waited for R2's row, which the help request held while it
+  # waited for the lock: 40P01, and a lost alert. Now the cron writes every row before its first
+  # alert, so the help request waits for the cron's commit and then sends its push.
+  B14c="B14c the cron's wait alerts and a help request on one of those rides at once: no deadlock; the help push is sent"
+  conc_db "$ON1
+    UPDATE public.rides SET created_at = now() - CASE id WHEN '$R1' THEN interval '3 minutes' ELSE interval '2 minutes' END;
+    UPDATE public.rides SET status = 'completed' WHERE id IN ('$R3', '$R4');"
+  : > "$O1"; : > "$O2"; : > "$O3"
+  run $CDB "SET application_name = 'lock'; BEGIN; SELECT pg_advisory_xact_lock(6790000000001);
+    $(signal test_picked)
+    DO \$\$ BEGIN FOR i IN 1..600 LOOP EXIT WHEN (SELECT is_called FROM public.test_go); PERFORM pg_sleep(0.05); END LOOP; END \$\$;
+    COMMIT;" > "$O1" &
+  await "SELECT is_called FROM public.test_picked"
+  run $CDB "SET application_name = 'cron'; SELECT public.notify_support_waiting_rides();" > "$O2" &
+  await "$(waiting cron)"; wcron=$?
+  run $CDB "SET application_name = 'help'; BEGIN; $(as_user $CUS)
+    SELECT public.request_ride_help('$R2') ->> 'support_phone'; COMMIT;" > "$O3" &
+  await "$(waiting help)"; whelp=$?
+  run $CDB "SELECT setval('public.test_go', 1)" >/dev/null
+  wait
+  r="cron:$(grep -v -e ERROR -e WARNING "$O2" | paste -sd' ' -)|help:$(grep -v -e ERROR -e WARNING "$O3" | paste -sd' ' -)"
+  r="$r|waited:$wcron$whelp|titles:$(run $CDB "$TITLES")|errors:$(cat "$O1" "$O2" "$O3" | grep -c -e ERROR -e 40P01)"
+  want="cron:2|help:+5355123456|waited:00|titles:Te toca · $TITLE_WAIT,Te toca · $TITLE_WAIT,Te toca · $TITLE_HELP|errors:0"
+  [ "$r" = "$want" ] && ok "$B14c" || ko "$B14c" "expected [$want], got [$r] $(cat "$O1" "$O2" "$O3" | paste -sd' ' -)"
 fi
 rm -f "$O1" "$O2" "$O3" "$O4"
 dropdb $CDB
