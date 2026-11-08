@@ -38,9 +38,10 @@ A marketing video with an influencer who rides a sports motorbike got very good 
 ### Data (migration 00679)
 
 1. `service_type_configs` row `moto_deportiva`, `is_active = false`, `max_passengers = 1`, premium USD prices (open item), plus its `pricing_rules` rows for the 4 bands, then `recompute_cup_from_usd_prices()`.
-2. `moto_deportiva_pilots (driver_profile_id uuid PK → driver_profiles, added_by, created_at)`. RLS on, readable and writable by admins only, explicit GRANTs (`service_role` always, per the GRANT rule).
-3. `moto_deportiva_waitlist (user_id uuid PK → users ON DELETE CASCADE, created_at, notified_at)`. RLS: a user reads, inserts and deletes their own row. One row per person; after the push it stays, and `notified_at` is reset when the person taps "Avísame" again. Must be added to the account-deletion checks if any FK is not CASCADE.
-4. The switch is `service_type_configs.is_active` of `moto_deportiva`. Changed only through `admin_set_moto_deportiva(p_active boolean)` (SECURITY DEFINER, `is_super_admin()`, one `admin_actions` row per change). A direct UPDATE by a client is already blocked by RLS on that table (verify).
+2. `moto_deportiva_pilots (driver_profile_id uuid PK → driver_profiles ON DELETE CASCADE, added_by, created_at)`. Lock table: RLS on, no policies, GRANT to `service_role` only. Super admins add a pilot by phone (`admin_add_moto_deportiva_pilot`, an approved driver with an active moto) and remove one (`admin_remove_moto_deportiva_pilot`); `admin_moto_deportiva_overview()` lists them.
+3. `moto_deportiva_waitlist (user_id uuid PK → users ON DELETE CASCADE, created_at, notified_at)`. Lock table too; a user joins or leaves with `set_moto_deportiva_waitlist(p_join)`. Joining again resets `notified_at`. Both FKs cascade, so account deletion needs no change.
+4. The switch is `service_type_configs.is_active` of `moto_deportiva`. The panel changes it through `admin_set_moto_deportiva(p_active boolean)` (SECURITY DEFINER, `is_super_admin()`, one `admin_actions` row per change). RLS already limits UPDATE of that table to super admins (`stc_super_admin_update`).
+5. **Placeholder prices:** the migration copies the moto_standard config and its 4 bands with every USD column × 1.5, then runs `recompute_cup_from_usd_prices()`. When the team decides, a later migration writes the real USD values.
 
 ### Dispatch
 
@@ -57,7 +58,7 @@ A marketing video with an influencer who rides a sports motorbike got very good 
 | `hidden` | switch off and `moto_deportiva_show_when_off = false` | no card at all |
 | `off` | switch off and `moto_deportiva_show_when_off = true` | greyed out, "No disponible ahora", button "Avísame" / "Te avisaremos" |
 | `offline` | switch on, no pilot online | "No disponible ahora" (cannot request) |
-| `busy` | switch on, every online pilot has an active ride | "Ocupada · en un viaje" (cannot request) |
+| `busy` | switch on, every online pilot has an active ride or is on a break, or a Moto Deportiva request is already searching (created in the last 150 s) | "Ocupada · en un viaje" (cannot request) |
 | `available` | switch on, at least one pilot online and free | normal card, can request |
 
 It never returns positions or ids. The client refreshes it on focus (`useRefreshOnFocus`) and every 30 s while the service selector is open.
@@ -66,11 +67,11 @@ A ride request for `moto_deportiva` when the status is not `available` is reject
 
 ### "Avísame" push
 
-`admin_set_moto_deportiva(true)` sends, through `cron_http_post` to `send-push` (label `moto-deportiva-waitlist`, category `promo`), one push to every waitlist row with `notified_at IS NULL`, then sets `notified_at`. Text: "¡La Moto Deportiva está activa! Pídela ahora." A failure never blocks the switch; it is logged in `rpc_attempt_log`.
+Switching it on (an AFTER UPDATE trigger on `service_type_configs`, so it also fires when the switch is flipped from another screen) sends, in batches of 300 ids, through `cron_http_post` to `send-push` (label `moto-deportiva-waitlist`, category `promo`), one push to every waitlist row with `notified_at IS NULL`, then sets `notified_at`. Text: "¡La Moto Deportiva está activa! Pídela ahora." A failure never blocks the switch; it is logged in `rpc_attempt_log`.
 
 ### Fallback to regular moto (client + web)
 
-After 120 s searching with no driver on a `moto_deportiva` ride, the search screen shows "La Moto Deportiva no respondió. ¿Cambiar a Moto?" with the regular moto price. The tap calls `switch_my_ride_to_moto(p_ride_id)` (SECURITY DEFINER, `authenticated`): only the ride's customer, only while `searching`, only from `moto_deportiva` to `moto_standard`; it reuses `_apply_ride_service_change`, so the price, snapshot and offers are recomputed on the server. The passenger can also cancel, as today.
+After 120 s searching with no driver on a `moto_deportiva` ride, the search screen shows "La Moto Deportiva no respondió" with a "Cambiar a Moto" button. The tap cancels the ride (free while searching: no reputation event) and returns to the selection screen with the same addresses and Moto selected; the app estimates the moto price and the rider confirms it. Rejected: a server RPC that changes the ride's type in place, because the server has no fare calculator and would have to trust a fare sent by the client.
 
 ### Apps
 
@@ -80,9 +81,11 @@ After 120 s searching with no driver on a `moto_deportiva` ride, the search scre
 
 ## Testing
 
-- Migration rehearsal in `supabase/tests/00679/run.sh` (RED without the migration, GREEN applied twice, CRLF copy, negative tests of every self-check): a `moto_deportiva` ride is offered only to pilots; regular moto drivers never get it; a pilot gets no regular offers while it is on and does again when it is off; status values; insert rejected when not available; `switch_my_ride_to_moto` rules; only super admins can switch; waitlist push enqueued once.
+- Migration rehearsal in `supabase/tests/00679/run.sh` (RED without the migration, GREEN applied twice, CRLF copy, negative tests of every self-check): a `moto_deportiva` ride is offered only to pilots; regular moto drivers never get it; a pilot gets no regular offers while it is on and does again when it is off; status values; insert rejected when not available; only super admins can switch; waitlist push enqueued once.
 - A rehearsal in prod inside a rolled-back block before applying, with the demo accounts.
 - vitest for the status → card mapping and the 120 s fallback timer; `pnpm check-types`.
+
+Implementation plan: `docs/superpowers/plans/2026-11-08-moto-deportiva.md`.
 
 ## Open items (block the launch, not the build)
 
