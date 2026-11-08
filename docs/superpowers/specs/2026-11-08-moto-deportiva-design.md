@@ -21,7 +21,8 @@ A marketing video with an influencer who rides a sports motorbike got very good 
 - **No answer in 2 minutes:** the passenger is offered to switch the same request to a regular moto with one tap.
 - **"Avísame":** opt-in. With the service off, the card is shown greyed out with an "Avísame" button; when a super admin switches it on, only those people get a push. No broadcast to everyone (one pilot cannot serve hundreds of requests at once).
 - **Web parity:** tricigo.com/book gets the same option, states and fallback.
-- **Image:** a picture of the bike for the selection card, like the other vehicles. Until the team sends it, the moto image is used.
+- **Visibility while off:** not decided yet by the team (always shown greyed out with "Avísame", or hidden until it is switched on). Built as a server setting, `platform_config.moto_deportiva_show_when_off` (default `true`), so the team can choose and change it without a release.
+- **Image:** an illustration in the same style and colours as the current selection images (`apps/client/assets/vehicles/selection/*.png`, `apps/web/public/images/vehicles/*.png`), showing a generic sports bike in the Yamaha / Honda / Ducati style. No brand, logo or model name on it.
 
 ## Current behaviour this builds on (verified 2026-11-08)
 
@@ -53,7 +54,8 @@ A marketing video with an influencer who rides a sports motorbike got very good 
 
 | Value | When | Card shows |
 |---|---|---|
-| `off` | switch off | greyed out, "No disponible ahora", button "Avísame" / "Te avisaremos" |
+| `hidden` | switch off and `moto_deportiva_show_when_off = false` | no card at all |
+| `off` | switch off and `moto_deportiva_show_when_off = true` | greyed out, "No disponible ahora", button "Avísame" / "Te avisaremos" |
 | `offline` | switch on, no pilot online | "No disponible ahora" (cannot request) |
 | `busy` | switch on, every online pilot has an active ride | "Ocupada · en un viaje" (cannot request) |
 | `available` | switch on, at least one pilot online and free | normal card, can request |
@@ -86,7 +88,7 @@ After 120 s searching with no driver on a `moto_deportiva` ride, the search scre
 
 1. **Price** (team): base, per km, per minute and minimum in USD for the 4 bands. Until then the migration carries placeholder values and the switch stays off.
 2. **Marketing metrics** (team): which numbers they want (views of the card, "Avísame" taps, requests, completed rides). Not in this design until decided.
-3. **Bike image** for the selection card (team).
+3. **Visibility while off** (team): set `moto_deportiva_show_when_off` before the launch.
 4. **Pilot account:** the influencer must have an approved driver account with his bike registered as a moto.
 
 ## Rejected
