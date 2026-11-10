@@ -236,7 +236,7 @@ DECLARE
 BEGIN
   IF auth.uid() IS NOT NULL THEN
     v_waiting := EXISTS (SELECT 1 FROM public.moto_deportiva_waitlist
-                          WHERE user_id = auth.uid() AND notified_at IS NULL);
+                          WHERE user_id = auth.uid());
   END IF;
 
   IF NOT public._moto_deportiva_is_on() THEN
@@ -323,7 +323,8 @@ BEGIN
     RETURN NEW;
   END IF;
   BEGIN
-    SELECT array_agg(user_id) INTO v_ids FROM public.moto_deportiva_waitlist WHERE notified_at IS NULL;
+    -- Permanent subscription: everybody on the list, every time (decided 2026-11-09).
+    SELECT array_agg(user_id) INTO v_ids FROM public.moto_deportiva_waitlist;
     IF v_ids IS NULL THEN RETURN NEW; END IF;
     v_key := public.get_service_role_key();
     IF COALESCE(v_key, '') = '' THEN RAISE EXCEPTION 'moto_deportiva_no_service_key'; END IF;
@@ -342,7 +343,7 @@ BEGIN
         timeout_milliseconds := 30000);
     END LOOP;
     UPDATE public.moto_deportiva_waitlist SET notified_at = now()
-     WHERE notified_at IS NULL AND user_id = ANY (v_ids);
+     WHERE user_id = ANY (v_ids);
     INSERT INTO public.platform_config (key, value)
     VALUES ('moto_deportiva_last_waitlist_push_at', to_jsonb(now()))
     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
@@ -367,7 +368,7 @@ BEGIN
   IF auth.uid() IS NULL THEN RETURN jsonb_build_object('error', 'unauthenticated'); END IF;
   IF p_join THEN
     INSERT INTO public.moto_deportiva_waitlist (user_id) VALUES (auth.uid())
-    ON CONFLICT (user_id) DO UPDATE SET notified_at = NULL, created_at = now();
+    ON CONFLICT (user_id) DO NOTHING;
   ELSE
     DELETE FROM public.moto_deportiva_waitlist WHERE user_id = auth.uid();
   END IF;
@@ -386,7 +387,7 @@ BEGIN
   RETURN jsonb_build_object(
     'active', public._moto_deportiva_is_on(),
     'status', public.get_moto_deportiva_status() ->> 'status',
-    'waitlist_pending', (SELECT count(*) FROM public.moto_deportiva_waitlist WHERE notified_at IS NULL),
+    'waitlist_count', (SELECT count(*) FROM public.moto_deportiva_waitlist),
     'pilots', COALESCE((
       SELECT jsonb_agg(jsonb_build_object(
                'driver_profile_id', dp.id, 'full_name', u.full_name,
@@ -520,9 +521,9 @@ The 00650 scaffold already has `driver_profiles`, `vehicles`, `find_best_drivers
 | T10 | client INSERT of a `moto_deportiva` ride when `busy` (as `authenticated`) | error DETAIL `moto_deportiva_unavailable` |
 | T11 | same INSERT when `available` | ride created |
 | T12 | INSERT as owner (no client role) when `off` | ride created (server writes are not blocked) |
-| T13 | RIDER joins waitlist, SUPER switches on | one `net.http_post` row with RIDER in `user_ids`, `notified_at` set |
-| T14 | switch off and on again without re-joining | no second push |
-| T14b | RIDER re-joins, switch off and on within 3 h | no push (cooldown); after setting `moto_deportiva_last_waitlist_push_at` 4 h back, the push goes out |
+| T13 | RIDER joins waitlist, SUPER switches on | one `net.http_post` row with RIDER in `user_ids`, `notified_at` set, RIDER still on the list (`waiting` true) |
+| T14 | switch off, move `moto_deportiva_last_waitlist_push_at` 4 h back, switch on again without re-joining | a second push to RIDER (permanent subscription) |
+| T14b | switch off and on again within 3 h | no push (cooldown); after setting `moto_deportiva_last_waitlist_push_at` 4 h back, the push goes out |
 | T15 | RIDER calls `admin_set_moto_deportiva(true)` | `{"error":"forbidden"}`, `is_active` unchanged, no `admin_actions` row |
 | T16 | SUPER adds PILOT by phone; adds TRIKE by phone | success / `not_an_approved_moto_driver` |
 | T17 | `notify_offline_drivers_for_searching_rides()` with a searching `moto_deportiva` ride and PILOT offline | no push for the deportiva group |
@@ -696,7 +697,7 @@ import { AppError } from '../errors';
 import { parseMotoDeportivaStatus, type MotoDeportivaStatus } from '@tricigo/utils';
 
 export interface MotoDeportivaPilot { driver_profile_id: string; full_name: string | null; is_online: boolean; status: string }
-export interface MotoDeportivaOverview { active: boolean; status: string; waitlist_pending: number; pilots: MotoDeportivaPilot[] }
+export interface MotoDeportivaOverview { active: boolean; status: string; waitlist_count: number; pilots: MotoDeportivaPilot[] }
 
 function rpcResult<T>(data: unknown, error: { message: string } | null): T {
   if (error) throw new AppError(error.message, 'MOTO_DEPORTIVA_FAILED', 500);
@@ -847,7 +848,7 @@ Render, when `offerMotoFallback`, a card above the cancel button: `t('moto_depor
 - [ ] **Step 1: Access test first.** In `adminPanelAccess.test.ts` add: `/moto-deportiva` allowed for `super_admin`, denied for `admin`, `operator`, `marketing`. Run → FAIL. Change `SUPER_ADMIN_ROUTES` to `['/equipo', '/moto-deportiva']`. Run → PASS.
 - [ ] **Step 2: Page** (client component, same layout primitives as `apps/admin/src/app/equipo/page.tsx`): loads `motoDeportivaService.overview()`; shows
   - a large switch "Moto Deportiva activa / apagada" with the current `status` ("Disponible", "Ocupada", "Piloto desconectado", "Apagada"); toggling asks for confirmation, calls `setActive`, reloads;
-  - "Personas esperando el aviso: N" (`waitlist_pending`);
+  - "Personas suscritas al aviso: N" (`waitlist_count`);
   - pilots table (name, online, status) with "Quitar" (`removePilot`), and an input "Teléfono del piloto" + "Agregar" (`addPilot`), mapping errors `phone_not_found` → "No hay ninguna cuenta con ese teléfono confirmado", `not_an_approved_moto_driver` → "Esa cuenta no es un conductor aprobado con moto".
 - [ ] **Step 3:** Sidebar entry "Moto Deportiva" in the super-admin group next to "Equipo". `rideType.ts`: `moto_deportiva: { key: 'rides.type_moto_deportiva', fallback: 'Moto Deportiva' }`.
 - [ ] **Step 4:** `check-types` + `corepack pnpm@9.15.4 --filter @tricigo/utils test` green. Open the page in the browser pane as a super admin and toggle on/off once with no pilots listed (no rider can request it: status `offline`). Commit `feat(admin): add Moto Deportiva page`.

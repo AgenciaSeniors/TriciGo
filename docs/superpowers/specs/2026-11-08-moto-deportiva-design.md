@@ -39,7 +39,7 @@ A marketing video with an influencer who rides a sports motorbike got very good 
 
 1. `service_type_configs` row `moto_deportiva`, `is_active = false`, `max_passengers = 1`, premium USD prices (open item), plus its `pricing_rules` rows for the 4 bands, then `recompute_cup_from_usd_prices()`.
 2. `moto_deportiva_pilots (driver_profile_id uuid PK → driver_profiles ON DELETE CASCADE, added_by, created_at)`. Lock table: RLS on, no policies, GRANT to `service_role` only. Super admins add a pilot by phone (`admin_add_moto_deportiva_pilot`, an approved driver with an active moto) and remove one (`admin_remove_moto_deportiva_pilot`); `admin_moto_deportiva_overview()` lists them.
-3. `moto_deportiva_waitlist (user_id uuid PK → users ON DELETE CASCADE, created_at, notified_at)`. Lock table too; a user joins or leaves with `set_moto_deportiva_waitlist(p_join)`. Joining again resets `notified_at`. Both FKs cascade, so account deletion needs no change.
+3. `moto_deportiva_waitlist (user_id uuid PK → users ON DELETE CASCADE, created_at, notified_at)`. Lock table too; a user joins or leaves with `set_moto_deportiva_waitlist(p_join)`. The subscription is permanent (decided 2026-11-09): a person stays on the list, and gets a notice every time it is switched on, until they leave it by tapping "Te avisaremos". `notified_at` only records the last notice. Both FKs cascade, so account deletion needs no change.
 4. The switch is `service_type_configs.is_active` of `moto_deportiva`. The panel changes it through `admin_set_moto_deportiva(p_active boolean)` (SECURITY DEFINER, `is_super_admin()`, one `admin_actions` row per change). RLS already limits UPDATE of that table to super admins (`stc_super_admin_update`).
 5. **Placeholder prices:** the migration copies the moto_standard config and its 4 bands with every USD column × 1.5, then runs `recompute_cup_from_usd_prices()`. When the team decides, a later migration writes the real USD values.
 
@@ -67,7 +67,7 @@ A ride request for `moto_deportiva` when the status is not `available` is reject
 
 ### "Avísame" push
 
-Switching it on (an AFTER UPDATE trigger on `service_type_configs`, so it also fires when the switch is flipped from another screen) sends, in batches of 300 ids, through `cron_http_post` to `send-push` (label `moto-deportiva-waitlist`, category `promo`), one push to every waitlist row with `notified_at IS NULL`, then sets `notified_at`. Text: "¡La Moto Deportiva está activa! Pídela ahora." A failure never blocks the switch; it is logged in `rpc_attempt_log`.
+Switching it on (an AFTER UPDATE trigger on `service_type_configs`, so it also fires when the switch is flipped from another screen) sends, in batches of 300 ids, through `cron_http_post` to `send-push` (label `moto-deportiva-waitlist`, category `promo`), one push to every person on the waitlist, then stamps `notified_at`. Text: "¡La Moto Deportiva está activa! Pídela ahora." A failure never blocks the switch; it is logged in `rpc_attempt_log`.
 
 Decided 2026-11-09:
 
