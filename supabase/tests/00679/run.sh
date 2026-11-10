@@ -651,6 +651,21 @@ val "C2 a ride with no owner: the first action makes its caller the owner (opene
       SELECT string_agg(action, ',') FROM public.admin_actions; $PUSHES")" \
     "reason_required;0;driver_not_approved;Ana Admin;true,true,$ADM;ride_owned_by_other;driver_not_approved;not_online;Melanye;true;Ana Admin;true,true;0;Melanye;cancel_ride;none"
 
+# Review fix 1: the owner acting on her ride counts as opening it. R1 is OP1's, assigned 61 s ago and
+# never opened (the cron gave it to her after her page loaded); she offers it to a driver, and the
+# tick then leaves it with her (OP2, on shift, would get it otherwise) with no miss. R2 is OP1's,
+# opened 30 s ago: her cancel keeps that first opening.
+val "C10 the owner acting on her ride counts as opening it: the handover leaves it, no miss; an earlier opening is kept" \
+    "$(tx "$ON_BOTH $(owned $R1 $OP1 61) $(owned $R2 $OP1 30)
+      UPDATE public.ride_assist SET owner_opened_at = now() - interval '30 seconds' WHERE ride_id = '$R2';
+      $(call $OP1 "public.admin_offer_ride_to_driver('$R1', '$DP') ->> 'mode'")
+      SELECT (owner_opened_at = now())::text FROM public.ride_assist WHERE ride_id = '$R1';
+      SELECT public.support_handoff_tick();
+      $(owner $R1) $MISSED $PUSHES
+      $(call $OP1 "public.admin_cancel_ride('$R2', $WHY) ->> 'success'")
+      SELECT (owner_opened_at = now() - interval '30 seconds')::text FROM public.ride_assist WHERE ride_id = '$R2';")" \
+    "created;true;0;Lete;Lete=0,Melanye=0;none;true;true"
+
 # ── Taking a ride ─────────────────────────────────────────────
 val "C3 taking a ride: the caller becomes its owner (opened, misses zeroed), the owner she saw gets a push, it is logged; a stale take gets ride_changed" \
     "$(tx "$ON_BOTH $(owned $R1 $OP1 30)

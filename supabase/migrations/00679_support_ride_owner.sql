@@ -806,8 +806,8 @@ SELECT cron.schedule('support-handoff-tick', '20 seconds', 'SELECT public.suppor
 -- check: NULL when the caller may act, 'ride_owned_by_other' when someone else owns the ride. A ride
 -- with no owner becomes the caller's, opened (she is on it, so the handover leaves it), with its
 -- ride_assist row created if missing; that stays even when the action then refuses on its own
--- grounds. An owner off shift still owns the ride: anyone else takes it first
--- (ops_take_ride_assist), admins too.
+-- grounds. Its owner acting on it counts as opening it too (the first opening is kept). An owner
+-- off shift still owns the ride: anyone else takes it first (ops_take_ride_assist), admins too.
 CREATE OR REPLACE FUNCTION public._assist_claim_or_refuse(p_ride_id uuid)
  RETURNS text
  LANGUAGE plpgsql
@@ -832,6 +832,9 @@ BEGIN
     RETURN NULL;
   END IF;
   IF v_owner = v_me THEN
+    -- Her acting on it counts as opening it (the cron may have given it to her after her page
+    -- loaded): the handover then leaves it. The row is already locked; no support_staff write.
+    UPDATE public.ride_assist SET owner_opened_at = now() WHERE ride_id = p_ride_id AND owner_opened_at IS NULL;
     RETURN NULL;
   END IF;
   RETURN 'ride_owned_by_other';
