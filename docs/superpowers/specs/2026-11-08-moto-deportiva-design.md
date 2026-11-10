@@ -69,6 +69,12 @@ A ride request for `moto_deportiva` when the status is not `available` is reject
 
 Switching it on (an AFTER UPDATE trigger on `service_type_configs`, so it also fires when the switch is flipped from another screen) sends, in batches of 300 ids, through `cron_http_post` to `send-push` (label `moto-deportiva-waitlist`, category `promo`), one push to every waitlist row with `notified_at IS NULL`, then sets `notified_at`. Text: "¡La Moto Deportiva está activa! Pídela ahora." A failure never blocks the switch; it is logged in `rpc_attempt_log`.
 
+Decided 2026-11-09:
+
+- **Permission at the right moment.** Tapping "Avísame" without notification permission asks for it right then (only while the permission is still `undetermined`, as `shouldSpendPushPrompt` does; after a denial, the soft-ask sheet with the link to Settings). Joining works either way.
+- **Inbox as a backstop.** `send-push` already saves every push to the in-app inbox (`notifications`), so people without a push token still see the notice the next time they open the app.
+- **No repeated notices.** A notice goes out at most once every `moto_deportiva_waitlist_cooldown_h` hours (default 3, in `platform_config`); switching it off and on again inside that window sends nothing. The time of the last notice is kept in `platform_config.moto_deportiva_last_waitlist_push_at`.
+
 ### Fallback to regular moto (client + web)
 
 After 120 s searching with no driver on a `moto_deportiva` ride, the search screen shows "La Moto Deportiva no respondió" with a "Cambiar a Moto" button. The tap cancels the ride (free while searching: no reputation event) and returns to the selection screen with the same addresses and Moto selected; the app estimates the moto price and the rider confirms it. Rejected: a server RPC that changes the ride's type in place, because the server has no fare calculator and would have to trust a fare sent by the client.

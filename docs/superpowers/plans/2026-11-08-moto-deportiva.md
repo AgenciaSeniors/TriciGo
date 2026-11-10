@@ -106,7 +106,8 @@ SELECT public.recompute_cup_from_usd_prices();
 
 -- ── B. Setting ───────────────────────────────────────────────
 INSERT INTO public.platform_config (key, value)
-VALUES ('moto_deportiva_show_when_off', 'true'::jsonb)
+VALUES ('moto_deportiva_show_when_off', 'true'::jsonb),
+       ('moto_deportiva_waitlist_cooldown_h', '3'::jsonb)
 ON CONFLICT (key) DO NOTHING;
 
 -- ── C. Lock tables ───────────────────────────────────────────
@@ -312,6 +313,15 @@ BEGIN
   IF NEW.slug <> 'moto_deportiva' OR NOT NEW.is_active OR OLD.is_active THEN
     RETURN NEW;
   END IF;
+  -- At most one notice per cooldown window (spec, decided 2026-11-09).
+  IF EXISTS (
+    SELECT 1 FROM public.platform_config
+     WHERE key = 'moto_deportiva_last_waitlist_push_at'
+       AND (value #>> '{}')::timestamptz > now() - make_interval(
+             hours => GREATEST(0, public.get_platform_config_numeric('moto_deportiva_waitlist_cooldown_h', 3))::int)
+  ) THEN
+    RETURN NEW;
+  END IF;
   BEGIN
     SELECT array_agg(user_id) INTO v_ids FROM public.moto_deportiva_waitlist WHERE notified_at IS NULL;
     IF v_ids IS NULL THEN RETURN NEW; END IF;
@@ -333,6 +343,9 @@ BEGIN
     END LOOP;
     UPDATE public.moto_deportiva_waitlist SET notified_at = now()
      WHERE notified_at IS NULL AND user_id = ANY (v_ids);
+    INSERT INTO public.platform_config (key, value)
+    VALUES ('moto_deportiva_last_waitlist_push_at', to_jsonb(now()))
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
   EXCEPTION WHEN OTHERS THEN
     PERFORM public.log_rpc_attempt('moto_deportiva_waitlist_push', auth.uid(), NULL::uuid, 'push_failed',
       jsonb_build_object('sqlstate', SQLSTATE, 'error', SQLERRM));
@@ -509,6 +522,7 @@ The 00650 scaffold already has `driver_profiles`, `vehicles`, `find_best_drivers
 | T12 | INSERT as owner (no client role) when `off` | ride created (server writes are not blocked) |
 | T13 | RIDER joins waitlist, SUPER switches on | one `net.http_post` row with RIDER in `user_ids`, `notified_at` set |
 | T14 | switch off and on again without re-joining | no second push |
+| T14b | RIDER re-joins, switch off and on within 3 h | no push (cooldown); after setting `moto_deportiva_last_waitlist_push_at` 4 h back, the push goes out |
 | T15 | RIDER calls `admin_set_moto_deportiva(true)` | `{"error":"forbidden"}`, `is_active` unchanged, no `admin_actions` row |
 | T16 | SUPER adds PILOT by phone; adds TRIKE by phone | success / `not_an_approved_moto_driver` |
 | T17 | `notify_offline_drivers_for_searching_rides()` with a searching `moto_deportiva` ride and PILOT offline | no push for the deportiva group |
@@ -783,6 +797,7 @@ export function useMotoDeportivaStatus(enabled: boolean) {
   - `reason === 'off' | 'offline'` → `t('moto_deportiva.unavailable', { defaultValue: 'No disponible ahora' })`
   - `waitlist === 'join'` → a small button `t('moto_deportiva.notify_me', { defaultValue: 'Avísame' })` calling `toggleWaitlist`; `'joined'` → `t('moto_deportiva.notify_joined', { defaultValue: 'Te avisaremos' })` (tap again leaves the list).
   If the selected service is `moto_deportiva` and the card stops being requestable (poll), switch the selection to `moto_standard` with `setServiceType`.
+- [ ] **Step 4b: Push permission on "Avísame".** Before `toggleWaitlist` joins, read the permission with `Notifications.getPermissionsAsync()`; if `shouldSpendPushPrompt(...)` (`packages/utils/src/pushRegistration.ts`) says the prompt can be spent, call the same registration the app uses (`registerPushTokenForUser` via `useNotificationSetup`); if it is denied and cannot ask again, open the existing soft-ask sheet. Join the waitlist whatever the answer: the inbox still gets the notice.
 - [ ] **Step 5: Server rejection.** When `confirmRide` fails with `moto_deportiva_unavailable`, show its message and call `refetch()`.
 - [ ] **Step 6: Fallback banner** in `SearchingView` (`index.tsx:5087`), using the existing `elapsedSeconds`:
 
