@@ -8,8 +8,9 @@
 -- B. Settings: price offset, visibility, notice cooldown.
 -- C. Lock tables moto_deportiva_pilots and moto_deportiva_waitlist.
 -- D. Helpers _moto_deportiva_is_on() and _md_driver_allowed(driver_profile_id, service_type).
--- E. md5-guarded in-place patches of find_best_drivers, notify_offline_drivers_for_searching_rides
---    and _driver_can_serve_ride.
+-- E. md5-guarded in-place patches of find_best_drivers, notify_offline_drivers_for_searching_rides,
+--    _driver_can_serve_ride, admin_ride_assist_candidates (support lists only pilots for it) and
+--    _ride_service_change_error (support never changes a ride into Moto Deportiva).
 -- F. get_moto_deportiva_status() for the apps.
 -- G. BEFORE INSERT guard on rides.
 -- H. _moto_deportiva_send_notice(): one notice to every subscriber, once per cooldown, logged in
@@ -175,30 +176,61 @@ BEGIN
     IF v_new = v_src THEN RAISE EXCEPTION '00679: _driver_can_serve_ride anchor not found'; END IF;
     EXECUTE v_new;
   END IF;
+
+  -- E4. admin_ride_assist_candidates: a Moto Deportiva ride lists only pilots, any other ride no pilot.
+  SELECT md5(prosrc) INTO v_md5 FROM pg_proc WHERE oid = 'public.admin_ride_assist_candidates(uuid,text)'::regprocedure;
+  IF v_md5 NOT IN ('c97a27059673affa5f75bc024e09f6bb', 'a858e14c0195e64bceb8c77417c4e472') THEN
+    RAISE EXCEPTION '00679: admin_ride_assist_candidates has an unknown body (md5 %)', v_md5;
+  END IF;
+  IF v_md5 = 'c97a27059673affa5f75bc024e09f6bb' THEN
+    v_src := pg_get_functiondef('public.admin_ride_assist_candidates(uuid,text)'::regprocedure);
+    v_new := replace(v_src,
+      'AND NOT public._users_blocked(v_ride.customer_id, dp.user_id)',
+      'AND NOT public._users_blocked(v_ride.customer_id, dp.user_id)
+    AND public._md_driver_allowed(dp.id, v_type)  -- 00679');
+    IF v_new = v_src THEN RAISE EXCEPTION '00679: admin_ride_assist_candidates anchor not found'; END IF;
+    EXECUTE v_new;
+  END IF;
+
+  -- E5. _ride_service_change_error: support may change a Moto Deportiva ride into another type,
+  --     never another ride into Moto Deportiva (it would skip the availability guard of G).
+  SELECT md5(prosrc) INTO v_md5 FROM pg_proc WHERE oid = 'public._ride_service_change_error(public.rides,text,integer)'::regprocedure;
+  IF v_md5 NOT IN ('a0796f7df0430c7bafa9d4621b82eae8', 'f782b9188ac8807f9592be7e5508e09e') THEN
+    RAISE EXCEPTION '00679: _ride_service_change_error has an unknown body (md5 %)', v_md5;
+  END IF;
+  IF v_md5 = 'a0796f7df0430c7bafa9d4621b82eae8' THEN
+    v_src := pg_get_functiondef('public._ride_service_change_error(public.rides,text,integer)'::regprocedure);
+    v_new := replace(v_src,
+      'IF NOT FOUND OR p_service_type = ''mensajeria'' OR',
+      -- The anchor ends mid-line (COALESCE(...) <= 0 THEN follows): the comment goes on its own
+      -- line, or it would comment out the rest of the condition.
+      'IF NOT FOUND OR p_service_type IN (''mensajeria'', ''moto_deportiva'')  -- 00679: never changed into Moto Deportiva
+     OR');
+    IF v_new = v_src THEN RAISE EXCEPTION '00679: _ride_service_change_error anchor not found'; END IF;
+    EXECUTE v_new;
+  END IF;
 END
 $patch$;
 
--- ── F. Status for the apps ───────────────────────────────────
--- {status: hidden|off|offline|busy|available, waiting: bool}. Never positions or ids.
-CREATE OR REPLACE FUNCTION public.get_moto_deportiva_status()
- RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER
+-- ── F. Status ────────────────────────────────────────────────
+-- _moto_deportiva_raw_status(): off | offline | busy | available, without the visibility setting
+-- (the panel shows this one). A pilot counts as available only if dispatch could reach him:
+-- approved, online, not on a break, a heartbeat in the last 3 minutes (a dead app stays
+-- is_online for 10-15 min until auto-offline), financially eligible and match_score > 10.
+CREATE OR REPLACE FUNCTION public._moto_deportiva_raw_status()
+ RETURNS text LANGUAGE plpgsql STABLE SECURITY DEFINER
  SET search_path TO 'public', 'pg_catalog'
 AS $function$
-DECLARE
-  v_show boolean;
-  v_status text;
-  v_waiting boolean := false;
 BEGIN
-  IF auth.uid() IS NOT NULL THEN
-    v_waiting := EXISTS (SELECT 1 FROM public.moto_deportiva_waitlist WHERE user_id = auth.uid());
-  END IF;
-
   IF NOT public._moto_deportiva_is_on() THEN
-    v_status := 'off';
-  ELSIF EXISTS (
+    RETURN 'off';
+  END IF;
+  IF EXISTS (
     SELECT 1 FROM public.moto_deportiva_pilots mp
     JOIN public.driver_profiles dp ON dp.id = mp.driver_profile_id
     WHERE dp.is_online AND dp.status = 'approved' AND NOT dp.is_on_break
+      AND COALESCE(dp.last_heartbeat_at, now()) > now() - interval '3 minutes'
+      AND dp.is_financially_eligible AND dp.match_score > 10
       AND NOT EXISTS (SELECT 1 FROM public.rides r WHERE r.driver_id = dp.id
                        AND r.status IN ('accepted','driver_en_route','arrived_at_pickup','in_progress','arrived_at_destination'))
   ) AND NOT EXISTS (
@@ -206,23 +238,40 @@ BEGIN
     SELECT 1 FROM public.rides r WHERE r.service_type = 'moto_deportiva' AND r.status = 'searching'
       AND r.created_at > now() - interval '150 seconds'
   ) THEN
-    v_status := 'available';
-  ELSIF EXISTS (
+    RETURN 'available';
+  END IF;
+  IF EXISTS (
     SELECT 1 FROM public.moto_deportiva_pilots mp
     JOIN public.driver_profiles dp ON dp.id = mp.driver_profile_id
     WHERE dp.is_online AND dp.status = 'approved'
+      AND COALESCE(dp.last_heartbeat_at, now()) > now() - interval '3 minutes'
   ) THEN
-    v_status := 'busy';
-  ELSE
-    v_status := 'offline';
+    RETURN 'busy';
   END IF;
+  RETURN 'offline';
+END
+$function$;
+REVOKE ALL ON FUNCTION public._moto_deportiva_raw_status() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public._moto_deportiva_raw_status() TO service_role;
 
+-- {status: hidden|off|offline|busy|available, waiting: bool}. Never positions or ids.
+CREATE OR REPLACE FUNCTION public.get_moto_deportiva_status()
+ RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+DECLARE
+  v_show boolean;
+  v_status text := public._moto_deportiva_raw_status();
+  v_waiting boolean := false;
+BEGIN
+  IF auth.uid() IS NOT NULL THEN
+    v_waiting := EXISTS (SELECT 1 FROM public.moto_deportiva_waitlist WHERE user_id = auth.uid());
+  END IF;
   IF v_status <> 'available' THEN
     SELECT (value #>> '{}') NOT IN ('false', 'f') INTO v_show
       FROM public.platform_config WHERE key = 'moto_deportiva_show_when_unavailable';
     IF NOT COALESCE(v_show, true) THEN v_status := 'hidden'; END IF;
   END IF;
-
   RETURN jsonb_build_object('status', v_status, 'waiting', v_waiting);
 END
 $function$;
@@ -241,8 +290,15 @@ BEGIN
   END IF;
   IF COALESCE(NEW.ride_mode, 'passenger') <> 'passenger'
      OR NEW.corporate_account_id IS NOT NULL
-     OR (NEW.scheduled_at IS NOT NULL AND NEW.scheduled_at > now())
-     OR (public.get_moto_deportiva_status() ->> 'status') <> 'available' THEN
+     OR (NEW.scheduled_at IS NOT NULL AND NEW.scheduled_at > now()) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'La Moto Deportiva no se puede programar, usar para envíos ni pagar con una cuenta de empresa.',
+      DETAIL  = 'moto_deportiva_unavailable';
+  END IF;
+  -- The guard runs as the client (SECURITY INVOKER), who may not call _moto_deportiva_raw_status():
+  -- read it through get_moto_deportiva_status(), which never hides 'available'.
+  IF (public.get_moto_deportiva_status() ->> 'status') <> 'available' THEN
     RAISE EXCEPTION USING
       ERRCODE = 'P0001',
       MESSAGE = 'La Moto Deportiva no está disponible en este momento.',
@@ -293,7 +349,7 @@ BEGIN
         'user_ids', to_jsonb(v_batch),
         'title',    '¡La Moto Deportiva está disponible!',
         'body',     'Pídela ahora en TriciGo.',
-        'category', 'promo',
+        'category', 'system',  -- opt-in (Avísame): not filtered by the promo preference
         'data',     jsonb_build_object('content_type', 'moto_deportiva')),
       timeout_milliseconds := 30000);
   END LOOP;
@@ -354,7 +410,7 @@ BEGIN
   IF NOT public.is_super_admin() THEN RETURN jsonb_build_object('error', 'forbidden'); END IF;
   RETURN jsonb_build_object(
     'active', public._moto_deportiva_is_on(),
-    'status', public.get_moto_deportiva_status() ->> 'status',
+    'status', public._moto_deportiva_raw_status(),
     'waitlist_count', (SELECT count(*) FROM public.moto_deportiva_waitlist),
     'last_notice_at', (SELECT max(sent_at) FROM public.moto_deportiva_notices),
     'pilots', COALESCE((
@@ -442,8 +498,10 @@ BEGIN
   IF v_dp IS NULL THEN RETURN jsonb_build_object('error', 'not_an_approved_moto_driver'); END IF;
   INSERT INTO public.moto_deportiva_pilots (driver_profile_id, added_by) VALUES (v_dp, auth.uid())
   ON CONFLICT (driver_profile_id) DO NOTHING;
-  INSERT INTO public.admin_actions (admin_id, action, target_type, target_id, new_values)
-  VALUES (auth.uid(), 'moto_deportiva_add_pilot', 'driver_profile', v_dp::text, jsonb_build_object('pilot', true));
+  IF FOUND THEN
+    INSERT INTO public.admin_actions (admin_id, action, target_type, target_id, new_values)
+    VALUES (auth.uid(), 'moto_deportiva_add_pilot', 'driver_profile', v_dp::text, jsonb_build_object('pilot', true));
+  END IF;
   RETURN jsonb_build_object('success', true, 'driver_profile_id', v_dp);
 END
 $function$;
@@ -532,7 +590,9 @@ BEGIN
   FOREACH v_fn IN ARRAY ARRAY[
     'public.find_best_drivers(double precision,double precision,text,integer,integer,boolean,integer,text,numeric,integer,integer,integer,uuid)',
     'public.notify_offline_drivers_for_searching_rides()', 'public._driver_can_serve_ride(uuid,text,boolean)',
-    'public._moto_deportiva_is_on()', 'public._md_driver_allowed(uuid,text)', 'public.get_moto_deportiva_status()',
+    'public.admin_ride_assist_candidates(uuid,text)', 'public._ride_service_change_error(public.rides,text,integer)',
+    'public._moto_deportiva_is_on()', 'public._md_driver_allowed(uuid,text)', 'public._moto_deportiva_raw_status()',
+    'public.get_moto_deportiva_status()',
     'public.tg_rides_moto_deportiva_guard()', 'public._moto_deportiva_send_notice(text)',
     'public.tg_moto_deportiva_pilot_online()', 'public.set_moto_deportiva_waitlist(boolean)',
     'public.admin_moto_deportiva_overview()', 'public.admin_moto_deportiva_subscribers()',
@@ -574,6 +634,12 @@ BEGIN
      OR position('_md_driver_allowed' IN (SELECT prosrc FROM pg_proc WHERE oid =
        'public._driver_can_serve_ride(uuid,text,boolean)'::regprocedure)) = 0 THEN
     RAISE EXCEPTION '00679: dispatch not patched';
+  END IF;
+  IF position('_md_driver_allowed' IN (SELECT prosrc FROM pg_proc WHERE oid =
+       'public.admin_ride_assist_candidates(uuid,text)'::regprocedure)) = 0
+     OR position('''moto_deportiva''' IN (SELECT prosrc FROM pg_proc WHERE oid =
+       'public._ride_service_change_error(public.rides,text,integer)'::regprocedure)) = 0 THEN
+    RAISE EXCEPTION '00679: support functions not patched';
   END IF;
 END
 $check$;

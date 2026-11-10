@@ -30,7 +30,7 @@
 \set SUBSCRIBE    'SET LOCAL request.jwt.claim.sub = ''5a000000-0000-4000-8000-000000000002''; SET LOCAL ROLE authenticated; SELECT 1 WHERE public.set_moto_deportiva_waitlist(true) IS NULL; SET LOCAL request.jwt.claim.sub = ''5a000000-0000-4000-8000-000000000003''; SELECT 1 WHERE public.set_moto_deportiva_waitlist(true) IS NULL; RESET ROLE; SET LOCAL request.jwt.claim.sub = '''';'
 -- the pilot connects from his app
 \set PILOT_APP_ON 'SET LOCAL request.jwt.claim.sub = ''5a000000-0000-4000-8000-000000000011''; SET LOCAL ROLE authenticated; UPDATE public.driver_profiles SET is_online = true WHERE id = ''5b000000-0000-4000-8000-000000000011''; RESET ROLE; SET LOCAL request.jwt.claim.sub = '''';'
-\set PROMO_PUSHES '(SELECT count(*) FROM net.sent WHERE body ->> ''category'' = ''promo'')'
+\set MD_PUSHES '(SELECT count(*) FROM net.sent WHERE body -> ''data'' ->> ''content_type'' = ''moto_deportiva'')'
 
 -- ── 1. Dispatch ───────────────────────────────────────────────
 BEGIN;
@@ -158,7 +158,7 @@ BEGIN;
 :PILOT_APP_ON
 SELECT tst.t('T13a the pilot connects: one push to both subscribers',
   (SELECT count(*) || '|' || string_agg((SELECT string_agg(x, ',' ORDER BY x) FROM jsonb_array_elements_text(body -> 'user_ids') x), ';')
-     FROM net.sent WHERE body ->> 'category' = 'promo'),
+     FROM net.sent WHERE body -> 'data' ->> 'content_type' = 'moto_deportiva'),
   '1|' || :'RIDER' || ',' || :'RIDER2');
 SELECT tst.t('T13b ...through cron_http_post, to send-push',
   (SELECT count(*)::text FROM public.cron_http_calls c JOIN net.sent s ON s.id = c.request_id
@@ -175,14 +175,14 @@ SELECT 1 WHERE set_config('t.r', current_setting('t.r') || ',' || (public.get_mo
 SELECT tst.t('T13d both are still subscribed', current_setting('t.r'), 'true,true');
 :PILOT_OFF
 :PILOT_APP_ON
-SELECT tst.t('T14 connecting again within 3 h: no new push', :PROMO_PUSHES::text, '1');
+SELECT tst.t('T14 connecting again within 3 h: no new push', :MD_PUSHES::text, '1');
 UPDATE public.moto_deportiva_notices SET sent_at = sent_at - interval '4 hours';
 :PILOT_OFF
 :PILOT_APP_ON
 SELECT tst.t('T15 after the cooldown: a second push to both (permanent subscription)',
   (SELECT count(*) || '|' || (SELECT string_agg(x, ',' ORDER BY x) FROM jsonb_array_elements_text(
-      (SELECT body -> 'user_ids' FROM net.sent WHERE body ->> 'category' = 'promo' ORDER BY id DESC LIMIT 1)) x)
-     FROM net.sent WHERE body ->> 'category' = 'promo'),
+      (SELECT body -> 'user_ids' FROM net.sent WHERE body -> 'data' ->> 'content_type' = 'moto_deportiva' ORDER BY id DESC LIMIT 1)) x)
+     FROM net.sent WHERE body -> 'data' ->> 'content_type' = 'moto_deportiva'),
   '2|' || :'RIDER' || ',' || :'RIDER2');
 ROLLBACK;
 
@@ -190,7 +190,7 @@ BEGIN;
 :LIST_PILOT
 :SUBSCRIBE
 :MOTO2_ON
-SELECT tst.t('T16 a moto that is not a pilot connects: no push', :PROMO_PUSHES::text, '0');
+SELECT tst.t('T16 a moto that is not a pilot connects: no push', :MD_PUSHES::text, '0');
 ROLLBACK;
 
 BEGIN;
@@ -199,7 +199,7 @@ BEGIN;
 :SWITCH_OFF
 :PILOT_APP_ON
 SELECT tst.t('T17 deactivated, the pilot connects: no push, no notice',
-  :PROMO_PUSHES || '|' || (SELECT count(*) FROM public.moto_deportiva_notices), '0|0');
+  :MD_PUSHES || '|' || (SELECT count(*) FROM public.moto_deportiva_notices), '0|0');
 ROLLBACK;
 
 BEGIN;
@@ -210,7 +210,7 @@ DELETE FROM vault.secret_store;
 SELECT tst.t('T18 no service key: the pilot is online anyway, one push_failed row, no notice',
   (SELECT is_online::text FROM public.driver_profiles WHERE id = :'PILOT')
     || '|' || (SELECT count(*) FROM public.rpc_attempt_log WHERE rpc_name = 'moto_deportiva_waitlist_push' AND outcome = 'push_failed')
-    || '|' || (SELECT count(*) FROM public.moto_deportiva_notices) || '|' || :PROMO_PUSHES,
+    || '|' || (SELECT count(*) FROM public.moto_deportiva_notices) || '|' || :MD_PUSHES,
   'true|1|0|0');
 ROLLBACK;
 
@@ -350,7 +350,7 @@ SET LOCAL request.jwt.claim.sub = '5a000000-0000-4000-8000-000000000001'; SET LO
 SELECT 1 WHERE set_config('t.r', public.admin_set_moto_deportiva(true)::text, true) IS NULL;
 :AS_ME
 SELECT tst.t('T27a activated with the pilot online: notified 2, one push, a notice admin_on, one switch row',
-  current_setting('t.r') || '|' || :PROMO_PUSHES || '|' || (SELECT string_agg(source || ':' || recipients, ',') FROM public.moto_deportiva_notices)
+  current_setting('t.r') || '|' || :MD_PUSHES || '|' || (SELECT string_agg(source || ':' || recipients, ',') FROM public.moto_deportiva_notices)
     || '|' || (SELECT count(*) FROM public.admin_actions WHERE action = 'moto_deportiva_switch'),
   '{"active": true, "success": true, "notified": 2}|1|admin_on:2|1');
 ROLLBACK;
@@ -363,7 +363,7 @@ SET LOCAL request.jwt.claim.sub = '5a000000-0000-4000-8000-000000000001'; SET LO
 SELECT 1 WHERE set_config('t.r', public.admin_set_moto_deportiva(true)::text, true) IS NULL;
 :AS_ME
 SELECT tst.t('T27b activated with no pilot online: nothing sent',
-  current_setting('t.r') || '|' || :PROMO_PUSHES || '|' || (SELECT count(*) FROM public.moto_deportiva_notices),
+  current_setting('t.r') || '|' || :MD_PUSHES || '|' || (SELECT count(*) FROM public.moto_deportiva_notices),
   '{"active": true, "success": true, "notified": 0}|0|0');
 ROLLBACK;
 
@@ -408,4 +408,145 @@ SELECT 1 WHERE set_config('t.r', current_setting('t.r') || ',' || (public.admin_
 :AS_ME
 SELECT tst.t('T28b over 90 days RIDER is a first ride; the period is capped at 90; a rider gets forbidden',
   current_setting('t.r'), '1,90,forbidden');
+ROLLBACK;
+
+-- ── 11. After review: dispatchable pilots only, raw status, guard messages, push category ──
+BEGIN;
+:LIST_PILOT :PILOT_ON
+UPDATE public.driver_profiles SET last_heartbeat_at = now() - interval '10 minutes' WHERE id = :'PILOT';
+:ANON_STATUS
+SELECT tst.t('T29a the pilot online but silent for 10 min (dead app): offline', current_setting('t.r'), 'offline');
+UPDATE public.driver_profiles SET last_heartbeat_at = now() - interval '30 seconds', is_financially_eligible = false WHERE id = :'PILOT';
+:ANON_STATUS
+SELECT tst.t('T29b fresh heartbeat but not financially eligible: busy, never available', current_setting('t.r'), 'busy');
+UPDATE public.driver_profiles SET is_financially_eligible = true, match_score = 5 WHERE id = :'PILOT';
+:ANON_STATUS
+SELECT tst.t('T29c fresh heartbeat but match_score 5: busy, never available', current_setting('t.r'), 'busy');
+UPDATE public.driver_profiles SET match_score = 50 WHERE id = :'PILOT';
+:ANON_STATUS
+SELECT tst.t('T29d fresh heartbeat, eligible, match_score 50: available', current_setting('t.r'), 'available');
+ROLLBACK;
+
+BEGIN;
+:LIST_PILOT
+UPDATE public.platform_config SET value = 'false'::jsonb WHERE key = 'moto_deportiva_show_when_unavailable';
+:ANON_STATUS
+SET LOCAL request.jwt.claim.sub = '5a000000-0000-4000-8000-000000000001'; SET LOCAL ROLE authenticated;
+SELECT 1 WHERE set_config('t.r', current_setting('t.r') || ',' || (public.admin_moto_deportiva_overview() ->> 'status'), true) IS NULL;
+:AS_ME
+SELECT tst.t('T30 hidden from the apps, the panel still sees offline', current_setting('t.r'), 'hidden,offline');
+ROLLBACK;
+
+BEGIN;
+:LIST_PILOT :PILOT_ON
+INSERT INTO public.corporate_accounts (id) VALUES ('5d000000-0000-4000-8000-000000000001');
+SET LOCAL request.jwt.claim.sub = '5a000000-0000-4000-8000-000000000002'; SET LOCAL ROLE authenticated;
+DO $$
+DECLARE d text; m text; v_out text := '';
+BEGIN
+  BEGIN
+    INSERT INTO public.rides (customer_id, service_type, scheduled_at)
+    VALUES ('5a000000-0000-4000-8000-000000000002', 'moto_deportiva', now() + interval '1 day');
+    v_out := v_out || 'inserted;';
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS d = PG_EXCEPTION_DETAIL, m = MESSAGE_TEXT;
+    v_out := v_out || d || ':' || m || ';';
+  END;
+  BEGIN
+    INSERT INTO public.rides (customer_id, service_type, corporate_account_id)
+    VALUES ('5a000000-0000-4000-8000-000000000002', 'moto_deportiva', '5d000000-0000-4000-8000-000000000001');
+    v_out := v_out || 'inserted;';
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS d = PG_EXCEPTION_DETAIL, m = MESSAGE_TEXT;
+    v_out := v_out || d || ':' || m || ';';
+  END;
+  BEGIN
+    INSERT INTO public.rides (customer_id, service_type, ride_mode)
+    VALUES ('5a000000-0000-4000-8000-000000000002', 'moto_deportiva', 'cargo');
+    v_out := v_out || 'inserted;';
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS d = PG_EXCEPTION_DETAIL, m = MESSAGE_TEXT;
+    v_out := v_out || d || ':' || m || ';';
+  END;
+  PERFORM set_config('t.r', v_out, true);
+END $$;
+:AS_ME
+SELECT tst.t('T31a while available: scheduled, company and cargo are refused with their own message',
+  current_setting('t.r'),
+  repeat('moto_deportiva_unavailable:La Moto Deportiva no se puede programar, usar para envíos ni pagar con una cuenta de empresa.;', 3));
+SET LOCAL request.jwt.claim.sub = '5a000000-0000-4000-8000-000000000002'; SET LOCAL ROLE authenticated;
+INSERT INTO public.rides (customer_id, service_type) VALUES ('5a000000-0000-4000-8000-000000000002', 'moto_deportiva');
+:AS_ME
+SELECT tst.t('T31b ...and an immediate one still goes through',
+  (SELECT count(*)::text FROM public.rides WHERE customer_id = :'RIDER' AND service_type = 'moto_deportiva'), '1');
+SET LOCAL request.jwt.claim.sub = '5a000000-0000-4000-8000-000000000003'; SET LOCAL ROLE authenticated;
+DO $$
+DECLARE d text; m text;
+BEGIN
+  BEGIN
+    INSERT INTO public.rides (customer_id, service_type) VALUES ('5a000000-0000-4000-8000-000000000003', 'moto_deportiva');
+    d := 'inserted';
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS d = PG_EXCEPTION_DETAIL, m = MESSAGE_TEXT;
+    d := d || ':' || m;
+  END;
+  PERFORM set_config('t.r', d, true);
+END $$;
+:AS_ME
+SELECT tst.t('T31c a second rider right after (the pilot is about to be busy): the unavailable message',
+  current_setting('t.r'), 'moto_deportiva_unavailable:La Moto Deportiva no está disponible en este momento.');
+ROLLBACK;
+
+BEGIN;
+:LIST_PILOT
+:SUBSCRIBE
+:PILOT_APP_ON
+SELECT tst.t('T32 the notice goes out as category system (opt-in), never promo',
+  (SELECT string_agg(body ->> 'category', ',') FROM net.sent WHERE url LIKE '%/send-push')
+    || '|' || (SELECT count(*) FROM net.sent WHERE body ->> 'category' = 'promo'),
+  'system|0');
+ROLLBACK;
+
+BEGIN;
+:LIST_PILOT :PILOT_ON :MOTO2_ON
+INSERT INTO public.rides (id, customer_id, status, service_type, pickup_location, estimated_fare_cup) VALUES
+  ('5e000000-0000-4000-8000-000000000001', :'RIDER', 'searching', 'moto_deportiva', :PICK, 600),
+  ('5e000000-0000-4000-8000-000000000002', :'RIDER2', 'searching', 'moto_standard', :PICK, 800);
+SET LOCAL request.jwt.claim.sub = '5a000000-0000-4000-8000-000000000001'; SET LOCAL ROLE authenticated;
+SELECT 1 WHERE set_config('t.r',
+  (SELECT coalesce(string_agg(driver_profile_id::text, ',' ORDER BY driver_profile_id), '-')
+     FROM public.admin_ride_assist_candidates('5e000000-0000-4000-8000-000000000001', NULL)) || '|' ||
+  (SELECT coalesce(string_agg(driver_profile_id::text, ',' ORDER BY driver_profile_id), '-')
+     FROM public.admin_ride_assist_candidates('5e000000-0000-4000-8000-000000000002', NULL)) || '|' ||
+  (SELECT coalesce(string_agg(driver_profile_id::text, ',' ORDER BY driver_profile_id), '-')
+     FROM public.admin_ride_assist_candidates('5e000000-0000-4000-8000-000000000002', 'moto_deportiva')), true) IS NULL;
+:AS_ME
+SELECT tst.t('T33 support lists only the pilot for a Moto Deportiva ride, only the other moto for a moto ride',
+  current_setting('t.r'), :'PILOT' || '|' || :'MOTO2' || '|' || :'PILOT');
+ROLLBACK;
+
+BEGIN;
+-- The row exists with the migration; without it, add it so the check is about the patch.
+INSERT INTO public.service_type_configs (slug, max_passengers, min_fare_cup, is_active)
+VALUES ('moto_deportiva', 1, 553, true) ON CONFLICT (slug) DO NOTHING;
+INSERT INTO public.rides (id, customer_id, status, service_type, pickup_location, estimated_fare_cup) VALUES
+  ('5e000000-0000-4000-8000-000000000003', :'RIDER', 'searching', 'moto_standard', :PICK, 800),
+  ('5e000000-0000-4000-8000-000000000004', :'RIDER2', 'searching', 'moto_deportiva', :PICK, 600);
+SELECT tst.t('T34 support never changes a ride into Moto Deportiva; out of it into a moto is fine',
+  (SELECT coalesce(public._ride_service_change_error(r, 'moto_deportiva', 900), 'NULL') FROM public.rides r WHERE r.id = '5e000000-0000-4000-8000-000000000003')
+    || '|' || (SELECT coalesce(public._ride_service_change_error(r, 'moto_standard', 900), 'NULL') FROM public.rides r WHERE r.id = '5e000000-0000-4000-8000-000000000004')
+    || '|' || (SELECT coalesce(public._ride_service_change_error(r, 'mensajeria', 900), 'NULL') FROM public.rides r WHERE r.id = '5e000000-0000-4000-8000-000000000003'),
+  'service_type_unavailable|NULL|service_type_unavailable');
+ROLLBACK;
+
+BEGIN;
+SET LOCAL request.jwt.claim.sub = '5a000000-0000-4000-8000-000000000001'; SET LOCAL ROLE authenticated;
+SELECT 1 WHERE set_config('t.r',
+  (public.admin_add_moto_deportiva_pilot('+5355510011') ->> 'success') || ',' ||
+  (public.admin_add_moto_deportiva_pilot('+5355510011') ->> 'success'), true) IS NULL;
+:AS_ME
+SELECT tst.t('T35 adding the same pilot twice: both succeed, one pilot row, one admin_actions row',
+  current_setting('t.r') || '|' || (SELECT count(*) FROM public.moto_deportiva_pilots)
+    || '|' || (SELECT count(*) FROM public.admin_actions WHERE action = 'moto_deportiva_add_pilot'),
+  'true,true|1|1');
 ROLLBACK;

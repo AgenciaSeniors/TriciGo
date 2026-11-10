@@ -3,10 +3,13 @@
 -- notify_offline_drivers_for_searching_rides carry today's live bodies.
 -- Live bodies copied verbatim (md5 of prosrc checked by run.sh S0):
 --   _driver_can_serve_ride 733f31677b6c4c146efa6434976180a8 (00628)
+--   admin_ride_assist_candidates c97a27059673affa5f75bc024e09f6bb (00677)
+--   _ride_service_change_error a0796f7df0430c7bafa9d4621b82eae8 (00628)
 --   _vehicle_types_for_service 5299ab645064c495257109e7e53c6e4e (00669)
 --   is_super_admin (00291)
 -- Stubs: recompute_cup_from_usd_prices (min fares only, at 330 CUP/USD),
--- _user_id_by_verified_phone (one confirmed account per number, or nothing).
+-- _user_id_by_verified_phone (one confirmed account per number, or nothing), is_ops_staff,
+-- driver_can_afford_commission, _users_blocked.
 -- The test schema tst holds the PASS/FAIL helper and is not part of prod.
 SET ROLE tricigo_owner;
 
@@ -17,7 +20,10 @@ ALTER TABLE public.rides
   ADD COLUMN corporate_account_id uuid,
   ADD COLUMN cancellation_reason text,
   ADD COLUMN final_fare_cup integer,
-  ADD COLUMN completed_at timestamptz;
+  ADD COLUMN completed_at timestamptz,
+  ADD COLUMN payment_method text NOT NULL DEFAULT 'cash',
+  ADD COLUMN estimated_fare_cup integer,
+  ADD COLUMN passenger_count integer DEFAULT 1;
 -- prod: riders create their own rides (the guard of 00679 fires before this check).
 CREATE POLICY r_insert ON public.rides FOR INSERT WITH CHECK (customer_id = (SELECT auth.uid()));
 
@@ -217,6 +223,184 @@ AS $$
 $$;
 REVOKE ALL ON FUNCTION public._vehicle_types_for_service(text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public._driver_can_serve_ride(uuid, text, boolean) FROM PUBLIC, anon, authenticated;
+
+-- ── Support (assist page) objects 00679 patches ──────────────
+CREATE TABLE public.ride_offers (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  ride_id uuid NOT NULL,
+  driver_profile_id uuid NOT NULL,
+  status text NOT NULL DEFAULT 'pending',
+  expires_at timestamptz
+);
+CREATE TABLE public.ride_splits (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), ride_id uuid NOT NULL);
+CREATE TABLE public.ride_waypoints (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), ride_id uuid NOT NULL);
+CREATE TABLE public.wallet_accounts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid,
+  account_type text NOT NULL,
+  balance numeric NOT NULL DEFAULT 0,
+  held_balance numeric DEFAULT 0
+);
+
+-- Stubs: ops staff = admin or super_admin here (the scaffold's role enum has no operator);
+-- every driver can afford the commission; blocks from user_blocks.
+CREATE OR REPLACE FUNCTION public.is_ops_staff() RETURNS boolean LANGUAGE plpgsql STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+BEGIN
+  IF auth.uid() IS NULL THEN RETURN false; END IF;
+  RETURN public.current_user_role() IN ('admin', 'super_admin');
+END;
+$function$;
+CREATE OR REPLACE FUNCTION public.driver_can_afford_commission(p_driver_id uuid, p_fare integer)
+ RETURNS jsonb LANGUAGE sql STABLE AS $function$ SELECT '{"ok": true}'::jsonb $function$;
+CREATE OR REPLACE FUNCTION public._users_blocked(p_a uuid, p_b uuid)
+ RETURNS boolean LANGUAGE sql STABLE SET search_path TO 'public', 'pg_catalog'
+AS $function$
+  SELECT EXISTS (SELECT 1 FROM public.user_blocks
+                  WHERE (blocker_id = p_a AND blocked_id = p_b) OR (blocker_id = p_b AND blocked_id = p_a))
+$function$;
+
+-- Live bodies: admin_ride_assist_candidates after 00677 (md5 c97a2705..., from
+-- supabase/tests/00677/live-ops.sql + the 00677 patch) and _ride_service_change_error of 00628
+-- (md5 a0796f7d...).
+CREATE OR REPLACE FUNCTION public.admin_ride_assist_candidates(p_ride_id uuid, p_service_type text DEFAULT NULL::text)
+ RETURNS TABLE(driver_profile_id uuid, full_name text, phone text, vehicle_type vehicle_type, vehicle_label text, is_online boolean, last_heartbeat_at timestamp with time zone, distance_m integer, busy_ride_id uuid, can_afford boolean, offer_status text, offer_expires_at timestamp with time zone)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+#variable_conflict use_column
+DECLARE
+  v_ride  public.rides%ROWTYPE;
+  v_type  text;
+  v_types public.vehicle_type[];
+  v_cargo boolean;
+BEGIN
+  IF NOT public.is_ops_staff() THEN
+    RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
+  END IF;
+  SELECT * INTO v_ride FROM public.rides WHERE id = p_ride_id;
+  IF NOT FOUND THEN
+    RETURN;
+  END IF;
+  v_type  := COALESCE(p_service_type, v_ride.service_type);
+  v_types := public._vehicle_types_for_service(v_type);
+  v_cargo := (v_ride.ride_mode = 'cargo' OR v_type = 'mensajeria');
+
+  RETURN QUERY
+  SELECT dp.id,
+         u.full_name,
+         u.phone,
+         v.type,
+         -- A NULL or blank field drops out instead of blanking the whole label.
+         concat_ws(' · ', NULLIF(concat_ws(' ', NULLIF(btrim(v.make), ''), NULLIF(btrim(v.model), '')), ''),
+                   NULLIF(btrim(v.color), ''), NULLIF(btrim(v.plate_number), '')),
+         dp.is_online,
+         dp.last_heartbeat_at,
+         ST_Distance(dp.current_location, v_ride.pickup_location)::int,
+         (SELECT a.id FROM public.rides a
+           WHERE a.driver_id = dp.id
+             AND a.status IN ('accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'arrived_at_destination')
+           LIMIT 1),
+         -- 00677: on a company ride the company pays the commission, so no driver lacks the balance.
+         (v_ride.payment_method::text = 'corporate' AND v_ride.corporate_account_id IS NOT NULL)
+         OR COALESCE((public.driver_can_afford_commission(dp.id, v_ride.estimated_fare_cup)->>'ok')::boolean, false),
+         o.status,
+         o.expires_at
+  FROM public.driver_profiles dp
+  JOIN public.users u ON u.id = dp.user_id
+  JOIN LATERAL (
+    SELECT v2.* FROM public.vehicles v2
+    WHERE v2.driver_id = dp.id
+      AND v2.is_active
+      AND (v_types IS NULL OR v2.type = ANY (v_types))
+      AND (NOT v_cargo OR v2.accepts_cargo IS TRUE)
+    ORDER BY v2.created_at DESC
+    LIMIT 1
+  ) v ON true
+  LEFT JOIN public.ride_offers o ON o.ride_id = v_ride.id AND o.driver_profile_id = dp.id
+  WHERE dp.status = 'approved'
+    AND u.is_active
+    AND (dp.is_online OR dp.last_heartbeat_at > now() - interval '7 days')
+    AND NOT public._users_blocked(v_ride.customer_id, dp.user_id)
+  ORDER BY dp.is_online DESC, ST_Distance(dp.current_location, v_ride.pickup_location) ASC NULLS LAST, u.full_name
+  LIMIT 60;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public._ride_service_change_error(p_ride public.rides, p_service_type text, p_fare_cup integer)
+RETURNS text
+LANGUAGE plpgsql STABLE
+SET search_path = public, pg_catalog
+AS $$
+DECLARE
+  v_svc public.service_type_configs%ROWTYPE;
+BEGIN
+  IF p_ride.status <> 'searching' THEN
+    RETURN 'ride_not_searching';
+  END IF;
+  -- The change dispatches the ride at once, and a driver who accepts it hours early is
+  -- cancelled by stale_pre_pickup (00282). The predicate of on_ride_insert_dispatch.
+  IF COALESCE(p_ride.is_scheduled, false) AND p_ride.scheduled_at IS NOT NULL AND p_ride.scheduled_at > now() THEN
+    RETURN 'scheduled_not_due';
+  END IF;
+  IF COALESCE(p_ride.ride_mode, 'passenger') <> 'passenger' THEN
+    RETURN 'cargo_not_supported';
+  END IF;
+  IF p_ride.corporate_account_id IS NOT NULL THEN
+    RETURN 'corporate_not_supported';
+  END IF;
+  -- A prepaid ride cannot change its amount silently. Mixed can: its wallet part is capped at
+  -- the balance when the ride completes.
+  IF p_ride.payment_method::text NOT IN ('cash', 'tricicoin', 'mixed') THEN
+    RETURN 'payment_method_not_supported';
+  END IF;
+  -- An accepted invitee would be charged a share of a fare they never saw.
+  IF EXISTS (SELECT 1 FROM public.ride_splits s WHERE s.ride_id = p_ride.id) THEN
+    RETURN 'split_not_supported';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.ride_waypoints w WHERE w.ride_id = p_ride.id) THEN
+    RETURN 'waypoints_not_supported';
+  END IF;
+  IF NULLIF(btrim(COALESCE(p_service_type, '')), '') IS NULL THEN
+    RETURN 'invalid_service_type';
+  END IF;
+  IF p_service_type = p_ride.service_type THEN
+    RETURN 'same_service_type';
+  END IF;
+  -- A passenger ride only goes to a type that carries passengers: max_passengers 0 marks a
+  -- cargo type (mensajeria, or triciclo_cargo from 00058 if it is ever activated).
+  SELECT * INTO v_svc FROM public.service_type_configs WHERE slug = p_service_type AND is_active;
+  IF NOT FOUND OR p_service_type = 'mensajeria' OR COALESCE(v_svc.max_passengers, 0) <= 0 THEN
+    RETURN 'service_type_unavailable';
+  END IF;
+  IF COALESCE(p_ride.passenger_count, 1) > v_svc.max_passengers THEN
+    RETURN 'too_many_passengers';
+  END IF;
+  IF p_fare_cup IS NULL OR p_fare_cup < v_svc.min_fare_cup THEN
+    RETURN 'fare_below_minimum';
+  END IF;
+  -- A typo guard: at most five times the larger of the current fare and the new type's minimum
+  -- fare. The minimum keeps the bound usable for a ride with a 0 fare and for a much pricier type.
+  IF p_fare_cup > 5 * GREATEST(COALESCE(p_ride.estimated_fare_cup, 0), v_svc.min_fare_cup) THEN
+    RETURN 'fare_out_of_range';
+  END IF;
+  -- complete_ride_and_pay charges a TriciCoin ride from the rider's customer_cash, uncapped, and
+  -- that balance may not go negative: a fare the rider cannot pay would leave the driver unable
+  -- to finish the ride. The rider app books it only with 1.2 times the fare.
+  IF p_ride.payment_method::text = 'tricicoin' AND NOT EXISTS (
+       SELECT 1 FROM public.wallet_accounts w
+       WHERE w.user_id = p_ride.customer_id
+         AND w.account_type = 'customer_cash'
+         AND w.balance - COALESCE(w.held_balance, 0) >= ceil(p_fare_cup * 1.2)) THEN
+    RETURN 'rider_balance_too_low';
+  END IF;
+  RETURN NULL;
+END;
+$$;
+REVOKE ALL ON FUNCTION public._ride_service_change_error(public.rides, text, integer) FROM PUBLIC, anon, authenticated;
 
 -- ── Seed ──────────────────────────────────────────────────────
 -- moto_standard as in prod on 2026-11-08 (USD = CUP / 330).
