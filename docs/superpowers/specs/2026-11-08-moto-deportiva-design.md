@@ -21,7 +21,7 @@ A marketing video with an influencer who rides a sports motorbike got very good 
 - **No answer in 2 minutes:** the passenger is offered to switch the same request to a regular moto with one tap.
 - **"Avísame":** opt-in. With the service off, the card is shown greyed out with an "Avísame" button; when a super admin switches it on, only those people get a push. No broadcast to everyone (one pilot cannot serve hundreds of requests at once).
 - **Web parity:** tricigo.com/book gets the same option, states and fallback.
-- **Visibility while off:** not decided yet by the team (always shown greyed out with "Avísame", or hidden until it is switched on). Built as a server setting, `platform_config.moto_deportiva_show_when_off` (default `true`), so the team can choose and change it without a release.
+- **Visibility while off (decided 2026-11-09):** always shown, greyed out, with "Avísame". People who tap it get a notification when a super admin switches it on. The server setting `platform_config.moto_deportiva_show_when_off` stays (default `true`) in case the team ever wants to hide it, without a release.
 - **Image:** an illustration in the same style and colours as the current selection images (`apps/client/assets/vehicles/selection/*.png`, `apps/web/public/images/vehicles/*.png`), showing a generic sports bike in the Yamaha / Honda / Ducati style. No brand, logo or model name on it.
 
 ## Current behaviour this builds on (verified 2026-11-08)
@@ -91,8 +91,7 @@ Implementation plan: `docs/superpowers/plans/2026-11-08-moto-deportiva.md`.
 
 1. **Price** (team): base, per km, per minute and minimum in USD for the 4 bands. Until then the migration carries placeholder values and the switch stays off.
 2. **Marketing metrics** (team): which numbers they want (views of the card, "Avísame" taps, requests, completed rides). Not in this design until decided.
-3. **Visibility while off** (team): set `moto_deportiva_show_when_off` before the launch.
-4. **Pilot account:** the influencer must have an approved driver account with his bike registered as a moto.
+3. **Pilot account:** the influencer must have an approved driver account with his bike registered as a moto.
 
 ## Rejected
 
