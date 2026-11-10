@@ -692,10 +692,11 @@ END
 $function$;
 
 -- _support_alert: the whole body (the md5 pins it to prod's, 00632's). The ride gets its owner, and
--- only she is pushed; with nobody to give it to, everyone is, as before. The texts are pasted with
+-- only she is pushed; with nobody to give it to, or an owner off shift who opened it (she keeps
+-- it), everyone is, as before. The texts are pasted with
 -- their line ends stripped of chr(13), so a copy pasted from Windows patches the same.
 SELECT pg_temp.m00679_patch('public._support_alert(uuid,text)', '992c2ce11b664d72e437a683170abb97',
-  '2e0ae1a5219e5e3ec8772124f1b50767',
+  '66476de2158a616eb7897904af78c92b',
   ARRAY[(SELECT prosrc FROM pg_proc WHERE oid = 'public._support_alert(uuid,text)'::regprocedure)],
   ARRAY[replace($new$
 DECLARE
@@ -711,15 +712,16 @@ BEGIN
   END IF;
   v_text := public._support_alert_text(p_ride_id, p_kind);
 
-  -- 00679: one owner on shift. An owner on shift keeps the ride. With no owner, or one off shift,
-  -- the assignment rule picks someone on shift who has not had it. With nobody to pick, an owner
-  -- off shift stays its owner (the panel shows her) and everyone is told, as when nobody is on
-  -- shift. The caller (request_ride_help, the cron) already holds the ride_assist row.
+  -- 00679: one owner on shift. An owner on shift keeps the ride. An owner off shift who opened it
+  -- keeps it too (she may be on it by WhatsApp), and everyone is told, as when nobody is on shift.
+  -- With no owner, or one off shift who never opened it, the assignment rule picks someone on shift
+  -- who has not had it; with nobody to pick, such an owner stays (the panel shows her) and everyone
+  -- is told. The caller (request_ride_help, the cron) already holds the ride_assist row.
   SELECT * INTO v_ra FROM public.ride_assist WHERE ride_id = p_ride_id FOR UPDATE;
   IF FOUND THEN
     IF v_ra.owner_id IS NOT NULL AND public._support_staff_on_shift(v_ra.owner_id) THEN
       v_owner := v_ra.owner_id;
-    ELSE
+    ELSIF v_ra.owner_id IS NULL OR v_ra.owner_opened_at IS NULL THEN
       v_owner := public._support_pick_owner(p_ride_id, v_ra.owners_tried);
       IF v_owner IS NOT NULL THEN
         UPDATE public.ride_assist
@@ -1192,7 +1194,7 @@ BEGIN
     SELECT f.fn, f.want, f.path, md5(p.prosrc) AS got, position(chr(13) IN p.prosrc) > 0 AS has_cr,
            p.prosecdef, p.proconfig
     FROM (VALUES
-      ('public._support_alert(uuid,text)'::regprocedure, '2e0ae1a5219e5e3ec8772124f1b50767', 'public, pg_catalog'),
+      ('public._support_alert(uuid,text)'::regprocedure, '66476de2158a616eb7897904af78c92b', 'public, pg_catalog'),
       ('public.request_ride_help(uuid)', '2b9faf1390909d63ae02696105d78090', 'public, pg_catalog'),
       ('public.notify_support_waiting_rides()', 'da6c10207da346fdc6f27114f6f125d6', 'public, pg_catalog'),
       ('public.admin_offer_ride_to_driver(uuid,uuid)', '87530b01f336c315a804d940333b7c04', 'public, pg_catalog'),
