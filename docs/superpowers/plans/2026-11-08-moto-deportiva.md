@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A "Moto Deportiva" ride type that can be requested whenever a listed pilot is online and free, priced 200 CUP below a regular moto, with a permanent "Avísame" subscription that notifies subscribers when a pilot goes online, a fallback to a regular moto after 2 minutes, and a super-admin page for pilots, subscribers and an emergency switch. In the client app, the web, the driver app and the admin panel.
+**Goal:** A "Moto Deportiva" ride type that can be requested whenever a listed pilot is online and free, priced 200 CUP below a regular moto, with a permanent "Avísame" subscription that notifies subscribers when a pilot goes online, a fallback to a regular moto after 2 minutes, and a super-admin page for pilots, subscribers, metrics and an Activar/Desactivar button. In the client app, the web, the driver app and the admin panel.
 
-**Architecture:** One new service type `moto_deportiva` (row in `service_type_configs`; `is_active` is the emergency switch, on by default). Two lock tables (pilots, waitlist) reached only through SECURITY DEFINER RPCs. A helper `_md_driver_allowed(driver, service)` is patched into the three dispatch functions, so the service reaches only pilots and pilots get nothing else. An AFTER UPDATE trigger on `driver_profiles.is_online` notifies subscribers when a pilot connects. The apps read `get_moto_deportiva_status()` and map it to a card with a pure function in `@tricigo/utils`; the price is the moto estimate plus a configurable offset (`-200`), computed in the shared `getLocalFareEstimate`.
+**Architecture:** One new service type `moto_deportiva` (row in `service_type_configs`; `is_active` is the panel's Activar/Desactivar, activated by default). Two lock tables (pilots, waitlist) reached only through SECURITY DEFINER RPCs. A helper `_md_driver_allowed(driver, service)` is patched into the three dispatch functions, so the service reaches only pilots and pilots get nothing else. An AFTER UPDATE trigger on `driver_profiles.is_online` notifies subscribers when a pilot connects. The apps read `get_moto_deportiva_status()` and map it to a card with a pure function in `@tricigo/utils`; the price is the moto estimate plus a configurable offset (`-200`), computed in the shared `getLocalFareEstimate`.
 
 **Tech Stack:** Supabase Postgres (plpgsql, RLS), Expo/React Native (client, driver), Next.js 15 (web, admin), TypeScript, vitest, local Postgres 16 + PostGIS for the rehearsal.
 
@@ -63,7 +63,7 @@ Expected on 2026-11-08: master ends at `00678`, open PRs hold `00569` and `00662
 -- Moto Deportiva: a ride type requestable while a listed pilot is online and free.
 -- Spec: docs/superpowers/specs/2026-11-08-moto-deportiva-design.md
 --
--- A. Service row (is_active = emergency switch, on) and bands: moto_standard rates with the
+-- A. Service row (is_active = the panel's Activar/Desactivar, activated) and bands: moto_standard rates with the
 --    minimum fare 200 CUP lower. The app prices the trip as the moto estimate + the offset (B);
 --    these rows feed only the server floor (tg_rides_validate_estimated_fare) and ceiling (00631).
 -- B. Settings: price offset, visibility, notice cooldown.
@@ -73,8 +73,10 @@ Expected on 2026-11-08: master ends at `00678`, open PRs hold `00569` and `00662
 --    and _driver_can_serve_ride.
 -- F. get_moto_deportiva_status() for the apps.
 -- G. BEFORE INSERT guard on rides.
--- H. AFTER UPDATE OF is_online trigger on driver_profiles: a pilot going online notifies subscribers.
--- I. RPCs: waitlist (users); overview, switch, pilots, subscribers (super admins).
+-- H. _moto_deportiva_send_notice(): one notice to every subscriber, once per cooldown, logged in
+--    moto_deportiva_notices. Called when a pilot goes online (trigger on driver_profiles.is_online)
+--    and when a super admin activates the service while a pilot is online.
+-- I. RPCs: waitlist (users); overview, activate/deactivate, pilots, subscribers, metrics (super admins).
 
 -- ── A. Service and bands ─────────────────────────────────────
 INSERT INTO public.service_type_configs
@@ -135,6 +137,17 @@ CREATE TABLE IF NOT EXISTS public.moto_deportiva_waitlist (
 ALTER TABLE public.moto_deportiva_waitlist ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.moto_deportiva_waitlist FROM anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.moto_deportiva_waitlist TO service_role;
+
+-- One row per notice sent (cooldown and metrics: cron_http_calls keeps only 24 h).
+CREATE TABLE IF NOT EXISTS public.moto_deportiva_notices (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  sent_at timestamptz NOT NULL DEFAULT now(),
+  recipients integer NOT NULL,
+  source text NOT NULL CHECK (source IN ('pilot_online', 'admin_on'))
+);
+ALTER TABLE public.moto_deportiva_notices ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.moto_deportiva_notices FROM anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.moto_deportiva_notices TO service_role;
 
 -- ── D. Helpers ───────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public._moto_deportiva_is_on()
@@ -303,12 +316,12 @@ DROP TRIGGER IF EXISTS rides_moto_deportiva_guard ON public.rides;
 CREATE TRIGGER rides_moto_deportiva_guard BEFORE INSERT ON public.rides
   FOR EACH ROW EXECUTE FUNCTION public.tg_rides_moto_deportiva_guard();
 
--- ── H. Notice when a pilot goes online ───────────────────────
+-- ── H. Notice to subscribers ─────────────────────────────────
 -- Permanent subscriptions: everybody on the list, every time, at most once per cooldown.
 -- Batches of 300 ids: send-push filters with .in() (CLAUDE.md, campaigns).
--- Never blocks the pilot going online: any failure is logged and swallowed.
-CREATE OR REPLACE FUNCTION public.tg_moto_deportiva_pilot_online()
- RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+-- Returns the number of people notified (0 when skipped). Callers swallow its errors.
+CREATE OR REPLACE FUNCTION public._moto_deportiva_send_notice(p_source text)
+ RETURNS integer LANGUAGE plpgsql SECURITY DEFINER
  SET search_path TO 'public', 'pg_catalog'
  SET lock_timeout TO '2s'
 AS $function$
@@ -319,44 +332,52 @@ DECLARE
   v_cooldown_h int;
   i int;
 BEGIN
+  IF NOT public._moto_deportiva_is_on() THEN RETURN 0; END IF;
+  -- Two pilots connecting at once, or a pilot and a super admin, must not both send.
+  PERFORM pg_advisory_xact_lock(hashtext('moto_deportiva_waitlist_notice'));
+  v_cooldown_h := GREATEST(0, public.get_platform_config_numeric('moto_deportiva_waitlist_cooldown_h', 3))::int;
+  IF EXISTS (SELECT 1 FROM public.moto_deportiva_notices
+              WHERE sent_at > now() - make_interval(hours => v_cooldown_h)) THEN
+    RETURN 0;
+  END IF;
+  SELECT array_agg(user_id) INTO v_ids FROM public.moto_deportiva_waitlist;
+  IF v_ids IS NULL THEN RETURN 0; END IF;
+  v_key := public.get_service_role_key();
+  IF COALESCE(v_key, '') = '' THEN RAISE EXCEPTION 'moto_deportiva_no_service_key'; END IF;
+  FOR i IN 1 .. array_length(v_ids, 1) BY 300 LOOP
+    v_batch := v_ids[i : i + 299];
+    PERFORM public.cron_http_post('moto-deportiva-waitlist',
+      url     := 'https://lqaufszburqvlslpcuac.supabase.co/functions/v1/send-push',
+      headers := jsonb_build_object('Content-Type', 'application/json',
+                   'Authorization', 'Bearer ' || v_key, 'apikey', v_key),
+      body    := jsonb_build_object(
+        'user_ids', to_jsonb(v_batch),
+        'title',    '¡La Moto Deportiva está disponible!',
+        'body',     'Pídela ahora en TriciGo.',
+        'category', 'promo',
+        'data',     jsonb_build_object('content_type', 'moto_deportiva')),
+      timeout_milliseconds := 30000);
+  END LOOP;
+  UPDATE public.moto_deportiva_waitlist SET notified_at = now() WHERE user_id = ANY (v_ids);
+  INSERT INTO public.moto_deportiva_notices (recipients, source) VALUES (array_length(v_ids, 1), p_source);
+  RETURN array_length(v_ids, 1);
+END
+$function$;
+REVOKE ALL ON FUNCTION public._moto_deportiva_send_notice(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public._moto_deportiva_send_notice(text) TO service_role;
+
+-- A pilot going online. Never blocks the pilot: any failure is logged and swallowed.
+CREATE OR REPLACE FUNCTION public.tg_moto_deportiva_pilot_online()
+ RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+BEGIN
   IF NOT NEW.is_online OR COALESCE(OLD.is_online, false)
      OR NOT EXISTS (SELECT 1 FROM public.moto_deportiva_pilots WHERE driver_profile_id = NEW.id) THEN
     RETURN NEW;
   END IF;
   BEGIN
-    IF NOT public._moto_deportiva_is_on() THEN RETURN NEW; END IF;
-    -- Two pilots connecting at once must not both send.
-    PERFORM pg_advisory_xact_lock(hashtext('moto_deportiva_waitlist_notice'));
-    v_cooldown_h := GREATEST(0, public.get_platform_config_numeric('moto_deportiva_waitlist_cooldown_h', 3))::int;
-    IF EXISTS (
-      SELECT 1 FROM public.platform_config
-       WHERE key = 'moto_deportiva_last_waitlist_push_at'
-         AND (value #>> '{}')::timestamptz > now() - make_interval(hours => v_cooldown_h)
-    ) THEN
-      RETURN NEW;
-    END IF;
-    SELECT array_agg(user_id) INTO v_ids FROM public.moto_deportiva_waitlist;
-    IF v_ids IS NULL THEN RETURN NEW; END IF;
-    v_key := public.get_service_role_key();
-    IF COALESCE(v_key, '') = '' THEN RAISE EXCEPTION 'moto_deportiva_no_service_key'; END IF;
-    FOR i IN 1 .. array_length(v_ids, 1) BY 300 LOOP
-      v_batch := v_ids[i : i + 299];
-      PERFORM public.cron_http_post('moto-deportiva-waitlist',
-        url     := 'https://lqaufszburqvlslpcuac.supabase.co/functions/v1/send-push',
-        headers := jsonb_build_object('Content-Type', 'application/json',
-                     'Authorization', 'Bearer ' || v_key, 'apikey', v_key),
-        body    := jsonb_build_object(
-          'user_ids', to_jsonb(v_batch),
-          'title',    '¡La Moto Deportiva está disponible!',
-          'body',     'Pídela ahora en TriciGo.',
-          'category', 'promo',
-          'data',     jsonb_build_object('content_type', 'moto_deportiva')),
-        timeout_milliseconds := 30000);
-    END LOOP;
-    UPDATE public.moto_deportiva_waitlist SET notified_at = now() WHERE user_id = ANY (v_ids);
-    INSERT INTO public.platform_config (key, value)
-    VALUES ('moto_deportiva_last_waitlist_push_at', to_jsonb(now()))
-    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
+    PERFORM public._moto_deportiva_send_notice('pilot_online');
   EXCEPTION WHEN OTHERS THEN
     PERFORM public.log_rpc_attempt('moto_deportiva_waitlist_push', auth.uid(), NEW.id, 'push_failed',
       jsonb_build_object('sqlstate', SQLSTATE, 'error', SQLERRM));
@@ -396,7 +417,7 @@ BEGIN
     'active', public._moto_deportiva_is_on(),
     'status', public.get_moto_deportiva_status() ->> 'status',
     'waitlist_count', (SELECT count(*) FROM public.moto_deportiva_waitlist),
-    'last_notice_at', (SELECT value #>> '{}' FROM public.platform_config WHERE key = 'moto_deportiva_last_waitlist_push_at'),
+    'last_notice_at', (SELECT max(sent_at) FROM public.moto_deportiva_notices),
     'pilots', COALESCE((
       SELECT jsonb_agg(jsonb_build_object(
                'driver_profile_id', dp.id, 'full_name', u.full_name,
@@ -441,7 +462,7 @@ CREATE OR REPLACE FUNCTION public.admin_set_moto_deportiva(p_active boolean)
  RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
  SET search_path TO 'public', 'pg_catalog'
 AS $function$
-DECLARE v_old boolean;
+DECLARE v_old boolean; v_sent integer := 0;
 BEGIN
   IF NOT public.is_super_admin() THEN RETURN jsonb_build_object('error', 'forbidden'); END IF;
   SELECT is_active INTO v_old FROM public.service_type_configs WHERE slug = 'moto_deportiva' FOR UPDATE;
@@ -451,7 +472,19 @@ BEGIN
   INSERT INTO public.admin_actions (admin_id, action, target_type, target_id, old_values, new_values)
   VALUES (auth.uid(), 'moto_deportiva_switch', 'service_type', 'moto_deportiva',
           jsonb_build_object('is_active', v_old), jsonb_build_object('is_active', p_active));
-  RETURN jsonb_build_object('success', true, 'active', p_active);
+  -- Activated while a pilot is already online: subscribers hear it now, not at his next connection.
+  IF p_active AND EXISTS (
+    SELECT 1 FROM public.moto_deportiva_pilots mp
+    JOIN public.driver_profiles dp ON dp.id = mp.driver_profile_id
+    WHERE dp.is_online AND dp.status = 'approved') THEN
+    BEGIN
+      v_sent := public._moto_deportiva_send_notice('admin_on');
+    EXCEPTION WHEN OTHERS THEN
+      PERFORM public.log_rpc_attempt('moto_deportiva_waitlist_push', auth.uid(), NULL::uuid, 'push_failed',
+        jsonb_build_object('sqlstate', SQLSTATE, 'error', SQLERRM));
+    END;
+  END IF;
+  RETURN jsonb_build_object('success', true, 'active', p_active, 'notified', v_sent);
 END
 $function$;
 
@@ -491,6 +524,49 @@ BEGIN
 END
 $function$;
 
+-- Numbers for marketing over the last p_days (1..90). Heartbeats are kept 30 days
+-- (driver_heartbeat_retention_days), so pilot hours never cover more than that.
+CREATE OR REPLACE FUNCTION public.admin_moto_deportiva_metrics(p_days integer DEFAULT 30)
+ RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+DECLARE
+  v_days int := LEAST(GREATEST(COALESCE(p_days, 30), 1), 90);
+  v_from timestamptz;
+BEGIN
+  IF NOT public.is_super_admin() THEN RETURN jsonb_build_object('error', 'forbidden'); END IF;
+  v_from := now() - make_interval(days => v_days);
+  RETURN jsonb_build_object(
+    'days', v_days,
+    'subscribers_now', (SELECT count(*) FROM public.moto_deportiva_waitlist),
+    'subscribers_new', (SELECT count(*) FROM public.moto_deportiva_waitlist WHERE created_at >= v_from),
+    'notices_sent', (SELECT count(*) FROM public.moto_deportiva_notices WHERE sent_at >= v_from),
+    'people_notified', (SELECT COALESCE(sum(recipients), 0) FROM public.moto_deportiva_notices WHERE sent_at >= v_from),
+    'requests', (SELECT count(*) FROM public.rides WHERE service_type = 'moto_deportiva' AND created_at >= v_from),
+    'completed', (SELECT count(*) FROM public.rides WHERE service_type = 'moto_deportiva' AND status = 'completed' AND created_at >= v_from),
+    'canceled', (SELECT count(*) FROM public.rides WHERE service_type = 'moto_deportiva' AND status = 'canceled' AND created_at >= v_from),
+    'switched_to_moto', (SELECT count(*) FROM public.rides WHERE service_type = 'moto_deportiva' AND status = 'canceled'
+                          AND cancellation_reason = 'moto_deportiva_fallback' AND created_at >= v_from),
+    'revenue_cup', (SELECT COALESCE(sum(final_fare_cup), 0) FROM public.rides
+                     WHERE service_type = 'moto_deportiva' AND status = 'completed' AND created_at >= v_from),
+    'first_ride_people', (
+      SELECT count(*) FROM (
+        SELECT DISTINCT ON (r.customer_id) r.customer_id, r.service_type, r.completed_at
+          FROM public.rides r
+         WHERE r.status = 'completed'
+         ORDER BY r.customer_id, r.completed_at) f
+       WHERE f.service_type = 'moto_deportiva' AND f.completed_at >= v_from),
+    'pilot_hours_online', (
+      SELECT round(count(DISTINCT (h.driver_profile_id, date_trunc('hour', h.beat_at)
+                     + floor(extract(minute FROM h.beat_at) / 5) * interval '5 minutes')) * 5 / 60.0, 1)
+        FROM public.driver_heartbeat_log h
+        JOIN public.moto_deportiva_pilots mp ON mp.driver_profile_id = h.driver_profile_id
+       WHERE h.is_online AND h.beat_at >= v_from));
+END
+$function$;
+REVOKE ALL ON FUNCTION public.admin_moto_deportiva_metrics(integer) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.admin_moto_deportiva_metrics(integer) TO authenticated, service_role;
+
 REVOKE ALL ON FUNCTION public.set_moto_deportiva_waitlist(boolean) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.admin_moto_deportiva_overview() FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.admin_moto_deportiva_subscribers() FROM PUBLIC, anon;
@@ -520,6 +596,9 @@ BEGIN
      OR has_table_privilege('authenticated', 'public.moto_deportiva_waitlist', 'SELECT')
      OR has_table_privilege('authenticated', 'public.moto_deportiva_pilots', 'SELECT') THEN
     RAISE EXCEPTION '00679: lock tables are readable by clients';
+  END IF;
+  IF has_table_privilege('authenticated', 'public.moto_deportiva_notices', 'SELECT') THEN
+    RAISE EXCEPTION '00679: moto_deportiva_notices is readable by clients';
   END IF;
   IF has_function_privilege('authenticated', 'public._md_driver_allowed(uuid,text)', 'EXECUTE') THEN
     RAISE EXCEPTION '00679: _md_driver_allowed is executable by clients';
@@ -560,13 +639,13 @@ The 00650 scaffold already has `driver_profiles`, `vehicles`, `find_best_drivers
 | T6 | PILOT online and free | `available` |
 | T7 | PILOT with an `in_progress` ride | `busy` |
 | T8 | a `moto_deportiva` ride `searching` created 10 s ago | `busy` |
-| T9 | emergency switch off, PILOT online | `off` |
+| T9 | deactivated in the panel, PILOT online | `off` |
 | T10 | client INSERT of a `moto_deportiva` ride when `busy` (as `authenticated`) | error DETAIL `moto_deportiva_unavailable` |
 | T11 | same INSERT when `available` | ride created |
 | T12 | INSERT as owner (no client role) when `offline` | ride created |
-| T13 | RIDER and RIDER2 subscribe; PILOT goes offline → online | one `net.http_post` with both in `user_ids`; both still subscribed (`waiting` true); `last_waitlist_push_at` set |
+| T13 | RIDER and RIDER2 subscribe; PILOT goes offline → online | one `net.http_post` with both in `user_ids`; both still subscribed (`waiting` true); one `moto_deportiva_notices` row (`pilot_online`, 2) |
 | T14 | PILOT offline → online again within 3 h | no new push |
-| T15 | `last_waitlist_push_at` moved 4 h back; PILOT offline → online | a second push to both (permanent subscription) |
+| T15 | the notice row moved 4 h back; PILOT offline → online | a second push to both (permanent subscription) |
 | T16 | MOTO2 (not a pilot) offline → online | no push |
 | T17 | switch off; PILOT offline → online after the cooldown | no push |
 | T18 | no service key in the vault, cooldown elapsed, PILOT online | PILOT is online (UPDATE committed), one `push_failed` row |
@@ -577,6 +656,8 @@ The 00650 scaffold already has `driver_profiles`, `vehicles`, `find_best_drivers
 | T23 | searching `moto_standard` ride, PILOT and MOTO2 offline | the push includes MOTO2, not PILOT |
 | T24 | `_driver_can_serve_ride(PILOT,'moto_standard',false)` / `(PILOT,'moto_deportiva',false)` | false / true |
 | T25 | anon and authenticated `SELECT` from both lock tables | permission denied |
+| T27 | deactivated; cooldown elapsed; PILOT online; SUPER `admin_set_moto_deportiva(true)` | one push, a notice row `admin_on`, response `notified` 2; activating with no pilot online sends nothing |
+| T28 | SUPER `admin_moto_deportiva_metrics(30)`; RIDER calls it | the counts match the rows the tests created; RIDER → `forbidden` |
 | T26 | prices | `service_type_configs.min_fare_cup` of `moto_deportiva` = moto − 200 (±1 from the stub rounding); the 06–12 band keeps base 0 |
 
 - [ ] **Step 3: `run.sh`** — copy the structure of `supabase/tests/00674/run.sh` (`ok`/`ko`/`run`/`val`/`err` helpers, `PGBIN`/`PGPORT`/`PGDB`, `PGCLIENTENCODING=UTF8 LC_MESSAGES=C`): create the DB, load `../00650/scaffold.sql`, apply `supabase/migrations/00650_*.sql`, check the three live md5s, load `scaffold-extra.sql`. With `none`, run `tests.sql` (RED). With the migration path: apply it twice, run `tests.sql`, apply a CRLF copy (`sed 's/$/\r/'`) in a fresh DB, and run negative proofs: (a) replace `find_best_drivers` with an unknown body → the migration aborts with `unknown body`; (b) grant SELECT on the waitlist to anon, rerun → the self-check aborts.
@@ -601,7 +682,7 @@ The first apply passes; the second aborts with `unknown body (md5 X)` for each p
 
 - [ ] **Step 1:** Ask the user, with AskUserQuestion, for authorization to (a) run the migration in prod inside a rolled-back block and (b) apply it (CLAUDE.md § "MCP migration apply").
 - [ ] **Step 2:** Rehearsal: `DO $probe$ BEGIN EXECUTE $mig$<file>$mig$; <T2, T3, T6, T10, T13 with the demo driver +5355550101 as a temporary pilot and the demo rider subscribed>; RAISE EXCEPTION 'PROBE %', <results>; END $probe$;`. The rollback cancels the enqueued push (`net.http_request_queue` is transactional). The function bodies contain `DELETE FROM`, so MCP will wait for approval: warn the user first; if it is cut twice, hand over the SQL Editor steps.
-- [ ] **Step 3:** Apply. Verify by object: the three md5s from Task 2, the service row `is_active = true`, the bands copied, `has_table_privilege` checks, the trigger `driver_profiles_moto_deportiva_online` enabled, and `get_moto_deportiva_status()` as anon returns `{"status":"offline","waiting":false}` (no pilots yet).
+- [ ] **Step 3:** Apply. Verify by object: the three md5s from Task 2, the service row `is_active = true`, the bands copied, `has_table_privilege` checks, the trigger `driver_profiles_moto_deportiva_online` enabled, `admin_moto_deportiva_metrics(30)` as a super admin returns zeros, and `get_moto_deportiva_status()` as anon returns `{"status":"offline","waiting":false}` (no pilots yet).
 
 ---
 
@@ -767,6 +848,11 @@ export interface MotoDeportivaPilot { driver_profile_id: string; full_name: stri
 export interface MotoDeportivaOverview {
   active: boolean; status: string; waitlist_count: number; last_notice_at: string | null; pilots: MotoDeportivaPilot[];
 }
+export interface MotoDeportivaMetrics {
+  days: number; subscribers_now: number; subscribers_new: number; notices_sent: number; people_notified: number;
+  requests: number; completed: number; canceled: number; switched_to_moto: number; revenue_cup: number;
+  first_ride_people: number; pilot_hours_online: number;
+}
 export interface MotoDeportivaSubscriber {
   user_id: string; full_name: string | null; phone: string | null; subscribed_at: string; notified_at: string | null;
 }
@@ -803,9 +889,13 @@ export const motoDeportivaService = {
     const { data, error } = await getSupabaseClient().rpc('admin_remove_moto_deportiva_subscriber', { p_user_id: userId });
     rpcResult(data, error);
   },
-  async setActive(active: boolean): Promise<void> {
+  async setActive(active: boolean): Promise<{ notified: number }> {
     const { data, error } = await getSupabaseClient().rpc('admin_set_moto_deportiva', { p_active: active });
-    rpcResult(data, error);
+    return rpcResult<{ notified: number }>(data, error);
+  },
+  async metrics(days = 30): Promise<MotoDeportivaMetrics> {
+    const { data, error } = await getSupabaseClient().rpc('admin_moto_deportiva_metrics', { p_days: days });
+    return rpcResult<MotoDeportivaMetrics>(data, error);
   },
   async addPilot(phone: string): Promise<void> {
     const { data, error } = await getSupabaseClient().rpc('admin_add_moto_deportiva_pilot', { p_phone: phone });
@@ -944,12 +1034,12 @@ When `offerMotoFallback`, render above the cancel button: title `t('moto_deporti
 **Files:** Create `apps/admin/src/app/moto-deportiva/page.tsx`. Modify `packages/utils/src/adminPanelAccess.ts:83`, `packages/utils/src/__tests__/adminPanelAccess.test.ts`, the sidebar component (`grep -rn "'/equipo'" apps/admin/src/components | head`), `apps/admin/src/lib/rideType.ts`.
 
 - [ ] **Step 1: Access test first.** In `adminPanelAccess.test.ts`: `/moto-deportiva` allowed for `super_admin`, denied for `admin`, `operator`, `marketing`. Run → FAIL. Set `SUPER_ADMIN_ROUTES` to `['/equipo', '/moto-deportiva']`. Run → PASS.
-- [ ] **Step 2: Page** (client component, same layout primitives as `apps/admin/src/app/equipo/page.tsx`), three blocks:
-  - **Estado:** the current status (`available` → "Disponible", `busy` → "Ocupada", `offline` → "Piloto desconectado", `off` → "Apagada"), the last notice time (`formatAdminDate`), and the emergency switch "Mostrar la Moto Deportiva en la app" (confirmation dialog, `setActive`, reload).
+- [ ] **Step 2: Page** (client component, same layout primitives as `apps/admin/src/app/equipo/page.tsx`), three blocks (the fourth is Step 4):
+  - **Estado:** a large "Activar" / "Desactivar" button at the top (confirmation dialog, `setActive`, reload; after activating, a toast "Se avisó a N personas" when `notified > 0`), the current status (`available` → "Disponible", `busy` → "Ocupada", `offline` → "Activada · piloto desconectado", `off` → "Desactivada") and the last notice time (`formatAdminDate`). Under the button: "Activada: se puede pedir mientras el piloto está conectado. Desactivada: no aparece disponible aunque el piloto esté conectado." 
   - **Pilotos:** table (name, en línea) with "Quitar" (`removePilot`), and an input "Teléfono del piloto" + "Agregar" (`addPilot`). Errors: `phone_not_found` → "No hay ninguna cuenta con ese teléfono confirmado"; `not_an_approved_moto_driver` → "Esa cuenta no es un conductor aprobado con moto".
   - **Suscritos al aviso (N):** table from `subscribers()` (nombre, teléfono, desde, último aviso) with "Quitar del aviso" per row (confirmation, `removeSubscriber`, reload), and a name/phone filter box.
 - [ ] **Step 3:** Sidebar entry "Moto Deportiva" in the super-admin group next to "Equipo". `rideType.ts`: `moto_deportiva: { key: 'rides.type_moto_deportiva', fallback: 'Moto Deportiva' }`.
-- [ ] **Step 4 (only if the team approves the metrics, spec open item 1):** a fourth block "Últimos 30 días" with numbers read by a new super-admin RPC `admin_moto_deportiva_metrics()` in a new migration: subscribers now and new in the period, notices sent, Moto Deportiva requests, completed rides, canceled before pickup, changes to a regular moto (`cancellation_reason = 'moto_deportiva_fallback'`), revenue of completed rides, people whose first completed ride was a Moto Deportiva, and hours with a pilot online (from `audit_log` `is_online` changes).
+- [ ] **Step 4: Métricas.** A fourth block with a 7 / 30 / 90-day selector over `metrics(days)`, one tile per number: suscritos (y nuevos en el período), avisos enviados (y personas avisadas), pedidos, viajes completados, cancelados, cambiados a moto normal, facturado (`formatCUP`), personas cuyo primer viaje fue en Moto Deportiva, horas con el piloto en línea. Under the hours tile: "Se guardan los últimos 30 días."
 - [ ] **Step 5:** `check-types` + `corepack pnpm@9.15.4 --filter @tricigo/utils test` green. Open the page in the browser pane as a super admin. Commit `feat(admin): add Moto Deportiva page`.
 
 ---
@@ -957,6 +1047,6 @@ When `offerMotoFallback`, render above the cancel button: title `t('moto_deporti
 ### Task 11: i18n, docs and wrap-up
 
 - [ ] **Step 1:** Real copy in `packages/i18n/src/locales/{es,en,pt}/rider.json` (`moto_deportiva.*`), `driver.json` (`trip.moto_deportiva_badge`), `admin.json` (`rides.type_moto_deportiva`), `common.json` (`service_type.moto_deportiva`). Tuteo (`copyTuteo` runs in `pnpm test`).
-- [ ] **Step 2:** Add a section "Moto Deportiva" to CLAUDE.md (after "Feature Compartir viaje"): automatic availability and the emergency switch, pilots table, `_md_driver_allowed` in the three dispatch functions with their new md5s, the status values, the insert guard, the notice trigger on `driver_profiles.is_online` (permanent subscriptions, 3 h cooldown, inbox backstop), the price (moto estimate + `moto_deportiva_price_offset_cup`, computed in `getLocalFareEstimate`; the bands only feed the server checks), the 2-minute fallback (cancel + reselect), and the `moto%` trap.
+- [ ] **Step 2:** Add a section "Moto Deportiva" to CLAUDE.md (after "Feature Compartir viaje"): automatic availability and the Activar/Desactivar button (activating with a pilot online notifies), pilots table, the notices table and the metrics RPC, `_md_driver_allowed` in the three dispatch functions with their new md5s, the status values, the insert guard, the notice trigger on `driver_profiles.is_online` (permanent subscriptions, 3 h cooldown, inbox backstop), the price (moto estimate + `moto_deportiva_price_offset_cup`, computed in `getLocalFareEstimate`; the bands only feed the server checks), the 2-minute fallback (cancel + reselect), and the `moto%` trap.
 - [ ] **Step 3:** `corepack pnpm@9.15.4 check-types`, `corepack pnpm@9.15.4 test`, `check:migration-grants` green.
-- [ ] **Step 4:** Commit `docs: document Moto Deportiva`, ask before pushing the branch, open the PR with: migration status, OTA needed for client and driver, open items (metrics, final image, pilot account, pilot income), and the parity checklist of CLAUDE.md.
+- [ ] **Step 4:** Commit `docs: document Moto Deportiva`, ask before pushing the branch, open the PR with: migration status, OTA needed for client and driver, open items (final image, pilot account, pilot income), and the parity checklist of CLAUDE.md.
