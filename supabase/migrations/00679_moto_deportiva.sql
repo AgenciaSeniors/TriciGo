@@ -521,6 +521,33 @@ GRANT EXECUTE ON FUNCTION public.admin_set_moto_deportiva(boolean) TO authentica
 GRANT EXECUTE ON FUNCTION public.admin_add_moto_deportiva_pilot(text) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.admin_remove_moto_deportiva_pilot(uuid) TO authenticated, service_role;
 
+-- ── Pasted from Windows (CRLF) ───────────────────────────────
+-- The new bodies and the text inserted by the patches carry a carriage return: rewrite them
+-- without it, so the bodies match git and the md5 guards of E accept a later re-run.
+DO $crlf$
+DECLARE
+  v_fn  regprocedure;
+  v_def text;
+BEGIN
+  FOREACH v_fn IN ARRAY ARRAY[
+    'public.find_best_drivers(double precision,double precision,text,integer,integer,boolean,integer,text,numeric,integer,integer,integer,uuid)',
+    'public.notify_offline_drivers_for_searching_rides()', 'public._driver_can_serve_ride(uuid,text,boolean)',
+    'public._moto_deportiva_is_on()', 'public._md_driver_allowed(uuid,text)', 'public.get_moto_deportiva_status()',
+    'public.tg_rides_moto_deportiva_guard()', 'public._moto_deportiva_send_notice(text)',
+    'public.tg_moto_deportiva_pilot_online()', 'public.set_moto_deportiva_waitlist(boolean)',
+    'public.admin_moto_deportiva_overview()', 'public.admin_moto_deportiva_subscribers()',
+    'public.admin_remove_moto_deportiva_subscriber(uuid)', 'public.admin_set_moto_deportiva(boolean)',
+    'public.admin_add_moto_deportiva_pilot(text)', 'public.admin_remove_moto_deportiva_pilot(uuid)',
+    'public.admin_moto_deportiva_metrics(integer)']::regprocedure[]
+  LOOP
+    v_def := pg_get_functiondef(v_fn);
+    IF position(chr(13) IN v_def) > 0 THEN
+      EXECUTE replace(v_def, chr(13), '');
+    END IF;
+  END LOOP;
+END
+$crlf$;
+
 -- ── Self-checks ──────────────────────────────────────────────
 DO $check$
 BEGIN
