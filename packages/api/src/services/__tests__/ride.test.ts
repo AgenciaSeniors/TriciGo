@@ -138,6 +138,69 @@ describe('rideService.getLocalFareEstimate', () => {
     expect(estimate.estimated_fare_cup).toBeGreaterThanOrEqual(TRICICLO_CONFIG.min_fare_cup);
   });
 
+  describe('moto_deportiva', () => {
+    const TRIP = {
+      pickup_lat: 23.1352,
+      pickup_lng: -82.3599,
+      dropoff_lat: 23.1375,
+      dropoff_lng: -82.3964,
+    };
+
+    // Routes each table query: service_type_configs by slug, platform_config by key.
+    function routeFrom(opts: { offset?: number | null; deportivaMin?: number | null }) {
+      (mockFrom as unknown as { mockImplementation: (fn: (table: string) => unknown) => void }).mockImplementation((table: string) => {
+        const chain = createMockQueryChain();
+        const filters: Record<string, unknown> = {};
+        chain.eq.mockImplementation((col: string, val: unknown) => { filters[col] = val; return chain; });
+        const resolve = () => {
+          if (table === 'platform_config') {
+            return opts.offset == null
+              ? { data: null, error: null }
+              : { data: { value: opts.offset }, error: null };
+          }
+          if (table === 'service_type_configs') {
+            if (filters.slug === 'moto_deportiva') {
+              return opts.deportivaMin == null
+                ? { data: null, error: null }
+                : { data: { min_fare_cup: opts.deportivaMin }, error: null };
+            }
+            return { data: MOTO_CONFIG, error: null };
+          }
+          return { data: null, error: null };
+        };
+        chain.single.mockImplementation(() => Promise.resolve(resolve()));
+        chain.maybeSingle.mockImplementation(() => Promise.resolve(resolve()));
+        return chain;
+      });
+    }
+
+    it('prices the moto estimate plus the offset, floored at its own minimum', async () => {
+      routeFrom({ offset: null, deportivaMin: 0 });
+      const moto = await rideService.getLocalFareEstimate({ ...TRIP, service_type: 'moto_standard' });
+
+      routeFrom({ offset: -200, deportivaMin: 553 });
+      const sport = await rideService.getLocalFareEstimate({ ...TRIP, service_type: 'moto_deportiva' });
+
+      expect(sport.service_type).toBe('moto_deportiva');
+      expect(sport.estimated_fare_cup).toBe(Math.max(moto.estimated_fare_cup - 200, 553));
+      expect(sport.estimated_fare_trc).toBe(sport.estimated_fare_cup);
+      expect(sport.fare_range_min_cup).toBe(Math.max(moto.fare_range_min_cup - 200, 553));
+      expect(sport.fare_range_max_cup).toBe(Math.max(moto.fare_range_max_cup - 200, 553));
+      expect(sport.stops_surcharge_cup).toBe(moto.stops_surcharge_cup);
+      expect(sport.estimated_distance_m).toBe(moto.estimated_distance_m);
+    });
+
+    it('uses -200 and no minimum when the config rows cannot be read', async () => {
+      routeFrom({ offset: null, deportivaMin: 0 });
+      const moto = await rideService.getLocalFareEstimate({ ...TRIP, service_type: 'moto_standard' });
+
+      routeFrom({ offset: null, deportivaMin: null });
+      const sport = await rideService.getLocalFareEstimate({ ...TRIP, service_type: 'moto_deportiva' });
+
+      expect(sport.estimated_fare_cup).toBe(moto.estimated_fare_cup - 200);
+    });
+  });
+
   it('different service types produce different fares', async () => {
     // First call: triciclo
     const triciChain = createMockQueryChain();

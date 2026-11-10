@@ -148,6 +148,8 @@ export {
 export { paymentService } from './services/payment.service';
 export { corporateService } from './services/corporate.service';
 export { fleetService } from './services/fleet.service';
+export { motoDeportivaService } from './services/moto-deportiva.service';
+export type { MotoDeportivaPilot, MotoDeportivaOverview, MotoDeportivaMetrics, MotoDeportivaSubscriber } from './services/moto-deportiva.service';
 export { buildFleetRequest, createFleetRequestSubmission } from './services/fleetRequestSubmission';
 export type { FleetRequestFormValues } from './services/fleetRequestSubmission';
 export { onboardingService, ONBOARDING_UNAVAILABLE } from './services/onboarding.service';

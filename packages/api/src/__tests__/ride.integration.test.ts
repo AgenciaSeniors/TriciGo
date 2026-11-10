@@ -82,6 +82,11 @@ vi.mock('@tricigo/utils', () => ({
   DEFAULT_EXCHANGE_RATE: 300,
   calculateTripDuration: vi.fn().mockReturnValue(600),
   cupToTrc: vi.fn().mockImplementation((cup: number) => Math.round(cup / 300)),
+  applyMotoDeportivaOffset: vi.fn().mockImplementation((fare: number, offset: number, min: number) =>
+    Math.max(Math.round(fare + (Number.isFinite(offset) ? offset : 0)), min),
+  ),
+  MOTO_DEPORTIVA_OFFSET_KEY: 'moto_deportiva_price_offset_cup',
+  MOTO_DEPORTIVA_DEFAULT_OFFSET_CUP: -200,
   trimNotes: vi.fn().mockImplementation((s: string | null | undefined) => (s && s.trim() ? s.trim() : null)),
 }));
 

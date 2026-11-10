@@ -47,6 +47,9 @@ import {
   fetchRoute,
   fetchMultiStopRoute,
   trimNotes,
+  applyMotoDeportivaOffset,
+  MOTO_DEPORTIVA_OFFSET_KEY,
+  MOTO_DEPORTIVA_DEFAULT_OFFSET_CUP,
 } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
 import { transformRideCoordinates } from './_ride-coordinates';
@@ -311,6 +314,37 @@ export const rideService = {
     /** IANA zone for the time band. Default: Cuba's official clock (cubaTimeZone). */
     time_zone?: string;
   }): Promise<FareEstimate> {
+    // Moto Deportiva: the moto fare for the same trip plus a configurable offset
+    // (−200 CUP), floored at its own minimum. Both reads are best-effort: with the
+    // migration not applied, fall back to the default offset and no minimum.
+    if (params.service_type === 'moto_deportiva') {
+      const moto = await this.getLocalFareEstimate({ ...params, service_type: 'moto_standard' });
+      const sb = getSupabaseClient();
+      const [cfgRes, svcRes] = await Promise.all([
+        sb.from('platform_config').select('value').eq('key', MOTO_DEPORTIVA_OFFSET_KEY).maybeSingle()
+          .then((r) => r, () => ({ data: null })),
+        sb.from('service_type_configs').select('min_fare_cup').eq('slug', 'moto_deportiva').maybeSingle()
+          .then((r) => r, () => ({ data: null })),
+      ]);
+      const rawOffset = (cfgRes.data as { value?: unknown } | null)?.value;
+      const parsedOffset = rawOffset == null ? Number.NaN : Number(rawOffset);
+      const offset = Number.isFinite(parsedOffset) ? parsedOffset : MOTO_DEPORTIVA_DEFAULT_OFFSET_CUP;
+      const rawMin = Number((svcRes.data as { min_fare_cup?: unknown } | null)?.min_fare_cup);
+      const minFare = Number.isFinite(rawMin) ? rawMin : 0;
+      const apply = (v: number) => applyMotoDeportivaOffset(v, offset, minFare);
+      const fare = apply(moto.estimated_fare_cup);
+      return {
+        ...moto,
+        service_type: 'moto_deportiva',
+        estimated_fare_cup: fare,
+        estimated_fare_trc: fare,
+        fare_range_min_cup: apply(moto.fare_range_min_cup),
+        fare_range_max_cup: apply(moto.fare_range_max_cup),
+        fare_range_min_trc: apply(moto.fare_range_min_trc),
+        fare_range_max_trc: apply(moto.fare_range_max_trc),
+      };
+    }
+
     // Validate ride distance is within reasonable bounds (50km max)
     const directDistance = haversineDistance(
       { latitude: params.pickup_lat, longitude: params.pickup_lng },
@@ -736,7 +770,8 @@ export const rideService = {
       if (
         (error.details === 'fare_above_ceiling'
           || error.details === 'fare_required'
-          || error.details === 'scheduled_limit')
+          || error.details === 'scheduled_limit'
+          || error.details === 'moto_deportiva_unavailable')
         && error.message
       ) {
         throw new AppError(error.message, error.details.toUpperCase(), 400);
