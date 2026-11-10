@@ -212,6 +212,10 @@ export function useRideInit() {
 
       try {
         const fresh = await rideService.getActiveRide(user.id);
+        // The ride changed while this poll was in flight (cancelled by the
+        // rider, e.g. "Cambiar a Moto" restoring the draft): its answer is
+        // about a ride that is no longer on screen, so drop it.
+        if (useRideStore.getState().activeRide?.id !== pinned.id) return;
         if (!fresh) {
           // BUG-257: getActiveRide filters by ACTIVE statuses only
           // (searching/accepted/.../in_progress/arrived_at_destination).

@@ -1,5 +1,5 @@
 import { describe, it, expect, assert } from 'vitest';
-import { generateWalletCSV } from '../historyExport';
+import { generateWalletCSV, generateHistoryCSV } from '../historyExport';
 
 describe('generateWalletCSV', () => {
   // Real prod shapes: a gift is ONE transfer_out for both parties; a tip is
@@ -72,5 +72,20 @@ describe('generateWalletCSV', () => {
 
   it('header row present', () => {
     expect(lines[0]).toContain('Monto (TRC)');
+  });
+});
+
+describe('generateHistoryCSV service labels', () => {
+  const ride = (service_type: string) => ({
+    id: 'abcdef123456', status: 'completed', service_type, payment_method: 'cash',
+    pickup_address: 'A', dropoff_address: 'B', estimated_fare_cup: 1000, final_fare_cup: 1000,
+    estimated_fare_trc: null, final_fare_trc: null, estimated_distance_m: 1000, actual_distance_m: null,
+    estimated_duration_s: 600, actual_duration_s: null, created_at: '2026-06-07T03:00:00Z',
+    completed_at: '2026-06-07T03:10:00Z', canceled_at: null,
+  });
+
+  it('labels moto_deportiva instead of the raw slug', () => {
+    expect(generateHistoryCSV([ride('moto_deportiva')], 'es').split('\n')[1]).toContain('Moto Deportiva');
+    expect(generateHistoryCSV([ride('moto_deportiva')], 'en').split('\n')[1]).not.toContain('moto_deportiva');
   });
 });

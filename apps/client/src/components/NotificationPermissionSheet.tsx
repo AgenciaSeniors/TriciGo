@@ -43,7 +43,7 @@ export function requestNotificationPermissionSheet(): void {
  * periodically while permission is not granted (capped to once per 7 days so
  * it informs without nagging) and routes denied users to system Settings.
  */
-export function NotificationPermissionSheet() {
+export function NotificationPermissionSheet({ autoPrompt = true }: { autoPrompt?: boolean } = {}) {
   const { t } = useTranslation('common');
   // Rendered inside a transparent RN Modal, which does NOT inherit the app's
   // SafeAreaView — pad the CTAs clear of the home indicator / gesture bar.
@@ -58,6 +58,8 @@ export function NotificationPermissionSheet() {
   }, []);
 
   useEffect(() => {
+    // On-demand mounts (the booking selection) never prompt by themselves.
+    if (!autoPrompt) return;
     let cancelled = false;
 
     async function check() {
@@ -84,7 +86,7 @@ export function NotificationPermissionSheet() {
 
     check();
     return () => { cancelled = true; };
-  }, []);
+  }, [autoPrompt]);
 
   /**
    * Stamp the cooldown. `retryAfterMs` is how long until the sheet may

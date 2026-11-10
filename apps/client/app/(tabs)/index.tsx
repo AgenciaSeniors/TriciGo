@@ -894,9 +894,13 @@ function WebHomeScreen() {
 
   // Moto Deportiva: leave the selection when it stops being requestable, and
   // re-estimate when it becomes requestable so its price appears.
+  // Not while a request is in flight: the user's own searching ride turns the
+  // status to busy, and that must not rewrite the type the fallback looks at.
   useEffect(() => {
-    if (serviceType === 'moto_deportiva' && !motoCard.requestable) setServiceType('moto_standard');
-  }, [serviceType, motoCard.requestable]);
+    if (requestSuccess) return;
+    // The server also rejects it for scheduled rides.
+    if (serviceType === 'moto_deportiva' && (!motoCard.requestable || isScheduled)) setServiceType('moto_standard');
+  }, [serviceType, motoCard.requestable, requestSuccess, isScheduled]);
   const prevMotoRequestableRef = useRef(motoCard.requestable);
   useEffect(() => {
     if (!prevMotoRequestableRef.current && motoCard.requestable && pickup && dropoff) setAllEstimates({});
@@ -1114,7 +1118,13 @@ function WebHomeScreen() {
     const rideId = useRideStore.getState().activeRide?.id;
     try {
       if (rideId) await rideService.cancelRide(rideId, user?.id, 'moto_deportiva_fallback');
-    } catch { /* already closed server-side: fine */ }
+    } catch (err) {
+      // Already closed server-side is fine; any other failure keeps the search on screen.
+      if ((err as { code?: string } | null)?.code !== 'RIDE_ALREADY_CLOSED') {
+        window.alert('No se pudo cancelar el viaje. Verifica tu conexión e intenta de nuevo.');
+        return;
+      }
+    }
     useRideStore.getState().resetAll();
     setRequestSuccess(false);
     setServiceType('moto_standard');
@@ -1147,6 +1157,7 @@ function WebHomeScreen() {
   // ── Phase 5: Web active ride view ──
   const flowStep = useRideStore((s) => s.flowStep);
   const activeRideId = useRideStore((s) => s.activeRide?.id);
+  const activeRideServiceType = useRideStore((s) => s.activeRide?.service_type);
 
   // Keep the search alive server-side.
   //
@@ -1202,7 +1213,7 @@ function WebHomeScreen() {
       dropoffAddress={dropoffAddress}
       routeCoords={routeCoords}
       selectedEstimate={selectedEstimate}
-      serviceType={serviceType}
+      serviceType={activeRideServiceType ?? serviceType}
       onReset={handleReset}
       onSwitchToMoto={handleSwitchToMoto}
       font={font}
@@ -1337,7 +1348,7 @@ function WebHomeScreen() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, opacity: hasBothLocations ? 1 : 0.5, pointerEvents: hasBothLocations ? 'auto' : 'none' }}>
                 {WEB_SERVICES.filter((svc) => svc.slug !== 'moto_deportiva' || motoCard.visible).map((svc) => {
                   const isMensajeria = svc.slug === 'mensajeria';
-                  const motoLocked = svc.slug === 'moto_deportiva' && !motoCard.requestable;
+                  const motoLocked = svc.slug === 'moto_deportiva' && (!motoCard.requestable || isScheduled);
                   const est = isMensajeria ? allEstimates[deliveryVehicle] : allEstimates[svc.slug];
                   const isSelected = serviceType === svc.slug;
                   const isLoadingEst = estimateLoading && !est;
@@ -1370,7 +1381,9 @@ function WebHomeScreen() {
                         {motoLocked ? (
                           <>
                             <div style={{ fontSize: 11, color: c.textFaint }}>
-                              {motoCard.reason === 'busy'
+                              {isScheduled && motoCard.requestable
+                                ? t('moto_deportiva.mode_blocked', { defaultValue: 'No disponible para viajes de empresa o programados' })
+                                : motoCard.reason === 'busy'
                                 ? t('moto_deportiva.busy', { defaultValue: 'Ocupada · en un viaje' })
                                 : t('moto_deportiva.unavailable', { defaultValue: 'No disponible ahora' })}
                             </div>
@@ -2978,6 +2991,18 @@ function IdleView() {
               dense
               mode={mode}
               onPress={() => {
+                // Moto Deportiva off or busy: opening the selection would show
+                // no card (it needs a trip first) or silently pick another
+                // service, so say why right here instead.
+                if (slug === 'moto_deportiva' && !motoDeportivaCard.requestable) {
+                  Toast.show({
+                    type: 'info',
+                    text1: motoDeportivaCard.reason === 'busy'
+                      ? t('moto_deportiva.busy', { defaultValue: 'Ocupada · en un viaje' })
+                      : t('moto_deportiva.unavailable', { defaultValue: 'No disponible ahora' }),
+                  });
+                  return;
+                }
                 // Preselect the tapped service type, then go to selecting view.
                 // Sticky-serviceType fix: this was missing, so every SERVICIOS
                 // button just opened SelectingView with whatever serviceType was
@@ -3252,7 +3277,9 @@ function SelectingView({ openPicker }: {
       if (perm.status !== 'granted' && uid) {
         if (shouldSpendPushPrompt(perm)) {
           await registerPushTokenForUser(uid, { promptIfNeeded: true });
-        } else if (!perm.canAskAgain) {
+        } else {
+          // The OS will not ask again (denied, with or without canAskAgain):
+          // the sheet deep-links to Settings.
           requestNotificationPermissionSheet();
         }
       }
@@ -3268,11 +3295,13 @@ function SelectingView({ openPicker }: {
   }, [setMotoWaitlist]);
   // If the selected service is Moto Deportiva and it stops being requestable
   // (poll), fall back to the regular moto selection.
+  // The server also rejects it for company-paid and scheduled rides.
+  const motoModeBlocked = !!draft.corporateAccountId || !!draft.scheduledAt;
   useEffect(() => {
-    if (draft.serviceType === 'moto_deportiva' && !motoCard.requestable) {
+    if (draft.serviceType === 'moto_deportiva' && (!motoCard.requestable || motoModeBlocked)) {
       setServiceType('moto_standard');
     }
-  }, [draft.serviceType, motoCard.requestable, setServiceType]);
+  }, [draft.serviceType, motoCard.requestable, motoModeBlocked, setServiceType]);
   // When it becomes requestable, re-estimate so its price appears.
   const prevMotoRequestableRef = useRef(motoCard.requestable);
   useEffect(() => {
@@ -3721,6 +3750,8 @@ function SelectingView({ openPicker }: {
 
   return (
     <View style={{ flex: 1 }}>
+      {/* Opens only on demand here ("Avísame" with notifications off); the idle screen owns the automatic prompt. */}
+      <NotificationPermissionSheet autoPrompt={false} />
       {/* Fullscreen map with route */}
       <RideMapView
         ref={mapRef}
@@ -4038,7 +4069,7 @@ function SelectingView({ openPicker }: {
               : (['triciclo_basico', 'moto_standard', 'auto_standard', 'auto_confort', 'mensajeria'] as const)
             ).map((slug) => {
               const meta = SERVICE_META[slug];
-              const motoLocked = slug === 'moto_deportiva' && !motoCard.requestable;
+              const motoLocked = slug === 'moto_deportiva' && (!motoCard.requestable || motoModeBlocked);
               // Mensajería muestra el precio del VEHÍCULO elegido (no su config
               // plano): resuelve al slug del vehículo. Alinea con la web.
               const est =
@@ -4060,7 +4091,9 @@ function SelectingView({ openPicker }: {
                     {motoLocked ? (
                       <>
                         <Text variant="caption" color="tertiary">
-                          {motoCard.reason === 'busy'
+                          {motoModeBlocked && motoCard.requestable
+                            ? t('moto_deportiva.mode_blocked', { defaultValue: 'No disponible para viajes de empresa o programados' })
+                            : motoCard.reason === 'busy'
                             ? t('moto_deportiva.busy', { defaultValue: 'Ocupada · en un viaje' })
                             : t('moto_deportiva.unavailable', { defaultValue: 'No disponible ahora' })}
                         </Text>
@@ -4529,7 +4562,7 @@ function ReviewingView() {
   const motoStatus = useMotoDeportivaStore((st) => st.status);
   const motoRequestable = buildMotoDeportivaCard(motoStatus).requestable;
   const allServiceSlugs: ServiceTypeSlug[] = ['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort', 'mensajeria'];
-  if (motoRequestable) allServiceSlugs.splice(1, 0, 'moto_deportiva');
+  if (motoRequestable && !draft.corporateAccountId && !draft.scheduledAt) allServiceSlugs.splice(1, 0, 'moto_deportiva');
   const selectedSlug = draft.serviceType || recommendedSlug;
   const otherServices = allServiceSlugs.filter((s) => s !== selectedSlug);
 
@@ -5393,10 +5426,17 @@ function SearchingView() {
   });
   const switchToMoto = useCallback(async () => {
     const saved = useRideStore.getState().draft;
+    // Rebuild the trip from the ride itself: the stored draft can be empty
+    // (cold start while searching), and the ride always has both endpoints.
+    const ride = useRideStore.getState().activeRide;
+    const fromRide = {
+      ...(ride?.pickup_location ? { pickup: { ...saved.pickup, address: ride.pickup_address ?? saved.pickup?.address ?? '', location: ride.pickup_location } } : {}),
+      ...(ride?.dropoff_location ? { dropoff: { ...saved.dropoff, address: ride.dropoff_address ?? saved.dropoff?.address ?? '', location: ride.dropoff_location } } : {}),
+    };
     await cancelRide('moto_deportiva_fallback');
     // cancelRide resets the store only when the cancel went through.
     if (useRideStore.getState().activeRide) return;
-    const restore = () => useRideStore.setState({ draft: { ...saved, serviceType: 'moto_standard' }, flowStep: 'selecting' });
+    const restore = () => useRideStore.setState({ draft: { ...saved, ...fromRide, serviceType: 'moto_standard' }, flowStep: 'selecting' });
     restore();
     // resetAll may still be settling: set it again after the current tick if it came back empty.
     setTimeout(() => {
