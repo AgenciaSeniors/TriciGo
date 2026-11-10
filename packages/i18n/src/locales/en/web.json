@@ -1,4 +1,14 @@
 {
+  "moto_deportiva": {
+    "busy": "Busy · on a trip",
+    "unavailable": "Not available now",
+    "notify_me": "Notify me",
+    "notify_joined": "We'll let you know",
+    "notify_failed": "We couldn't save your alert. Try again.",
+    "fallback_title": "The Sport Motorbike didn't respond",
+    "fallback_body": "You can request a regular Moto to the same destination.",
+    "fallback_cta": "Switch to Moto"
+  },
   "recharge": {
     "nav": "Top up",
     "title": "Top up a wallet",

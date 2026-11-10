@@ -125,6 +125,7 @@
   },
 
   "trip": {
+    "moto_deportiva_badge": "Moto Deportiva",
     "support_assigned_title": "Soporte te asignó un viaje",
     "support_assigned_body": "Ya está en tu pantalla. Ve a recoger al pasajero.",
     "queued_offline": "Guardado sin conexión",

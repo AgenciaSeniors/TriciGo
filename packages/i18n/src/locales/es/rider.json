@@ -1,4 +1,14 @@
 {
+  "moto_deportiva": {
+    "busy": "Ocupada · en un viaje",
+    "unavailable": "No disponible ahora",
+    "notify_me": "Avísame",
+    "notify_joined": "Te avisaremos",
+    "notify_failed": "No pudimos guardar tu aviso. Intenta de nuevo.",
+    "fallback_title": "La Moto Deportiva no respondió",
+    "fallback_body": "Puedes pedir una Moto normal con el mismo destino.",
+    "fallback_cta": "Cambiar a Moto"
+  },
   "delivery": {
     "accompany": "Acompaño el envío",
     "description_placeholder": "Descripción del paquete",
@@ -513,6 +523,7 @@
   },
 
   "service_type": {
+    "moto_deportiva": "Moto Deportiva",
     "triciclo_basico": "Triciclo",
     "triciclo_premium": "Triciclo Premium",
     "triciclo_cargo": "Triciclo Cargo",
