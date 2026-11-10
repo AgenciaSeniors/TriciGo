@@ -32,11 +32,23 @@
 --   support_handoff_tick        pg_cron, every 20 s: a ride not opened in time passes on; repeated
 --                               misses take an operator off shift
 --
+-- The assist actions and the panel:
+--   _assist_claim_or_refuse     the ownership guard: a ride with no owner becomes the caller's;
+--                               one someone else owns refuses (ride_owned_by_other)
+--   the seven assist actions (patched)  offer, assign and change type (00628), release, advance and
+--                               complete (00660), and admin_cancel_ride call the guard first
+--   ops_open_ride_assist        the assist page loads: its owner's opening stops the handover
+--   ops_take_ride_assist        "Tomar este viaje": the caller becomes the owner
+--   _support_ride_owner         who owns a ride, for the two contexts
+--   admin_ride_assist_context, admin_active_ride_context (patched)  gain the owner key
+--   admin_support_waiting_rides_v2  the banner, with the owner (v1 stays as it was)
+--
 -- Rules (spec, and 00668 / 00671-00673): SECURITY DEFINER, search_path set, EXECUTE revoked from
 -- PUBLIC and anon; the panel's RPCs open to authenticated, get_support_contact to anon too, the
 -- helpers to nobody. Refusals are {error} objects. Lock order: rides, then ride_assist, then the
 -- support lock (an advisory lock, see _support_pick_owner), then support_staff rows. No DELETE, DROP
--- or TRUNCATE statements (an MCP apply waits for approval on them).
+-- or TRUNCATE statements (an MCP apply waits for approval on them): the banner's new columns come
+-- in a new function, admin_support_waiting_rides_v2, not in a changed signature.
 -- Re-applying the file changes nothing.
 
 -- ── A. Settings ─────────────────────────────────────────────
@@ -781,6 +793,263 @@ SELECT pg_temp.m00679_patch('public.notify_support_waiting_rides()', 'c69e1ca717
 -- cron.schedule updates a job of the same name.
 SELECT cron.schedule('support-handoff-tick', '20 seconds', 'SELECT public.support_handoff_tick()');
 
+-- ── I. One owner in the assist actions, opening and taking ──
+-- Locks in part 3. Each assist action locks its ride (rides) and then calls the guard, which locks
+-- the ride's ride_assist row; the guard writes no support_staff row, so it takes no support lock.
+-- ops_open_ride_assist locks the ride_assist row, then the support lock, then the caller's
+-- support_staff row; ops_take_ride_assist the ride first, then the same. The order everywhere:
+-- rides, ride_assist, support lock, support_staff.
+
+-- The ownership guard, called by each assist action right after its own ride lock and self-ride
+-- check: NULL when the caller may act, 'ride_owned_by_other' when someone else owns the ride. A ride
+-- with no owner becomes the caller's, opened (she is on it, so the handover leaves it), with its
+-- ride_assist row created if missing; that stays even when the action then refuses on its own
+-- grounds. An owner off shift still owns the ride: anyone else takes it first
+-- (ops_take_ride_assist), admins too.
+CREATE OR REPLACE FUNCTION public._assist_claim_or_refuse(p_ride_id uuid)
+ RETURNS text
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+DECLARE
+  v_me    uuid := auth.uid();
+  v_owner uuid;
+BEGIN
+  IF v_me IS NULL THEN
+    RETURN 'forbidden';
+  END IF;
+
+  INSERT INTO public.ride_assist (ride_id) VALUES (p_ride_id) ON CONFLICT (ride_id) DO NOTHING;
+  SELECT ra.owner_id INTO v_owner FROM public.ride_assist ra WHERE ra.ride_id = p_ride_id FOR UPDATE;
+  IF v_owner IS NULL THEN
+    UPDATE public.ride_assist
+       SET owner_id = v_me, owner_assigned_at = now(), owner_opened_at = now(), all_missed_alert_at = NULL,
+           owners_tried = CASE WHEN v_me = ANY (owners_tried) THEN owners_tried ELSE owners_tried || v_me END
+     WHERE ride_id = p_ride_id;
+    RETURN NULL;
+  END IF;
+  IF v_owner = v_me THEN
+    RETURN NULL;
+  END IF;
+  RETURN 'ride_owned_by_other';
+END
+$function$;
+
+-- The assist page, when it loads. Its owner opening it stamps owner_opened_at (the first time: the
+-- handover then leaves the ride alone) and zeroes her missed rides. Anyone else: nothing changes.
+CREATE OR REPLACE FUNCTION public.ops_open_ride_assist(p_ride_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+DECLARE
+  c_support_lock CONSTANT bigint := 6790000000001;  -- the support lock (see _support_pick_owner)
+  v_me uuid := auth.uid();
+BEGIN
+  IF v_me IS NULL OR NOT public.is_ops_staff() THEN
+    RETURN jsonb_build_object('error', 'forbidden');
+  END IF;
+
+  UPDATE public.ride_assist SET owner_opened_at = COALESCE(owner_opened_at, now())
+   WHERE ride_id = p_ride_id AND owner_id = v_me;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('success', true, 'is_owner', false);
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(c_support_lock);
+  UPDATE public.support_staff SET missed_in_a_row = 0, updated_at = now()
+   WHERE user_id = v_me AND missed_in_a_row <> 0;
+  RETURN jsonb_build_object('success', true, 'is_owner', true);
+END
+$function$;
+
+-- "Tomar este viaje": the caller becomes the ride's owner, only if its owner is still the one she
+-- saw (p_expected_owner_id, NULL for none): ride_changed otherwise. The ride counts as opened by
+-- her, and her missed rides are zeroed. The owner she took it from gets a push (support-take: "<her
+-- name> tomó el viaje #<code>"); a push that fails never takes back the take (_support_send). Logged
+-- as support_take_ride. Never on a ride she rides in or drives. A second tap on a ride already hers
+-- only counts as opening it.
+CREATE OR REPLACE FUNCTION public.ops_take_ride_assist(p_ride_id uuid, p_expected_owner_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+DECLARE
+  c_support_lock CONSTANT bigint := 6790000000001;  -- the support lock (see _support_pick_owner)
+  v_me     uuid := auth.uid();
+  v_ride   public.rides%ROWTYPE;
+  v_driver uuid;
+  v_prev   uuid;
+  v_name   text;
+BEGIN
+  IF v_me IS NULL OR NOT public.is_ops_staff() THEN
+    RETURN jsonb_build_object('error', 'forbidden');
+  END IF;
+
+  SELECT * INTO v_ride FROM public.rides WHERE id = p_ride_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('error', 'ride_not_found');
+  END IF;
+  SELECT dp.user_id INTO v_driver FROM public.driver_profiles dp WHERE dp.id = v_ride.driver_id;
+  IF v_me = v_ride.customer_id OR v_me = v_driver THEN
+    RETURN jsonb_build_object('error', 'self_ride');
+  END IF;
+
+  SELECT ra.owner_id INTO v_prev FROM public.ride_assist ra WHERE ra.ride_id = p_ride_id FOR UPDATE;
+  IF NOT FOUND THEN
+    -- No row yet: it has no owner, so only a take that saw none goes on.
+    IF p_expected_owner_id IS NOT NULL THEN
+      RETURN jsonb_build_object('error', 'ride_changed');
+    END IF;
+    INSERT INTO public.ride_assist (ride_id) VALUES (p_ride_id) ON CONFLICT (ride_id) DO NOTHING;
+    SELECT ra.owner_id INTO v_prev FROM public.ride_assist ra WHERE ra.ride_id = p_ride_id FOR UPDATE;
+  END IF;
+  IF v_prev IS DISTINCT FROM p_expected_owner_id THEN
+    RETURN jsonb_build_object('error', 'ride_changed');
+  END IF;
+
+  IF v_prev IS NOT DISTINCT FROM v_me THEN
+    UPDATE public.ride_assist SET owner_opened_at = COALESCE(owner_opened_at, now()) WHERE ride_id = p_ride_id;
+  ELSE
+    UPDATE public.ride_assist
+       SET owner_id = v_me, owner_assigned_at = now(), owner_opened_at = now(), all_missed_alert_at = NULL,
+           owners_tried = CASE WHEN v_me = ANY (owners_tried) THEN owners_tried ELSE owners_tried || v_me END
+     WHERE ride_id = p_ride_id;
+  END IF;
+  PERFORM pg_advisory_xact_lock(c_support_lock);
+  UPDATE public.support_staff SET missed_in_a_row = 0, updated_at = now()
+   WHERE user_id = v_me AND missed_in_a_row <> 0;
+  IF v_prev IS NOT DISTINCT FROM v_me THEN
+    RETURN jsonb_build_object('success', true);
+  END IF;
+
+  INSERT INTO public.admin_actions (admin_id, action, target_type, target_id, old_values, new_values)
+  VALUES (v_me, 'support_take_ride', 'ride', p_ride_id::text,
+          jsonb_build_object('owner_id', v_prev), jsonb_build_object('owner_id', v_me));
+
+  IF v_prev IS NOT NULL THEN
+    SELECT COALESCE(NULLIF(btrim(u.full_name), ''), 'Soporte') INTO v_name FROM public.users u WHERE u.id = v_me;
+    PERFORM public._support_send('support-take', ARRAY[v_prev],
+      v_name || ' tomó el viaje #' || public._ride_short_code(p_ride_id),
+      left(COALESCE(v_ride.pickup_address, '—'), 60) || ' → ' || left(COALESCE(v_ride.dropoff_address, '—'), 60),
+      'support_take', p_ride_id);
+  END IF;
+  RETURN jsonb_build_object('success', true);
+END
+$function$;
+
+-- Who owns a ride, for the assist page (both contexts): {id, name, on_shift, assigned_at,
+-- opened_at}, or NULL with no owner. on_shift as _support_staff_on_shift: an owner off shift still
+-- owns the ride (nobody acts on it by surprise), but alerts and the rider's number skip her.
+CREATE OR REPLACE FUNCTION public._support_ride_owner(p_ride_id uuid)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+  SELECT jsonb_build_object('id', ra.owner_id, 'name', u.full_name,
+                            'on_shift', public._support_staff_on_shift(ra.owner_id),
+                            'assigned_at', ra.owner_assigned_at, 'opened_at', ra.owner_opened_at)
+  FROM public.ride_assist ra
+  JOIN public.users u ON u.id = ra.owner_id
+  WHERE ra.ride_id = p_ride_id;
+$function$;
+
+-- The banner: admin_support_waiting_rides (00628), the same rows, columns and order, plus who owns
+-- each ride (owner_on_shift NULL with no owner). A new name, because a RETURNS TABLE gains columns
+-- only through a DROP; v1 stays as it was until the panel no longer calls it.
+CREATE OR REPLACE FUNCTION public.admin_support_waiting_rides_v2()
+ RETURNS TABLE(ride_id uuid, code text, waiting_since timestamp with time zone, wait_s integer,
+               help_requested_at timestamp with time zone, service_type text, estimated_fare_cup integer,
+               pickup_address text, dropoff_address text, pending_offers integer, is_test boolean,
+               owner_id uuid, owner_name text, owner_on_shift boolean,
+               owner_assigned_at timestamp with time zone, owner_opened_at timestamp with time zone)
+ LANGUAGE plpgsql
+ STABLE
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+#variable_conflict use_column
+DECLARE
+  v_after integer := GREATEST(15, public.get_platform_config_numeric('support_alert_after_s', 60)::int);
+BEGIN
+  IF NOT public.is_ops_staff() THEN
+    RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
+  END IF;
+  RETURN QUERY
+  SELECT r.id,
+         public._ride_short_code(r.id),
+         GREATEST(r.created_at, r.scheduled_at),
+         GREATEST(0, floor(extract(epoch FROM now() - GREATEST(r.created_at, r.scheduled_at))))::int,
+         ra.help_requested_at,
+         r.service_type,
+         r.estimated_fare_cup,
+         r.pickup_address,
+         r.dropoff_address,
+         (SELECT count(*)::int FROM public.ride_offers o
+           WHERE o.ride_id = r.id AND o.status = 'pending' AND o.expires_at > now()),
+         c.is_test,
+         ra.owner_id,
+         ou.full_name,
+         CASE WHEN ra.owner_id IS NOT NULL THEN public._support_staff_on_shift(ra.owner_id) END,
+         ra.owner_assigned_at,
+         ra.owner_opened_at
+  FROM public.rides r
+  JOIN public.users c ON c.id = r.customer_id
+  LEFT JOIN public.ride_assist ra ON ra.ride_id = r.id
+  LEFT JOIN public.users ou ON ou.id = ra.owner_id
+  WHERE r.status = 'searching'
+    AND GREATEST(r.created_at, r.scheduled_at) <= now()
+    AND (ra.help_requested_at IS NOT NULL
+         OR GREATEST(r.created_at, r.scheduled_at) <= now() - make_interval(secs => v_after))
+  ORDER BY (ra.help_requested_at IS NULL), GREATEST(r.created_at, r.scheduled_at)
+  LIMIT 50;
+END
+$function$;
+
+-- ── J. The guard in the assist actions, the owner in the contexts ──
+-- Patched like section G (m00679_patch, md5 of the bodies in prod on 2026-11-07). The seven
+-- actions take the same two edits: a variable, and the guard right after the self-ride check, which
+-- comes after the action's own lock of the ride (in admin_cancel_ride and the assign, right before
+-- PERFORM public._ops_allow(ARRAY[p_ride_id]); in release, advance and complete, before their
+-- _ops_allow). Every text is an E'' string, so a copy pasted from Windows patches the same.
+SELECT pg_temp.m00679_patch(f.fn::regprocedure, f.old_md5, f.new_md5,
+  ARRAY[E'\nDECLARE\n',
+        E'    RETURN jsonb_build_object(''error'', ''self_ride'');\n  END IF;\n'],
+  ARRAY[E'\nDECLARE\n'
+        || E'  v_own text;  -- 00679: the ownership guard\n',
+        E'    RETURN jsonb_build_object(''error'', ''self_ride'');\n  END IF;\n'
+        || E'  -- 00679: one owner per ride. With no owner the caller becomes it; another owner refuses.\n'
+        || E'  v_own := public._assist_claim_or_refuse(p_ride_id);\n'
+        || E'  IF v_own IS NOT NULL THEN\n'
+        || E'    RETURN jsonb_build_object(''error'', v_own);\n'
+        || E'  END IF;\n'])
+FROM (VALUES
+  ('public.admin_offer_ride_to_driver(uuid,uuid)', '0085408045cc5fbf2dbc3e2eb0da92f5', '87530b01f336c315a804d940333b7c04'),
+  ('public.admin_assign_ride_to_driver(uuid,uuid,text)', '96a14f1ef39f9d397884457278efd699', '668b0ae079d5e00c12013537bdaa3384'),
+  ('public.admin_change_ride_service(uuid,text,integer,text,text)', '06b0af6654384570c38a76389681d43a', '9aea004c5bc6f7a83c3098c18bf97812'),
+  ('public.admin_release_active_ride(uuid,text,uuid,text)', '8f18bf4984f52e41c93cdb16b062eeff', '961b6169aa4152b935f122dce4a46b5e'),
+  ('public.admin_advance_active_ride(uuid,text,uuid,text)', 'bc7187cb8d4dbde6c64886e2ee9e3ff8', '271197d1cc0c41ea18dbd6a4975e85bb'),
+  ('public.admin_complete_active_ride(uuid,text,uuid,integer,text)', '149e13089c12d43458a75ee58dd2a9d3', '6df9d20cee20b03c8f7f28c3b1022a5f'),
+  ('public.admin_cancel_ride(uuid,text)', '21b4dfa6427e7c8976ef1324ddfa732b', '460ebfbaeb70f9734bff2d6d9cd5c51d')
+) AS f(fn, old_md5, new_md5);
+
+-- The two contexts of the assist page gain owner (_support_ride_owner; JSON null with no owner).
+SELECT pg_temp.m00679_patch('public.admin_ride_assist_context(uuid)', '2b7a2a9cb6ca0566c3fde8614220e91a',
+  'd5e63768daed1321fd8fbddb09ff2ba6',
+  ARRAY[E'    ''help_requested_at'', ra.help_requested_at,\n'],
+  ARRAY[E'    ''help_requested_at'', ra.help_requested_at,\n'
+        || E'    ''owner'', public._support_ride_owner(v_ride.id),  -- 00679: who owns the ride\n']);
+SELECT pg_temp.m00679_patch('public.admin_active_ride_context(uuid)', '62031d5be71f09241122be3e64bb3957',
+  '5ec61f7f9f02e2537da12c49f53a521f',
+  ARRAY[E'    ''allowed_actions'', to_jsonb(v_actions));\n'],
+  ARRAY[E'    ''allowed_actions'', to_jsonb(v_actions),\n'
+        || E'    ''owner'', public._support_ride_owner(v_ride.id));  -- 00679: who owns the ride\n']);
+
 -- ── Permissions ─────────────────────────────────────────────
 -- The helpers and the tick (pg_cron runs it as the owner) to nobody.
 REVOKE ALL ON FUNCTION public._support_staff_on_shift(uuid),
@@ -791,17 +1060,26 @@ REVOKE ALL ON FUNCTION public._support_staff_on_shift(uuid),
                        public._support_phone_for_ride(uuid),
                        public._support_handoff_rides_of(uuid),
                        public._support_pickup_for(uuid),
-                       public.support_handoff_tick()
+                       public.support_handoff_tick(),
+                       public._assist_claim_or_refuse(uuid),
+                       public._support_ride_owner(uuid)
   FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.ops_set_support_shift(boolean, text),
                        public.ops_support_shift_status(),
-                       public.get_support_contact()
+                       public.get_support_contact(),
+                       public.ops_open_ride_assist(uuid),
+                       public.ops_take_ride_assist(uuid, uuid),
+                       public.admin_support_waiting_rides_v2()
   FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.ops_set_support_shift(boolean, text),
                           public.ops_support_shift_status()
   TO authenticated, service_role;
+-- The assist page (open, take) and the banner.
+GRANT EXECUTE ON FUNCTION public.ops_open_ride_assist(uuid), public.ops_take_ride_assist(uuid, uuid) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.admin_support_waiting_rides_v2() TO authenticated, service_role;
 -- The help screens ask for it before login too (the driver waiting for approval, the web).
 GRANT EXECUTE ON FUNCTION public.get_support_contact() TO anon, authenticated, service_role;
+-- The patched bodies keep prod's grants (CREATE OR REPLACE keeps them).
 
 -- Pasted from Windows, the SQL Editor puts carriage returns (chr(13)) inside the function bodies:
 -- recreate them without those.
@@ -816,7 +1094,10 @@ BEGIN
     'public.ops_support_shift_status()', 'public._support_alert_text(uuid,text)',
     'public._support_send(text,uuid[],text,text,text,uuid)', 'public._support_phone_for_ride(uuid)',
     'public._support_handoff_rides_of(uuid)', 'public._support_pickup_for(uuid)',
-    'public.support_handoff_tick()', 'public._support_ride_open(public.ride_status,timestamptz)'
+    'public.support_handoff_tick()', 'public._support_ride_open(public.ride_status,timestamptz)',
+    'public._assist_claim_or_refuse(uuid)', 'public.ops_open_ride_assist(uuid)',
+    'public.ops_take_ride_assist(uuid,uuid)', 'public._support_ride_owner(uuid)',
+    'public.admin_support_waiting_rides_v2()'
   ]::regprocedure[] LOOP
     SELECT pg_get_functiondef(v_fn) INTO v_def;
     IF position(chr(13) IN v_def) > 0 THEN
@@ -830,10 +1111,54 @@ $crlf$;
 DO $check$
 DECLARE
   v_row record;
+  v_fn  text;
+  -- Every function this migration creates.
+  v_new text[] := ARRAY[
+    'public._support_staff_on_shift(uuid)', 'public._support_pick_owner(uuid,uuid[])',
+    'public.get_support_contact()', 'public.ops_set_support_shift(boolean,text)',
+    'public.ops_support_shift_status()', 'public._support_alert_text(uuid,text)',
+    'public._support_send(text,uuid[],text,text,text,uuid)', 'public._support_phone_for_ride(uuid)',
+    'public._support_handoff_rides_of(uuid)', 'public._support_pickup_for(uuid)',
+    'public.support_handoff_tick()', 'public._support_ride_open(public.ride_status,timestamptz)',
+    'public._assist_claim_or_refuse(uuid)', 'public.ops_open_ride_assist(uuid)',
+    'public.ops_take_ride_assist(uuid,uuid)', 'public._support_ride_owner(uuid)',
+    'public.admin_support_waiting_rides_v2()'];
+  -- Every live body it patches.
+  v_patched text[] := ARRAY[
+    'public._support_alert(uuid,text)', 'public.request_ride_help(uuid)', 'public.notify_support_waiting_rides()',
+    'public.admin_offer_ride_to_driver(uuid,uuid)', 'public.admin_assign_ride_to_driver(uuid,uuid,text)',
+    'public.admin_change_ride_service(uuid,text,integer,text,text)',
+    'public.admin_release_active_ride(uuid,text,uuid,text)', 'public.admin_advance_active_ride(uuid,text,uuid,text)',
+    'public.admin_complete_active_ride(uuid,text,uuid,integer,text)', 'public.admin_cancel_ride(uuid,text)',
+    'public.admin_ride_assist_context(uuid)', 'public.admin_active_ride_context(uuid)'];
 BEGIN
+  -- The new functions: each one present, and no other function under their names (a stray
+  -- overload); each SECURITY DEFINER with its search_path.
+  FOREACH v_fn IN ARRAY v_new LOOP
+    IF to_regprocedure(v_fn) IS NULL THEN
+      RAISE EXCEPTION '00679 check: % is missing', v_fn;
+    END IF;
+  END LOOP;
+  IF (SELECT count(*) FROM pg_proc p
+      WHERE p.pronamespace = 'public'::regnamespace
+        AND p.proname IN (SELECT q.proname FROM pg_proc q WHERE q.oid = ANY (SELECT to_regprocedure(f) FROM unnest(v_new) f)))
+     <> cardinality(v_new) THEN
+    RAISE EXCEPTION '00679 check: the new functions are not exactly the % of this file', cardinality(v_new);
+  END IF;
+  FOR v_row IN
+    SELECT p.oid::regprocedure AS fn, p.prosecdef, p.proconfig FROM pg_proc p
+    WHERE p.oid = ANY (SELECT to_regprocedure(f) FROM unnest(v_new) f)
+  LOOP
+    IF NOT v_row.prosecdef OR v_row.proconfig IS DISTINCT FROM ARRAY['search_path=public, pg_catalog'] THEN
+      RAISE EXCEPTION '00679 check: % is not SECURITY DEFINER with its search_path', v_row.fn;
+    END IF;
+  END LOOP;
+
   -- support_staff: RLS on, one read policy, written only by the functions (and service_role).
-  IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.support_staff'::regclass)
-     OR (SELECT count(*) FROM pg_policies WHERE schemaname = 'public' AND tablename = 'support_staff') <> 1
+  IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.support_staff'::regclass) THEN
+    RAISE EXCEPTION '00679 check: RLS is off on support_staff';
+  END IF;
+  IF (SELECT count(*) FROM pg_policies WHERE schemaname = 'public' AND tablename = 'support_staff') <> 1
      OR has_table_privilege('anon', 'public.support_staff', 'SELECT')
      OR NOT has_table_privilege('authenticated', 'public.support_staff', 'SELECT')
      OR has_table_privilege('authenticated', 'public.support_staff', 'INSERT')
@@ -843,24 +1168,6 @@ BEGIN
     RAISE EXCEPTION '00679 check: support_staff is not locked down';
   END IF;
 
-  -- Every function of this migration, and the two it patches: SECURITY DEFINER, with its search_path.
-  FOR v_row IN
-    SELECT p.oid::regprocedure AS fn, p.prosecdef, p.proconfig FROM pg_proc p
-    WHERE p.oid = ANY (ARRAY[
-      'public._support_staff_on_shift(uuid)', 'public._support_pick_owner(uuid,uuid[])',
-      'public.get_support_contact()', 'public.ops_set_support_shift(boolean,text)',
-      'public.ops_support_shift_status()', 'public._support_alert_text(uuid,text)',
-      'public._support_send(text,uuid[],text,text,text,uuid)', 'public._support_phone_for_ride(uuid)',
-      'public._support_handoff_rides_of(uuid)', 'public._support_pickup_for(uuid)',
-      'public.support_handoff_tick()', 'public._support_alert(uuid,text)', 'public.request_ride_help(uuid)',
-      'public.notify_support_waiting_rides()', 'public._support_ride_open(public.ride_status,timestamptz)'
-    ]::regprocedure[])
-  LOOP
-    IF NOT v_row.prosecdef OR v_row.proconfig IS DISTINCT FROM ARRAY['search_path=public, pg_catalog'] THEN
-      RAISE EXCEPTION '00679 check: % is not SECURITY DEFINER with its search_path', v_row.fn;
-    END IF;
-  END LOOP;
-
   -- The helpers and the tick stay the owner's.
   FOR v_row IN
     SELECT f.fn FROM unnest(ARRAY[
@@ -868,7 +1175,8 @@ BEGIN
       'public._support_alert_text(uuid,text)', 'public._support_send(text,uuid[],text,text,text,uuid)',
       'public._support_phone_for_ride(uuid)', 'public._support_handoff_rides_of(uuid)',
       'public._support_pickup_for(uuid)', 'public.support_handoff_tick()',
-      'public._support_ride_open(public.ride_status,timestamptz)'
+      'public._support_ride_open(public.ride_status,timestamptz)', 'public._assist_claim_or_refuse(uuid)',
+      'public._support_ride_owner(uuid)'
     ]::regprocedure[]) AS f(fn)
   LOOP
     IF has_function_privilege('anon', v_row.fn, 'EXECUTE')
@@ -878,29 +1186,49 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- The three patched bodies: the 00679 ones, with prod's grants (the alert and the cron closed to
-  -- clients, the help button open to signed-in riders).
+  -- The twelve patched bodies: the 00679 ones (md5 of prosrc, no carriage return), still SECURITY
+  -- DEFINER with prod's search_path.
   FOR v_row IN
-    SELECT f.fn, f.want, md5(p.prosrc) AS got
+    SELECT f.fn, f.want, f.path, md5(p.prosrc) AS got, position(chr(13) IN p.prosrc) > 0 AS has_cr,
+           p.prosecdef, p.proconfig
     FROM (VALUES
-      ('public._support_alert(uuid,text)'::regprocedure, '2e0ae1a5219e5e3ec8772124f1b50767'),
-      ('public.request_ride_help(uuid)', '2b9faf1390909d63ae02696105d78090'),
-      ('public.notify_support_waiting_rides()', 'da6c10207da346fdc6f27114f6f125d6')
-    ) AS f(fn, want)
+      ('public._support_alert(uuid,text)'::regprocedure, '2e0ae1a5219e5e3ec8772124f1b50767', 'public, pg_catalog'),
+      ('public.request_ride_help(uuid)', '2b9faf1390909d63ae02696105d78090', 'public, pg_catalog'),
+      ('public.notify_support_waiting_rides()', 'da6c10207da346fdc6f27114f6f125d6', 'public, pg_catalog'),
+      ('public.admin_offer_ride_to_driver(uuid,uuid)', '87530b01f336c315a804d940333b7c04', 'public, pg_catalog'),
+      ('public.admin_assign_ride_to_driver(uuid,uuid,text)', '668b0ae079d5e00c12013537bdaa3384', 'public, pg_catalog'),
+      ('public.admin_change_ride_service(uuid,text,integer,text,text)', '9aea004c5bc6f7a83c3098c18bf97812',
+       'public, extensions, pg_catalog'),
+      ('public.admin_release_active_ride(uuid,text,uuid,text)', '961b6169aa4152b935f122dce4a46b5e', 'public, pg_catalog'),
+      ('public.admin_advance_active_ride(uuid,text,uuid,text)', '271197d1cc0c41ea18dbd6a4975e85bb',
+       'public, extensions, pg_catalog'),
+      ('public.admin_complete_active_ride(uuid,text,uuid,integer,text)', '6df9d20cee20b03c8f7f28c3b1022a5f',
+       'public, extensions, pg_catalog'),
+      ('public.admin_cancel_ride(uuid,text)', '460ebfbaeb70f9734bff2d6d9cd5c51d', 'public, pg_catalog'),
+      ('public.admin_ride_assist_context(uuid)', 'd5e63768daed1321fd8fbddb09ff2ba6', 'public, pg_catalog'),
+      ('public.admin_active_ride_context(uuid)', '5ec61f7f9f02e2537da12c49f53a521f', 'public, extensions, pg_catalog')
+    ) AS f(fn, want, path)
     JOIN pg_proc p ON p.oid = f.fn
   LOOP
-    IF v_row.got IS DISTINCT FROM v_row.want THEN
+    IF v_row.got IS DISTINCT FROM v_row.want OR v_row.has_cr THEN
       RAISE EXCEPTION '00679 check: % has md5 %, expected %', v_row.fn, v_row.got, v_row.want;
     END IF;
+    IF NOT v_row.prosecdef OR v_row.proconfig IS DISTINCT FROM ARRAY['search_path=' || v_row.path] THEN
+      RAISE EXCEPTION '00679 check: % is not SECURITY DEFINER with its search_path', v_row.fn;
+    END IF;
   END LOOP;
-  IF has_function_privilege('anon', 'public._support_alert(uuid,text)', 'EXECUTE')
-     OR has_function_privilege('authenticated', 'public._support_alert(uuid,text)', 'EXECUTE')
-     OR has_function_privilege('anon', 'public.notify_support_waiting_rides()', 'EXECUTE')
-     OR has_function_privilege('authenticated', 'public.notify_support_waiting_rides()', 'EXECUTE')
-     OR has_function_privilege('anon', 'public.request_ride_help(uuid)', 'EXECUTE')
-     OR NOT has_function_privilege('authenticated', 'public.request_ride_help(uuid)', 'EXECUTE') THEN
+  -- With prod's grants: the alert and the cron closed to clients; the help button, the assist
+  -- actions and the contexts open to signed-in users (each checks is_ops_staff or the rider).
+  IF has_function_privilege('authenticated', 'public._support_alert(uuid,text)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.notify_support_waiting_rides()', 'EXECUTE') THEN
     RAISE EXCEPTION '00679 check: the patched functions have the wrong grants';
   END IF;
+  FOREACH v_fn IN ARRAY v_patched[2:] LOOP
+    IF v_fn <> 'public.notify_support_waiting_rides()'
+       AND NOT has_function_privilege('authenticated', v_fn::regprocedure, 'EXECUTE') THEN
+      RAISE EXCEPTION '00679 check: the patched functions have the wrong grants (%)', v_fn;
+    END IF;
+  END LOOP;
 
   -- The handover tick is scheduled.
   IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'support-handoff-tick' AND schedule = '20 seconds'
@@ -913,9 +1241,24 @@ BEGIN
      OR has_function_privilege('anon', 'public.ops_support_shift_status()', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.ops_set_support_shift(boolean,text)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.ops_support_shift_status()', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.ops_open_ride_assist(uuid)', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.ops_take_ride_assist(uuid,uuid)', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.admin_support_waiting_rides_v2()', 'EXECUTE')
      OR NOT has_function_privilege('anon', 'public.get_support_contact()', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_support_contact()', 'EXECUTE') THEN
     RAISE EXCEPTION '00679 check: the RPCs have the wrong grants';
   END IF;
+
+  -- anon: of every function this migration creates or patches, only get_support_contact.
+  FOR v_row IN
+    SELECT p.oid::regprocedure AS fn FROM pg_proc p
+    WHERE p.oid = ANY (SELECT to_regprocedure(f) FROM unnest(v_new || v_patched) f)
+      AND has_function_privilege('anon', p.oid, 'EXECUTE') <> (p.oid = 'public.get_support_contact()'::regprocedure)
+    ORDER BY p.oid::regprocedure::text
+  LOOP
+    RAISE EXCEPTION '00679 check: anon % %',
+      CASE WHEN v_row.fn = 'public.get_support_contact()'::regprocedure THEN 'cannot execute' ELSE 'can execute' END,
+      v_row.fn;
+  END LOOP;
 END
 $check$;

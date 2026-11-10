@@ -3,7 +3,8 @@
 # operator on shift). Builds prod's tables (tables.sql) and the bodies 00679 calls or patches, byte
 # for byte (live-bodies.sql), on the roles and stubs of scaffold.sql (pushes land in test_pushes).
 # A cases: part 1 (staff, shifts, the contact). B cases: part 2 (owners, the help number, handover,
-# the tick and the automatic off-shift).
+# the tick and the automatic off-shift). C cases: part 3 (the ownership guard in the seven assist
+# actions, opening and taking a ride, the owner in the panel's reads, the self-check).
 #   supabase/tests/00679/run.sh none
 #       -> prod as captured + tests (RED: support_staff and the shift functions do not exist)
 #   supabase/tests/00679/run.sh supabase/migrations/00679_support_ride_owner.sql
@@ -51,6 +52,8 @@ R1=b6790000-0000-4000-8000-000000000001     # searching
 R2=b6790000-0000-4000-8000-000000000002     # searching
 R3=b6790000-0000-4000-8000-000000000003     # searching
 R4=b6790000-0000-4000-8000-000000000004     # searching
+DRV2=a6790000-0000-4000-8000-000000000006   # a second driver (C cases only)
+DP2=d6790000-0000-4000-8000-000000000003
 as_user(){ echo "SET LOCAL request.jwt.claim.sub = '$1'; SET LOCAL ROLE authenticated;"; }
 tx(){ echo "BEGIN; $1 ROLLBACK;"; }
 call(){ echo "$(as_user $1) SELECT $2; RESET ROLE;"; }
@@ -81,19 +84,29 @@ CREATED_LIST="'_support_staff_on_shift','_support_pick_owner','get_support_conta
 CREATED2_LIST="'_support_alert_text','_support_send','_support_phone_for_ride','_support_handoff_rides_of',
   '_support_pickup_for','support_handoff_tick','_support_ride_open'"
 PATCHED_LIST="'_support_alert','request_ride_help','notify_support_waiting_rides'"
+# Part 3: the functions it creates, and the live bodies it patches (the seven assist actions and the
+# two contexts). The banner's v1 (admin_support_waiting_rides) is in neither: M4 shows it unchanged.
+CREATED3_LIST="'_assist_claim_or_refuse','_support_ride_owner','ops_open_ride_assist','ops_take_ride_assist',
+  'admin_support_waiting_rides_v2'"
+PATCHED3_LIST="'admin_offer_ride_to_driver','admin_assign_ride_to_driver','admin_change_ride_service',
+  'admin_release_active_ride','admin_advance_active_ride','admin_complete_active_ride','admin_cancel_ride',
+  'admin_ride_assist_context','admin_active_ride_context'"
 BODIES="SELECT string_agg(p.proname || '=' || md5(p.prosrc), ',' ORDER BY p.proname) FROM pg_proc p
-  WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ($CREATED_LIST, $CREATED2_LIST, $PATCHED_LIST)"
+  WHERE p.pronamespace = 'public'::regnamespace
+    AND p.proname IN ($CREATED_LIST, $CREATED2_LIST, $PATCHED_LIST, $CREATED3_LIST, $PATCHED3_LIST)"
 OTHERS="SELECT md5(string_agg(p.oid::regprocedure::text || md5(p.prosrc) || coalesce(p.proacl::text, ''), ',' ORDER BY p.oid::regprocedure::text))
   FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace
-   AND p.proname NOT IN ($CREATED_LIST, $CREATED2_LIST, $PATCHED_LIST)"
+   AND p.proname NOT IN ($CREATED_LIST, $CREATED2_LIST, $PATCHED_LIST, $CREATED3_LIST, $PATCHED3_LIST)"
 HELPERS="SELECT string_agg(p.proname || '=' || md5(p.prosrc), ',' ORDER BY p.proname) FROM pg_proc p
   WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ('current_user_role', 'is_admin', 'is_operator',
   'is_ops_staff', '_ride_short_code', '_ride_type_label', 'get_platform_config_numeric', 'log_rpc_attempt',
-  '_html_escape', 'get_platform_config_text', '_support_alert', 'request_ride_help', 'notify_support_waiting_rides')"
-# md5 of prosrc in prod on 2026-11-07.
-PROD_HELPERS="_html_escape=11824274e20a4bc4e469ca12e4dc7c10,_ride_short_code=7dae14319bfae57a2ac8b4317e928513,_ride_type_label=6334b65ed6bc08e91f9d4cfdee97976e,_support_alert=992c2ce11b664d72e437a683170abb97,current_user_role=cb4a7c12d4e21fe2997135833f141e25,get_platform_config_numeric=13d2587037eca74854cf2394ba42a90c,get_platform_config_text=407a7b835c527164a4aa8b3aa8525ba5,is_admin=22cb75e91980d512498034cd33e1eda2,is_operator=16438eb527af61eaa2d0b3d9a53f08f9,is_ops_staff=d6774e4677be1072e66b247492e9cb9a,log_rpc_attempt=0a902c34a1148dac5686403a7c941bc0,notify_support_waiting_rides=c69e1ca717436dad23eada26af46e0ce,request_ride_help=0568a44a41e6b9ef925ae1b2b2799cb1"
-# md5 of prosrc of the three bodies 00679 patches, after the patch.
-PATCHED_MD5="_support_alert=2e0ae1a5219e5e3ec8772124f1b50767,notify_support_waiting_rides=da6c10207da346fdc6f27114f6f125d6,request_ride_help=2b9faf1390909d63ae02696105d78090"
+  '_html_escape', 'get_platform_config_text', '_support_alert', 'request_ride_help', 'notify_support_waiting_rides',
+  '_ops_allow', $PATCHED3_LIST, 'admin_support_waiting_rides')"
+# md5 of prosrc in prod on 2026-11-07 (part 3's re-captured on 2026-11-09: unchanged).
+PROD_HELPERS="_html_escape=11824274e20a4bc4e469ca12e4dc7c10,_ops_allow=4762cf93cce4a747dc420cf3cdd7c7e9,_ride_short_code=7dae14319bfae57a2ac8b4317e928513,_ride_type_label=6334b65ed6bc08e91f9d4cfdee97976e,_support_alert=992c2ce11b664d72e437a683170abb97,admin_active_ride_context=62031d5be71f09241122be3e64bb3957,admin_advance_active_ride=bc7187cb8d4dbde6c64886e2ee9e3ff8,admin_assign_ride_to_driver=96a14f1ef39f9d397884457278efd699,admin_cancel_ride=21b4dfa6427e7c8976ef1324ddfa732b,admin_change_ride_service=06b0af6654384570c38a76389681d43a,admin_complete_active_ride=149e13089c12d43458a75ee58dd2a9d3,admin_offer_ride_to_driver=0085408045cc5fbf2dbc3e2eb0da92f5,admin_release_active_ride=8f18bf4984f52e41c93cdb16b062eeff,admin_ride_assist_context=2b7a2a9cb6ca0566c3fde8614220e91a,admin_support_waiting_rides=6220ecbb3b398b62c22dc2534ce55570,current_user_role=cb4a7c12d4e21fe2997135833f141e25,get_platform_config_numeric=13d2587037eca74854cf2394ba42a90c,get_platform_config_text=407a7b835c527164a4aa8b3aa8525ba5,is_admin=22cb75e91980d512498034cd33e1eda2,is_operator=16438eb527af61eaa2d0b3d9a53f08f9,is_ops_staff=d6774e4677be1072e66b247492e9cb9a,log_rpc_attempt=0a902c34a1148dac5686403a7c941bc0,notify_support_waiting_rides=c69e1ca717436dad23eada26af46e0ce,request_ride_help=0568a44a41e6b9ef925ae1b2b2799cb1"
+# md5 of prosrc of the twelve bodies 00679 patches, after the patch (part 3's nine: see the file's
+# Checks block).
+PATCHED_MD5="_support_alert=2e0ae1a5219e5e3ec8772124f1b50767,admin_active_ride_context=5ec61f7f9f02e2537da12c49f53a521f,admin_advance_active_ride=271197d1cc0c41ea18dbd6a4975e85bb,admin_assign_ride_to_driver=668b0ae079d5e00c12013537bdaa3384,admin_cancel_ride=460ebfbaeb70f9734bff2d6d9cd5c51d,admin_change_ride_service=9aea004c5bc6f7a83c3098c18bf97812,admin_complete_active_ride=6df9d20cee20b03c8f7f28c3b1022a5f,admin_offer_ride_to_driver=87530b01f336c315a804d940333b7c04,admin_release_active_ride=961b6169aa4152b935f122dce4a46b5e,admin_ride_assist_context=d5e63768daed1321fd8fbddb09ff2ba6,notify_support_waiting_rides=da6c10207da346fdc6f27114f6f125d6,request_ride_help=2b9faf1390909d63ae02696105d78090"
 # The cron with nobody on shift: R1, R2 and R4 wait (R3 already asked for help), and the digest goes
 # to two addresses. Its return value, every push and e-mail (label and md5 of the body) and the
 # stamps it leaves. B19 compares the result after 00679 with the result before it.
@@ -123,9 +136,9 @@ if [ "$MIG" != none ]; then
       "SELECT value FROM public.platform_config WHERE key = 'support_handoff_after_s';
        UPDATE public.platform_config SET value = '60'::jsonb WHERE key = 'support_handoff_after_s';" "90"
   val "M4 no other function changed" "$OTHERS" "$OTHERS_BEFORE"
-  val "M5 the three patched bodies carry their 00679 md5" \
+  val "M5 the twelve patched bodies carry their 00679 md5" \
       "SELECT string_agg(p.proname || '=' || md5(p.prosrc), ',' ORDER BY p.proname) FROM pg_proc p
-        WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ($PATCHED_LIST)" "$PATCHED_MD5"
+        WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ($PATCHED_LIST, $PATCHED3_LIST)" "$PATCHED_MD5"
 fi
 
 # ── The switch ────────────────────────────────────────────────
@@ -544,6 +557,198 @@ val "B13 a push that fails keeps the assignment and the handover, and logs alert
       SELECT outcome || ',' || target_id || ',' || (metadata ->> 'label') FROM public.rpc_attempt_log;")" \
     "Lete;none;alert_failed,$R1,support-owner-alert;1;Melanye;none;alert_failed,$R1,support-handoff"
 
+# ══ Part 3: the ownership guard, open and take, the owner in the panel's reads ══
+# A second driver, approved and online (R3's in C1).
+DRIVER2="INSERT INTO public.users (id, role, full_name) VALUES ('$DRV2', 'driver', 'Chofer Dos');
+  INSERT INTO public.driver_profiles (id, user_id, status, is_online) VALUES ('$DP2', '$DRV2', 'approved', true);"
+WHY="'Sin conductor'"
+OWNED_BY_OTHER='{"error": "ride_owned_by_other"}'
+
+val "C0 part 3's functions: SECURITY DEFINER with search_path; the guard and the owner helper closed; open, take and v2 for signed-in staff; the patched keep prod's grants and search_path" \
+    "SELECT p.proname || ':' || has_function_privilege('anon', p.oid, 'EXECUTE')::int
+              || has_function_privilege('authenticated', p.oid, 'EXECUTE')::int
+              || has_function_privilege('service_role', p.oid, 'EXECUTE')::int
+              || ':' || p.prosecdef || ':' || array_to_string(p.proconfig, ' ')
+       FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ($CREATED3_LIST, $PATCHED3_LIST)
+      ORDER BY p.proname" \
+    "_assist_claim_or_refuse:000:true:search_path=public, pg_catalog;_support_ride_owner:000:true:search_path=public, pg_catalog;admin_active_ride_context:011:true:search_path=public, extensions, pg_catalog;admin_advance_active_ride:011:true:search_path=public, extensions, pg_catalog;admin_assign_ride_to_driver:011:true:search_path=public, pg_catalog;admin_cancel_ride:011:true:search_path=public, pg_catalog;admin_change_ride_service:011:true:search_path=public, extensions, pg_catalog;admin_complete_active_ride:011:true:search_path=public, extensions, pg_catalog;admin_offer_ride_to_driver:011:true:search_path=public, pg_catalog;admin_release_active_ride:011:true:search_path=public, pg_catalog;admin_ride_assist_context:011:true:search_path=public, pg_catalog;admin_support_waiting_rides_v2:011:true:search_path=public, pg_catalog;ops_open_ride_assist:011:true:search_path=public, pg_catalog;ops_take_ride_assist:011:true:search_path=public, pg_catalog"
+has "C0b anon calling the take gets permission denied" \
+    "$(tx "SET LOCAL ROLE anon; SELECT public.ops_take_ride_assist('$R1', NULL);")" \
+    "permission denied for function ops_take_ride_assist"
+
+# ── The guard ─────────────────────────────────────────────────
+# R1 (searching), R2 (accepted by DP) and R3 (in progress with DP2), all OP1's. OP2 tries every
+# action, ADM cancels, and OP2 offers again once OP1 is off shift (an owner off shift still owns
+# it). Nothing may change: the rides, the drivers, offers, proposals, the log, the pushes, the owners.
+val "C1 a ride someone else owns: each of the seven actions refuses with ride_owned_by_other, admins and off-shift owners too, and nothing changes" \
+    "$(tx "$ON_BOTH $DRIVER2 $(owned $R1 $OP1 10) $(owned $R2 $OP1 10) $(owned $R3 $OP1 10)
+      UPDATE public.driver_profiles SET is_online = true WHERE id = '$DP';
+      UPDATE public.rides SET status = 'accepted', driver_id = '$DP', accepted_at = now() WHERE id = '$R2';
+      UPDATE public.rides SET status = 'in_progress', driver_id = '$DP2', accepted_at = now(), pickup_at = now() WHERE id = '$R3';
+      CREATE TEMP TABLE c1_rides AS SELECT * FROM public.rides;
+      CREATE TEMP TABLE c1_drivers AS SELECT * FROM public.driver_profiles;
+      $(call $OP2 "public.admin_offer_ride_to_driver('$R1', '$DP')::text")
+      $(call $OP2 "public.admin_assign_ride_to_driver('$R1', '$DP', $WHY)::text")
+      $(call $OP2 "public.admin_change_ride_service('$R1', 'triciclo_basico', 900, 'apply', $WHY)::text")
+      $(call $OP2 "public.admin_cancel_ride('$R1', $WHY)::text")
+      $(call $OP2 "public.admin_release_active_ride('$R2', 'accepted', '$DP', $WHY)::text")
+      $(call $OP2 "public.admin_advance_active_ride('$R2', 'accepted', '$DP', $WHY)::text")
+      $(call $OP2 "public.admin_complete_active_ride('$R3', 'in_progress', '$DP2', 0, $WHY)::text")
+      $(call $ADM "public.admin_cancel_ride('$R1', $WHY)::text")
+      UPDATE public.support_staff SET on_shift = false, shift_ended_at = now() WHERE user_id = '$OP1';
+      $(call $OP2 "public.admin_offer_ride_to_driver('$R1', '$DP')::text")
+      SELECT (SELECT count(*) FROM (SELECT * FROM public.rides EXCEPT SELECT * FROM c1_rides) x)
+          || ',' || (SELECT count(*) FROM (SELECT * FROM public.driver_profiles EXCEPT SELECT * FROM c1_drivers) x)
+          || ',' || (SELECT count(*) FROM public.ride_offers) || ',' || (SELECT count(*) FROM public.ride_service_proposals)
+          || ',' || (SELECT count(*) FROM public.admin_actions) || ',' || (SELECT count(*) FROM public.test_pushes);
+      SELECT string_agg(u.full_name || ':' || (ra.owner_opened_at IS NULL) || ':' || array_to_string(ra.owners_tried, ' '),
+                        ',' ORDER BY ra.ride_id)
+        FROM public.ride_assist ra JOIN public.users u ON u.id = ra.owner_id;")" \
+    "$(for i in 1 2 3 4 5 6 7 8 9; do printf '%s;' "$OWNED_BY_OTHER"; done)0,0,0,0,0,0;Lete:true:$OP1,Lete:true:$OP1,Lete:true:$OP1"
+# The control for C1: the same stubs let the owner take R1 through every action to the end.
+val "C1b the owner goes through every action (offer, propose, assign, release, change, assign, advance x2, complete; cancel)" \
+    "$(tx "$ON_BOTH $(owned $R1 $OP1 10) $(owned $R2 $OP1 10)
+      UPDATE public.driver_profiles SET is_online = true WHERE id = '$DP';
+      $(call $OP1 "public.admin_offer_ride_to_driver('$R1', '$DP') ->> 'mode'")
+      $(call $OP1 "public.admin_change_ride_service('$R1', 'triciclo_basico', 900, 'propose') ->> 'mode'")
+      $(call $OP1 "public.admin_assign_ride_to_driver('$R1', '$DP', $WHY) ->> 'success'")
+      $(call $OP1 "public.admin_release_active_ride('$R1', 'accepted', '$DP', $WHY) ->> 'status'")
+      UPDATE public.driver_profiles SET is_online = true WHERE id = '$DP';
+      $(call $OP1 "public.admin_change_ride_service('$R1', 'triciclo_basico', 900, 'apply', $WHY) ->> 'mode'")
+      $(call $OP1 "public.admin_assign_ride_to_driver('$R1', '$DP', $WHY) ->> 'success'")
+      $(call $OP1 "public.admin_advance_active_ride('$R1', 'accepted', '$DP', $WHY) ->> 'status'")
+      $(call $OP1 "public.admin_advance_active_ride('$R1', 'arrived_at_pickup', '$DP', $WHY) ->> 'status'")
+      $(call $OP1 "public.admin_complete_active_ride('$R1', 'in_progress', '$DP', 900, $WHY) ->> 'status'")
+      $(call $OP1 "public.admin_cancel_ride('$R2', $WHY) ->> 'success'")
+      SELECT string_agg(action, ',' ORDER BY action) FROM public.admin_actions;
+      $(owner $R1) $(owner $R2)")" \
+    "created;propose;true;searching;apply;true;arrived_at_pickup;in_progress;completed;true;cancel_ride,support_advance_ride,support_advance_ride,support_assign_ride,support_assign_ride,support_change_service,support_complete_ride,support_offer_ride,support_propose_service,support_release_ride;Lete;Lete"
+# R4 has no ride_assist row and R1 one with no owner (alerted while nobody was on shift). A refusal
+# before the guard (no reason) claims nothing. ADM's offer to a suspended driver makes her R4's
+# owner, opened, though the offer is refused; OP1 is then refused; ADM goes on to the offer's own
+# checks. OP2's assign to an offline driver (not_online) makes her R3's owner. ADM's cancel of R1
+# makes her its owner. A ride its owner acted on is opened: the tick leaves it.
+val "C2 a ride with no owner: the first action makes its caller the owner (opened), even when the action then refuses" \
+    "$(tx "$ON_BOTH $(alerted $R1 wait)
+      UPDATE public.driver_profiles SET status = 'suspended' WHERE id = '$DP';
+      $(call $OP1 "public.admin_assign_ride_to_driver('$R4', '$DP', ' ') ->> 'error'")
+      SELECT count(*) FROM public.ride_assist WHERE ride_id = '$R4';
+      $(call $ADM "public.admin_offer_ride_to_driver('$R4', '$DP') ->> 'error'")
+      $(owner $R4)
+      SELECT (owner_assigned_at = now()) || ',' || (owner_opened_at = now()) || ',' || array_to_string(owners_tried, ' ')
+        FROM public.ride_assist WHERE ride_id = '$R4';
+      $(call $OP1 "public.admin_offer_ride_to_driver('$R4', '$DP') ->> 'error'")
+      $(call $ADM "public.admin_offer_ride_to_driver('$R4', '$DP') ->> 'error'")
+      UPDATE public.driver_profiles SET status = 'approved' WHERE id = '$DP';
+      $(call $OP2 "public.admin_assign_ride_to_driver('$R3', '$DP', $WHY) ->> 'error'")
+      $(owner $R3)
+      $(call $ADM "public.admin_cancel_ride('$R1', $WHY) ->> 'success'")
+      $(owner $R1)
+      SELECT (wait_alert_sent_at IS NOT NULL) || ',' || (owner_opened_at = now()) FROM public.ride_assist WHERE ride_id = '$R1';
+      UPDATE public.ride_assist SET owner_assigned_at = now() - interval '61 seconds' WHERE ride_id = '$R3';
+      SELECT public.support_handoff_tick();
+      $(owner $R3)
+      SELECT string_agg(action, ',') FROM public.admin_actions; $PUSHES")" \
+    "reason_required;0;driver_not_approved;Ana Admin;true,true,$ADM;ride_owned_by_other;driver_not_approved;not_online;Melanye;true;Ana Admin;true,true;0;Melanye;cancel_ride;none"
+
+# ── Taking a ride ─────────────────────────────────────────────
+val "C3 taking a ride: the caller becomes its owner (opened, misses zeroed), the owner she saw gets a push, it is logged; a stale take gets ride_changed" \
+    "$(tx "$ON_BOTH $(owned $R1 $OP1 30)
+      UPDATE public.support_staff SET missed_in_a_row = 1;
+      $(call $OP2 "public.ops_take_ride_assist('$R1', '$OP1')::text")
+      $(owner $R1)
+      SELECT (owner_assigned_at = now()) || ',' || (owner_opened_at = now()) || ',' || array_to_string(owners_tried, ' ')
+        FROM public.ride_assist WHERE ride_id = '$R1';
+      $MISSED $PUSHES $TITLES $EVENTS
+      SELECT (body ->> 'body') || '|' || (body -> 'data' ->> 'ride_id') FROM public.test_pushes;
+      SELECT action || ',' || admin_id || ',' || target_type || ',' || target_id || ',' || (old_values ->> 'owner_id')
+             || ',' || (new_values ->> 'owner_id') FROM public.admin_actions;
+      $(call $ADM "public.ops_take_ride_assist('$R1', '$OP1')::text")
+      $(owner $R1) SELECT count(*) FROM public.test_pushes; SELECT count(*) FROM public.admin_actions;")" \
+    "{\"success\": true};Melanye;true,true,$OP1 $OP2;Lete=1,Melanye=0;support-take:Lete;Melanye tomó el viaje #B6790000;support_take;Calle 23 entre L y M, Vedado → Obispo 104, Habana Vieja|$R1;support_take_ride,$OP2,ride,$R1,$OP1,$OP2;{\"error\": \"ride_changed\"};Melanye;1;1"
+val "C3b take: an unowned ride (no push); no row but an owner expected; her own ride (self_ride); a passenger; a missing ride; a failing push keeps the take" \
+    "$(tx "$ON_BOTH $(owned $R3 $OP1 30)
+      $(call $OP1 "public.ops_take_ride_assist('$R4', NULL)::text")
+      $(owner $R4)
+      $(call $OP2 "public.ops_take_ride_assist('$R2', '$OP1') ->> 'error'")
+      SELECT count(*) FROM public.ride_assist WHERE ride_id = '$R2';
+      UPDATE public.rides SET customer_id = '$OP2' WHERE id = '$R3';
+      $(call $OP2 "public.ops_take_ride_assist('$R3', '$OP1') ->> 'error'")
+      $(call $CUS "public.ops_take_ride_assist('$R3', '$OP1') ->> 'error'")
+      $(call $OP2 "public.ops_take_ride_assist('b6790000-0000-4000-8000-0000000000ff', NULL) ->> 'error'")
+      $(owner $R3) $PUSHES
+      SELECT string_agg(action || ':' || coalesce(old_values ->> 'owner_id', 'null'), ',') FROM public.admin_actions;")
+     $(tx "SET LOCAL client_min_messages = error; SET LOCAL test.http_fail = '1';
+      $ON_BOTH $(owned $R1 $OP1 30)
+      $(call $OP2 "public.ops_take_ride_assist('$R1', '$OP1') ->> 'success'")
+      $(owner $R1) $PUSHES
+      SELECT outcome || ',' || target_id || ',' || (metadata ->> 'label') FROM public.rpc_attempt_log;")" \
+    "{\"success\": true};Lete;ride_changed;0;self_ride;forbidden;ride_not_found;Lete;none;support_take_ride:null;true;Melanye;none;alert_failed,$R1,support-take"
+
+# ── Opening the assist page ───────────────────────────────────
+val "C4 opening the assist page: its owner stamps owner_opened_at and zeroes her misses (the handover then leaves it); anyone else changes nothing" \
+    "$(tx "$ON_BOTH $(owned $R1 $OP1 61)
+      UPDATE public.support_staff SET missed_in_a_row = 1;
+      $(call $OP2 "public.ops_open_ride_assist('$R1')::text")
+      SELECT (owner_opened_at IS NULL)::text FROM public.ride_assist WHERE ride_id = '$R1';
+      $MISSED
+      $(call $OP1 "public.ops_open_ride_assist('$R1')::text")
+      SELECT (owner_opened_at = now())::text FROM public.ride_assist WHERE ride_id = '$R1';
+      $MISSED
+      SELECT public.support_handoff_tick(); $(owner $R1)
+      $(call $OP1 "public.ops_open_ride_assist('$R2')::text")
+      SELECT count(*) FROM public.ride_assist WHERE ride_id = '$R2';
+      $(call $CUS "public.ops_open_ride_assist('$R1') ->> 'error'")
+      $PUSHES SELECT count(*) FROM public.admin_actions;")" \
+    "{\"success\": true, \"is_owner\": false};true;Lete=1,Melanye=1;{\"success\": true, \"is_owner\": true};true;Lete=0,Melanye=1;0;Lete;{\"success\": true, \"is_owner\": false};0;forbidden;none;0"
+
+# ── The owner in the panel's reads ────────────────────────────
+# R1 asked for help (OP1's, on shift, opened); R2 waits 4 min (OP2's, off shift, not opened, one
+# pending offer); R3 waits 3 min (no owner); R4 waits 10 s (not listed). Help first, then the oldest.
+V2ROWS="SELECT string_agg(right(t.ride_id::text, 1) || ':' || coalesce(t.owner_name, '-') || ':' || coalesce(t.owner_on_shift::text, '-')
+    || ':' || (t.owner_assigned_at IS NOT NULL) || ':' || (t.owner_opened_at IS NOT NULL) || ':' || t.pending_offers,
+    ',' ORDER BY t.ordinality)
+  FROM public.admin_support_waiting_rides_v2() WITH ORDINALITY AS t"
+V1COLS="ride_id uuid, code text, waiting_since timestamp with time zone, wait_s integer, help_requested_at timestamp with time zone, service_type text, estimated_fare_cup integer, pickup_address text, dropoff_address text, pending_offers integer, is_test boolean"
+val "C5 the banner's v2 lists each ride with its owner (name, on shift, since, opened), the same rows and order as v1; v1 answers as before" \
+    "$(tx "$ON1
+      INSERT INTO public.support_staff (user_id, whatsapp_phone, on_shift, shift_ended_at) VALUES ('$OP2', '+5355123457', false, now());
+      UPDATE public.rides SET created_at = now() - CASE id WHEN '$R2' THEN interval '4 minutes'
+        WHEN '$R3' THEN interval '3 minutes' ELSE interval '10 seconds' END;
+      INSERT INTO public.ride_assist (ride_id, help_requested_at, help_alert_sent_at, owner_id, owner_assigned_at, owner_opened_at, owners_tried)
+        VALUES ('$R1', now(), now(), '$OP1', now(), now(), ARRAY['$OP1']::uuid[]);
+      $(owned $R2 $OP2 30)
+      INSERT INTO public.ride_offers (ride_id, driver_profile_id, expires_at) VALUES ('$R2', '$DP', now() + interval '1 minute');
+      $(as $OP1 "$V2ROWS")
+      $(as $OP1 "SELECT string_agg(right(t.ride_id::text, 1), ',' ORDER BY t.ordinality) FROM public.admin_support_waiting_rides() WITH ORDINALITY AS t")
+      $(as $OP1 "SELECT count(*) FROM (SELECT ride_id, code, waiting_since, wait_s, help_requested_at, service_type, estimated_fare_cup,
+                   pickup_address, dropoff_address, pending_offers, is_test FROM public.admin_support_waiting_rides_v2()
+                 EXCEPT SELECT * FROM public.admin_support_waiting_rides()) x")
+      SELECT pg_get_function_result('public.admin_support_waiting_rides()'::regprocedure);
+      SELECT pg_get_function_result('public.admin_support_waiting_rides_v2()'::regprocedure);")" \
+    "1:Lete:true:true:true:0,2:Melanye:false:true:false:1,3:-:-:false:false:0;1,2,3;0;TABLE($V1COLS);TABLE($V1COLS, owner_id uuid, owner_name text, owner_on_shift boolean, owner_assigned_at timestamp with time zone, owner_opened_at timestamp with time zone)"
+has "C5b a passenger cannot read v2" \
+    "$(tx "$(call $CUS "count(*) FROM public.admin_support_waiting_rides_v2()")")" "forbidden"
+# owner: its keys, then id, name, on_shift, and whether assigned_at / opened_at are the times set
+# (30 s and 10 s ago; null when not opened). KEYS: every key of the context, and the owner's JSON type.
+CTX(){ echo "SELECT (SELECT string_agg(k, ',' ORDER BY k) FROM jsonb_object_keys(j -> 'owner') k)
+    || '|' || (j -> 'owner' ->> 'id') || '|' || (j -> 'owner' ->> 'name') || '|' || (j -> 'owner' ->> 'on_shift')
+    || '|' || ((j -> 'owner' ->> 'assigned_at')::timestamptz = now() - interval '30 seconds')
+    || '|' || coalesce(((j -> 'owner' ->> 'opened_at')::timestamptz = now() - interval '10 seconds')::text, 'null')
+  FROM (SELECT public.$1('$2') AS j) x"; }
+KEYS(){ echo "SELECT (SELECT string_agg(k, ',' ORDER BY k) FROM jsonb_object_keys(j) k) || '|' || jsonb_typeof(j -> 'owner')
+  FROM (SELECT public.$1('$2') AS j) x"; }
+val "C6 both assist contexts carry owner: {id, name, on_shift, assigned_at, opened_at}, or null with no owner" \
+    "$(tx "$ON1 $(owned $R1 $OP1 30)
+      UPDATE public.ride_assist SET owner_opened_at = now() - interval '10 seconds' WHERE ride_id = '$R1';
+      UPDATE public.rides SET status = 'accepted', driver_id = '$DP', accepted_at = now() WHERE id IN ('$R2', '$R4');
+      $(owned $R2 $OP2 30)
+      $(as $ADM "$(CTX admin_ride_assist_context $R1)")
+      $(as $ADM "$(CTX admin_active_ride_context $R2)")
+      $(as $ADM "$(KEYS admin_ride_assist_context $R3)")
+      $(as $ADM "$(KEYS admin_active_ride_context $R4)")")" \
+    "assigned_at,id,name,on_shift,opened_at|$OP1|Lete|true|true|true;assigned_at,id,name,on_shift,opened_at|$OP2|Melanye|false|true|null;help_requested_at,offers,owner,proposal,ride|null;alert,allowed_actions,delivery_proof_missing,driver,driver_profile_id,last_point,owner,preview,ride,start_pickup_at,start_pickup_source|null"
+
 # ── At the same time (committed state, several sessions) ──────
 # The sessions are ordered by state, not by timing. Each one starts only once the one before has
 # picked (it says so with setval, which other sessions see at once), is waiting on a lock, or is
@@ -699,6 +904,34 @@ else
   want="cron:2|help:+5355123456|waited:00|titles:Te toca · $TITLE_WAIT,Te toca · $TITLE_WAIT,Te toca · $TITLE_HELP|errors:0"
   [ "$r" = "$want" ] && ok "$B14c" || ko "$B14c" "expected [$want], got [$r] $(cat "$O1" "$O2" "$O3" | paste -sd' ' -)"
 fi
+
+# C8 (Ruling 5): opening and taking a ride write support_staff (her missed rides) only under the
+# support lock. A session holds it; OP1 opening R1 (hers) and OP2 taking R2 (OP1's) are each seen
+# waiting for it, and both finish once it is let go.
+C8="C8 opening and taking write support_staff only under the support lock: each waits for it, then finishes"
+conc_db "$ON_BOTH $(owned $R1 $OP1 30) $(owned $R2 $OP1 30) UPDATE public.support_staff SET missed_in_a_row = 1;"
+if [ "$(run $CDB "SELECT to_regprocedure('public.ops_take_ride_assist(uuid,uuid)') IS NOT NULL")" != t ]; then
+  ko "$C8" "no ops_take_ride_assist"
+else
+  : > "$O1"; : > "$O2"; : > "$O3"
+  run $CDB "SET application_name = 'lock'; BEGIN; SELECT pg_advisory_xact_lock(6790000000001);
+    $(signal test_picked)
+    DO \$\$ BEGIN FOR i IN 1..600 LOOP EXIT WHEN (SELECT is_called FROM public.test_go); PERFORM pg_sleep(0.05); END LOOP; END \$\$;
+    COMMIT;" > "$O1" &
+  await "SELECT is_called FROM public.test_picked"
+  run $CDB "SET application_name = 'open'; BEGIN; $(as_user $OP1)
+    SELECT public.ops_open_ride_assist('$R1') ->> 'is_owner'; COMMIT;" > "$O2" &
+  await "$(waiting open)"; wopen=$?
+  run $CDB "SET application_name = 'take'; BEGIN; $(as_user $OP2)
+    SELECT public.ops_take_ride_assist('$R2', '$OP1') ->> 'success'; COMMIT;" > "$O3" &
+  await "$(waiting take)"; wtake=$?
+  run $CDB "SELECT setval('public.test_go', 1)" >/dev/null
+  wait
+  r="open:$(cat "$O2")|take:$(cat "$O3")|waited:$wopen$wtake|owners:$(run $CDB "$(owner $R1) $(owner $R2)")"
+  r="$r|missed:$(run $CDB "$MISSED")|errors:$(cat "$O1" "$O2" "$O3" | grep -c ERROR)"
+  want="open:true|take:true|waited:00|owners:Lete;Melanye|missed:Lete=0,Melanye=0|errors:0"
+  [ "$r" = "$want" ] && ok "$C8" || ko "$C8" "expected [$want], got [$r] $(cat "$O1" "$O2" "$O3" | paste -sd' ' -)"
+fi
 rm -f "$O1" "$O2" "$O3" "$O4"
 dropdb $CDB
 
@@ -723,8 +956,22 @@ if [ "$MIG" != none ]; then
   neg "N2 a helper open to clients stops it" "the helpers are open to clients" "$BAD"
   sed 's/^  FROM PUBLIC, anon;$/  FROM PUBLIC;/' "$FILE" > "$BAD"
   neg "N3 a panel RPC open to anon stops it" "the RPCs have the wrong grants" "$BAD"
+  # C7: part 3's self-check, each on a broken copy.
+  sed 's/^DO \$check\$$/DROP FUNCTION public.ops_take_ride_assist(uuid, uuid);\n&/' "$FILE" > "$BAD"
+  neg "C7a a function missing at the check stops it" "ops_take_ride_assist(uuid,uuid) is missing" "$BAD"
+  sed 's/ops_take_ride_assist(uuid, uuid) TO authenticated/ops_take_ride_assist(uuid, uuid) TO anon, authenticated/' "$FILE" > "$BAD"
+  neg "C7b anon able to execute an ops_ function stops it" "anon can execute .*ops_open_ride_assist(uuid)" "$BAD"
+  sed 's/^ALTER TABLE public.support_staff ENABLE ROW LEVEL SECURITY;$/ALTER TABLE public.support_staff DISABLE ROW LEVEL SECURITY;/' "$FILE" > "$BAD"
+  neg "C7c RLS off on support_staff stops it" "RLS is off on support_staff" "$BAD"
+  sed "s/^SELECT cron.schedule('support-handoff-tick'/-- &/" "$FILE" > "$BAD"
+  neg "C7d the cron job missing stops it" "the support-handoff-tick job is missing" "$BAD"
   rm -f "$BAD"
   for d in ${DB}crlf ${DB}neg; do dropdb $d; done
+else
+  for c in "C7a a function missing at the check stops it" "C7b anon able to execute an ops_ function stops it" \
+           "C7c RLS off on support_staff stops it" "C7d the cron job missing stops it"; do
+    ko "$c" "no migration applied"
+  done
 fi
 
 echo "----"
