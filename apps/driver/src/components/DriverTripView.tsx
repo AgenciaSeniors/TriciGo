@@ -1211,6 +1211,7 @@ export function DriverTripView() {
       <TripBadgesRow
         isCargo={isCargoRide(activeTrip)}
         isCorporate={!!activeTrip.corporate_account_id}
+        isMotoDeportiva={activeTrip.service_type === 'moto_deportiva'}
       />
 
       {/* Fare — only visible during accepted (hidden while driving;
