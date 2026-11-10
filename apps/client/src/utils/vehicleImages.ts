@@ -12,7 +12,7 @@ export const vehicleSelectionImages: Record<ServiceTypeSlug, ImageSourcePropType
   triciclo_premium: require('../../assets/vehicles/selection/triciclo.png'),
   triciclo_cargo: require('../../assets/vehicles/selection/triciclo.png'),
   moto_standard: require('../../assets/vehicles/selection/moto.png'),
-  moto_deportiva: require('../../assets/vehicles/selection/moto.png'),
+  moto_deportiva: require('../../assets/vehicles/selection/moto_deportiva.png'),
   // TODO: dedicated selection-style almendrón asset still pending.
   // Using the marker image (top-down) in selection UI looked off — reverted
   // to selection/auto.png (modern sedan) until a proper side-view almendrón
