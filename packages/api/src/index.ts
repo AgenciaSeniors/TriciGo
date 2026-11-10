@@ -58,6 +58,7 @@ export type {
 export { rideAssistService, RIDE_ASSIST_UNAVAILABLE, isProposalGone } from './services/ride-assist.service';
 export type {
   SupportWaitingRide,
+  AssistOwner,
   ServiceProposal,
   RideAssistContext,
   RideAssistOffer,
@@ -73,6 +74,9 @@ export type {
   ActiveRideAdvanceResult,
   ActiveRideCompleteResult,
 } from './services/ride-assist.service';
+export { supportContactService } from './services/support-contact.service';
+export { supportShiftService } from './services/support-shift.service';
+export type { SupportShiftStatus, SupportShiftChange } from './services/support-shift.service';
 export { deliveryService, DELIVERY_OTP_LOCKOUT_SECONDS } from './services/delivery.service';
 export type { DeliveryDetails, PublicDeliveryView, ValidateOtpResult, CreateDeliveryParams } from './services/delivery.service';
 export { nearbyService } from './services/nearby.service';
