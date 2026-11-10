@@ -12,21 +12,24 @@ import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
 import Toast from 'react-native-toast-message';
-import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, findNearestPreset, estimateVehicleEtaMinutes, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, INCOMPATIBILITY_REASON_LABELS, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta, formatRating, SEARCH_TYPICAL_WAIT_S, searchWaitView, discountBaseCup, isSignupPromoCode, signupPromoAction } from '@tricigo/utils';
+import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, findNearestPreset, estimateVehicleEtaMinutes, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, INCOMPATIBILITY_REASON_LABELS, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta, formatRating, SEARCH_TYPICAL_WAIT_S, searchWaitView, discountBaseCup, isSignupPromoCode, signupPromoAction, shouldOfferMotoFallback, shouldSpendPushPrompt, motoDeportivaCard as buildMotoDeportivaCard } from '@tricigo/utils';
 import * as Location from 'expo-location';
+import * as Notifications from 'expo-notifications';
 import { useTranslation } from '@tricigo/i18n';
-import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost, announcementService, type HomeAnnouncement, exchangeRateService, promotionService, type ActivePromotion, partnerPlaceService } from '@tricigo/api';
+import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost, announcementService, type HomeAnnouncement, exchangeRateService, promotionService, type ActivePromotion, partnerPlaceService, motoDeportivaService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import { useNotificationStore } from '@/stores/notification.store';
 import { useThemeStore } from '@/stores/theme.store';
 import { useRideActions } from '@/hooks/useRide';
+import { useMotoDeportivaStatus, useMotoDeportivaStore, isMotoDeportivaRequestable } from '@/hooks/useMotoDeportivaStatus';
 import { useSignupPromotion } from '@/hooks/useSignupPromotion';
 import { useRoutePolyline } from '@/hooks/useRoutePolyline';
 import { WebMapView } from '@/components/WebMapView';
 import type { WebMapViewRef } from '@/components/WebMapView';
 import { WebAddressInput } from '@/components/WebAddressInput';
 import { useNearbyVehicles } from '@/hooks/useNearbyVehicles';
+import { registerPushTokenForUser } from '@/hooks/useNotifications';
 import { useDeliveryVehicles } from '@/hooks/useDeliveryVehicles';
 import { useTestVehicles } from '@/hooks/useTestVehicles';
 import { RideActiveView } from '@/components/RideActiveView';
@@ -67,7 +70,7 @@ import type { PredictedDestination } from '@tricigo/utils';
 import { useCorporateAccounts } from '@/hooks/useCorporateAccounts';
 import { rideService } from '@tricigo/api/services/ride';
 import { reverseGeocode, isPlaceholderAddress } from '@tricigo/utils';
-import { NotificationPermissionSheet } from '@/components/NotificationPermissionSheet';
+import { NotificationPermissionSheet, requestNotificationPermissionSheet } from '@/components/NotificationPermissionSheet';
 import { MarketingConsentSheet } from '@/components/MarketingConsentSheet';
 import { UpdateAvailableSheet } from '@/components/UpdateAvailableSheet';
 import { OnboardingOverlay } from '@/components/OnboardingOverlay';
@@ -104,6 +107,7 @@ function useDebouncePress(callback: (...args: unknown[]) => void, delayMs = 1000
 const WEB_SERVICES: { name: string; desc: string; slug: ServiceTypeSlug; img: any }[] = [
   { name: 'Triciclo', desc: 'Económico', slug: 'triciclo_basico', img: require('../../assets/vehicles/selection/triciclo.png') },
   { name: 'Moto', desc: 'Rápido', slug: 'moto_standard', img: require('../../assets/vehicles/selection/moto.png') },
+  { name: 'Moto Deportiva', desc: 'Exclusiva', slug: 'moto_deportiva', img: require('../../assets/vehicles/selection/moto_deportiva.png') },
   // TODO: dedicated side-view almendrón asset pending. Using selection/auto.png
   // until then (top-down markers/auto_clasico.png looked off in card UI).
   { name: 'Auto', desc: 'Cómodo', slug: 'auto_standard', img: require('../../assets/vehicles/selection/auto.png') },
@@ -176,7 +180,7 @@ const WEB_SEARCH_MESSAGES = [
 /* ── Premium Web Searching State ── */
 function WebSearchingState({
   pickup, dropoff, pickupAddress, dropoffAddress, routeCoords,
-  selectedEstimate, serviceType, onReset, font, paymentMethod,
+  selectedEstimate, serviceType, onReset, onSwitchToMoto, font, paymentMethod,
 }: {
   pickup: LocationPreset | null;
   dropoff: LocationPreset | null;
@@ -186,6 +190,7 @@ function WebSearchingState({
   selectedEstimate: any;
   serviceType: string;
   onReset: () => void;
+  onSwitchToMoto: () => void;
   font: { fontFamily: string };
   paymentMethod: string;
 }) {
@@ -239,6 +244,12 @@ function WebSearchingState({
   // Same tested decision as the native screen. This panel has no offer-stats
   // poll, so no countdown can be live here.
   const webWait = searchWaitView({ elapsedSeconds: elapsedSec, pendingOfferCount: 0, offerSecondsLeft: null });
+  // Moto Deportiva has a single pilot: after 2 minutes offer a regular moto.
+  const offerMotoFallback = shouldOfferMotoFallback({
+    serviceType,
+    status: useRideStore.getState().activeRide?.status ?? 'searching',
+    elapsedSeconds: elapsedSec,
+  });
 
   const searchMessage = WEB_SEARCH_MESSAGES[searchPhase] ?? WEB_SEARCH_MESSAGES[0];
   const fmtCUP = (v: number) => `${Math.round(v).toLocaleString('es-CU')} CUP`;
@@ -546,6 +557,22 @@ function WebSearchingState({
           </div>
         )}
 
+        {offerMotoFallback && (
+          <div role="alert" style={{
+            padding: 14, borderRadius: 12, border: `1px solid ${colors.brand.orange}`,
+            background: 'rgba(255,77,0,0.06)', animation: 'ws-fadeIn 0.3s ease both',
+          }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: c.text }}>La Moto Deportiva no respondió</div>
+            <div style={{ fontSize: 12, color: c.textMuted, margin: '4px 0 10px' }}>Puedes pedir una Moto normal con el mismo destino.</div>
+            <button onClick={onSwitchToMoto} style={{
+              width: '100%', padding: '10px 16px', borderRadius: 10, border: 'none',
+              background: colors.brand.orange, color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer', ...font,
+            }}>
+              Cambiar a Moto
+            </button>
+          </div>
+        )}
+
         {/* Cancel button */}
         <button onClick={onReset} style={{
           width: '100%', padding: '14px 24px', borderRadius: 12,
@@ -633,6 +660,7 @@ function WebHomeScreen() {
 
   // Ride state
   const [serviceType, setServiceType] = useState<ServiceTypeSlug>('triciclo_basico');
+  const { card: motoCard, setWaitlist: setMotoWaitlist } = useMotoDeportivaStatus(true);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'tricicoin' | 'mixed'>('cash');
   // Share of the fare paid from the wallet when paymentMethod === 'mixed'.
   // This branch offered "Mixto" but had no ratio at all and never sent one, so
@@ -829,6 +857,8 @@ function WebHomeScreen() {
     setEstimateLoading(true);
     setAllEstimates({});
     const serviceTypes: ServiceTypeSlug[] = ['triciclo_basico', 'moto_standard', 'auto_standard', 'auto_confort'];
+    // Moto Deportiva is priced only while it can be requested.
+    if (isMotoDeportivaRequestable()) serviceTypes.splice(2, 0, 'moto_deportiva');
     try {
       const results = await Promise.allSettled(
         serviceTypes.map((st) =>
@@ -861,6 +891,24 @@ function WebHomeScreen() {
       handleEstimateAll();
     }
   }, [pickup?.latitude, pickup?.longitude, dropoff?.latitude, dropoff?.longitude]);
+
+  // Moto Deportiva: leave the selection when it stops being requestable, and
+  // re-estimate when it becomes requestable so its price appears.
+  useEffect(() => {
+    if (serviceType === 'moto_deportiva' && !motoCard.requestable) setServiceType('moto_standard');
+  }, [serviceType, motoCard.requestable]);
+  const prevMotoRequestableRef = useRef(motoCard.requestable);
+  useEffect(() => {
+    if (!prevMotoRequestableRef.current && motoCard.requestable && pickup && dropoff) setAllEstimates({});
+    prevMotoRequestableRef.current = motoCard.requestable;
+  }, [motoCard.requestable]);
+  useEffect(() => {
+    if (pickup && dropoff && Object.keys(allEstimates).length === 0 && !estimateLoading) handleEstimateAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allEstimates]);
+  const onNotifyMotoDeportiva = async () => {
+    try { await setMotoWaitlist(true); } catch { /* best effort */ }
+  };
 
   // Promo code handler
   const handleApplyPromo = async () => {
@@ -1006,7 +1054,10 @@ function WebHomeScreen() {
       setRequestSuccess(true);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('Not authenticated')) setError('Debes iniciar sesión.');
+      if ((err as { code?: string } | null)?.code === 'MOTO_DEPORTIVA_UNAVAILABLE') {
+        setError(msg);
+        void motoDeportivaService.getStatus().then((st) => useMotoDeportivaStore.getState().setStatus(st));
+      } else if (msg.includes('Not authenticated')) setError('Debes iniciar sesión.');
       else if (msg.includes('outside the service area')) setError('Ubicación fuera del área de servicio.');
       else setError(`Error: ${msg}`);
     } finally {
@@ -1055,6 +1106,20 @@ function WebHomeScreen() {
     setRouteInfo(null);
     setError(null);
     setRequestSuccess(false);
+  };
+
+  // Moto Deportiva fallback: cancel (free while searching) and go back to the
+  // selection with the same trip and the regular moto preselected.
+  const handleSwitchToMoto = async () => {
+    const rideId = useRideStore.getState().activeRide?.id;
+    try {
+      if (rideId) await rideService.cancelRide(rideId, user?.id, 'moto_deportiva_fallback');
+    } catch { /* already closed server-side: fine */ }
+    useRideStore.getState().resetAll();
+    setRequestSuccess(false);
+    setServiceType('moto_standard');
+    setAllEstimates({});
+    setError(null);
   };
 
   const handleUseMyLocation = () => {
@@ -1139,6 +1204,7 @@ function WebHomeScreen() {
       selectedEstimate={selectedEstimate}
       serviceType={serviceType}
       onReset={handleReset}
+      onSwitchToMoto={handleSwitchToMoto}
       font={font}
       paymentMethod={paymentMethod}
     />;
@@ -1269,8 +1335,9 @@ function WebHomeScreen() {
                 Elige tu servicio
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, opacity: hasBothLocations ? 1 : 0.5, pointerEvents: hasBothLocations ? 'auto' : 'none' }}>
-                {WEB_SERVICES.map((svc) => {
+                {WEB_SERVICES.filter((svc) => svc.slug !== 'moto_deportiva' || motoCard.visible).map((svc) => {
                   const isMensajeria = svc.slug === 'mensajeria';
+                  const motoLocked = svc.slug === 'moto_deportiva' && !motoCard.requestable;
                   const est = isMensajeria ? allEstimates[deliveryVehicle] : allEstimates[svc.slug];
                   const isSelected = serviceType === svc.slug;
                   const isLoadingEst = estimateLoading && !est;
@@ -1279,13 +1346,15 @@ function WebHomeScreen() {
                     <button
                       key={svc.slug}
                       type="button"
-                      onClick={() => setServiceType(svc.slug)}
+                      onClick={() => { if (!motoLocked) setServiceType(svc.slug); }}
+                      aria-disabled={motoLocked}
                       style={{
+                        opacity: motoLocked ? 0.55 : 1,
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         padding: '12px 14px', borderRadius: 12,
                         border: isSelected ? '2px solid ' + colors.brand.orange : `1px solid ${c.border}`,
                         background: isSelected ? c.cardSel : c.panel,
-                        cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s',
+                        cursor: motoLocked ? 'default' : 'pointer', textAlign: 'left', transition: 'all 0.15s',
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -1298,7 +1367,26 @@ function WebHomeScreen() {
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        {isLoadingEst ? (
+                        {motoLocked ? (
+                          <>
+                            <div style={{ fontSize: 11, color: c.textFaint }}>
+                              {motoCard.reason === 'busy'
+                                ? t('moto_deportiva.busy', { defaultValue: 'Ocupada · en un viaje' })
+                                : t('moto_deportiva.unavailable', { defaultValue: 'No disponible ahora' })}
+                            </div>
+                            {motoCard.waitlist !== 'none' && (
+                              <span
+                                role="button"
+                                onClick={(e) => { e.stopPropagation(); void (motoCard.waitlist === 'join' ? onNotifyMotoDeportiva() : setMotoWaitlist(false)); }}
+                                style={{ display: 'inline-block', marginTop: 4, padding: '3px 10px', borderRadius: 999, border: `1px solid ${colors.brand.orange}`, color: colors.brand.orange, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                              >
+                                {motoCard.waitlist === 'join'
+                                  ? t('moto_deportiva.notify_me', { defaultValue: 'Avísame' })
+                                  : t('moto_deportiva.notify_joined', { defaultValue: 'Te avisaremos' })}
+                              </span>
+                            )}
+                          </>
+                        ) : isLoadingEst ? (
                           <div style={{ width: 60, height: 14, borderRadius: 4, background: c.surfaceAlt, animation: 'pulse 1.5s ease-in-out infinite' }} />
                         ) : est ? (
                           <>
@@ -1943,6 +2031,7 @@ function IdleView() {
   const setServiceType = useRideStore((s) => s.setServiceType);
   const resetServiceSelection = useRideStore((s) => s.resetServiceSelection);
   const { requestEstimate } = useRideActions();
+  const { card: motoDeportivaCard } = useMotoDeportivaStatus(true);
   const [locationDenied, setLocationDenied] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [userCenter, setUserCenter] = useState<[number, number] | null>(null);
@@ -2871,16 +2960,21 @@ function IdleView() {
           </View>
         )}
 
-        {/* ── Servicios — 5 en fila ── */}
+        {/* ── Servicios — 5 en fila (6 con Moto Deportiva visible) ── */}
         <Text style={{ fontFamily: 'JetBrainsMono_600SemiBold', fontSize: 10, letterSpacing: 2, color: tokens.ink.subtle, marginBottom: 10 }}>
           {t('home.services_label', { defaultValue: 'SERVICIOS' })}
         </Text>
         <View style={{ flexDirection: 'row', gap: 7 }}>
-          {(['triciclo_basico', 'moto_standard', 'auto_standard', 'auto_confort', 'mensajeria'] as const).map((slug) => (
+          {(motoDeportivaCard.visible
+            ? (['triciclo_basico', 'moto_standard', 'moto_deportiva', 'auto_standard', 'auto_confort', 'mensajeria'] as const)
+            : (['triciclo_basico', 'moto_standard', 'auto_standard', 'auto_confort', 'mensajeria'] as const)
+          ).map((slug) => (
             <ServiceIconButton
               key={slug}
               icon={vehicleSelectionImages[slug]}
-              name={t(`service_type.${slug}` as const, { defaultValue: slug.split('_')[0]!.charAt(0).toUpperCase() + slug.split('_')[0]!.slice(1) })}
+              name={slug === 'moto_deportiva'
+                ? t('service_type.moto_deportiva', { defaultValue: 'Moto Deportiva' })
+                : t(`service_type.${slug}` as const, { defaultValue: slug.split('_')[0]!.charAt(0).toUpperCase() + slug.split('_')[0]!.slice(1) })}
               dense
               mode={mode}
               onPress={() => {
@@ -3067,6 +3161,7 @@ function formatCurrency(amount: number): string {
 // UBER-1.1: Service metadata for recommendation cards
 const SERVICE_META: Record<string, { label: string; desc: string; maxPax: number; slug: ServiceTypeSlug }> = {
   moto_standard: { label: 'Moto', desc: 'Rápido', maxPax: 1, slug: 'moto_standard' },
+  moto_deportiva: { label: 'Moto Deportiva', desc: 'Exclusiva', maxPax: 1, slug: 'moto_deportiva' },
   triciclo_basico: { label: 'Triciclo', desc: 'Económico', maxPax: 3, slug: 'triciclo_basico' },
   auto_standard: { label: 'Auto', desc: 'Cómodo', maxPax: 4, slug: 'auto_standard' },
   auto_confort: { label: 'Confort', desc: 'Premium', maxPax: 4, slug: 'auto_confort' },
@@ -3076,6 +3171,7 @@ const SERVICE_META: Record<string, { label: string; desc: string; maxPax: number
 // Vehicle selection icons (used in service cards)
 const VEHICLE_ICONS: Record<string, any> = {
   moto_standard: require('../../assets/vehicles/selection/moto.png'),
+  moto_deportiva: require('../../assets/vehicles/selection/moto_deportiva.png'),
   triciclo_basico: require('../../assets/vehicles/selection/triciclo.png'),
   // TODO: dedicated side-view almendrón selection asset still pending.
   // markers/auto_clasico.png is top-down style — looked wrong in the
@@ -3144,6 +3240,48 @@ function SelectingView({ openPicker }: {
     fareEstimate,
   } = useRideStore();
   const { requestEstimate, confirmRide, validatePromo, validatingPromo } = useRideActions();
+  const { card: motoCard, setWaitlist: setMotoWaitlist } = useMotoDeportivaStatus(true);
+  // "Avísame": ask for push permission only while it is still undetermined
+  // (shouldSpendPushPrompt); if the OS will not ask again, open the soft-ask
+  // sheet (Settings deep-link). The waitlist is joined whatever the answer:
+  // the notice still lands in the inbox.
+  const onNotifyMotoDeportiva = useCallback(async () => {
+    try {
+      const perm = await Notifications.getPermissionsAsync();
+      const uid = useAuthStore.getState().user?.id;
+      if (perm.status !== 'granted' && uid) {
+        if (shouldSpendPushPrompt(perm)) {
+          await registerPushTokenForUser(uid, { promptIfNeeded: true });
+        } else if (!perm.canAskAgain) {
+          requestNotificationPermissionSheet();
+        }
+      }
+    } catch { /* best effort */ }
+    try {
+      await setMotoWaitlist(true);
+    } catch {
+      Toast.show({ type: 'error', text1: t('moto_deportiva.notify_failed', { defaultValue: 'No pudimos guardar tu aviso. Intenta de nuevo.' }) });
+    }
+  }, [setMotoWaitlist, t]);
+  const onLeaveMotoDeportivaWaitlist = useCallback(async () => {
+    try { await setMotoWaitlist(false); } catch { /* best effort */ }
+  }, [setMotoWaitlist]);
+  // If the selected service is Moto Deportiva and it stops being requestable
+  // (poll), fall back to the regular moto selection.
+  useEffect(() => {
+    if (draft.serviceType === 'moto_deportiva' && !motoCard.requestable) {
+      setServiceType('moto_standard');
+    }
+  }, [draft.serviceType, motoCard.requestable, setServiceType]);
+  // When it becomes requestable, re-estimate so its price appears.
+  const prevMotoRequestableRef = useRef(motoCard.requestable);
+  useEffect(() => {
+    if (!prevMotoRequestableRef.current && motoCard.requestable && draft.pickup?.location && draft.dropoff?.location) {
+      requestEstimate();
+    }
+    prevMotoRequestableRef.current = motoCard.requestable;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [motoCard.requestable]);
   useSignupPromotion();
   const signupPromo = useRideStore((s) => s.signupPromo);
   const setPromoResult = useRideStore((s) => s.setPromoResult);
@@ -3895,8 +4033,12 @@ function SelectingView({ openPicker }: {
           <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: mode === 'dark' ? tokens.ink.subtle : colors.neutral[300], marginBottom: 8 }} />
           <ScrollView showsVerticalScrollIndicator={false}>
             {/* Paso 1+2: Service cards — vertical stack with ETA + trip duration */}
-            {(['triciclo_basico', 'moto_standard', 'auto_standard', 'auto_confort', 'mensajeria'] as const).map((slug) => {
+            {(motoCard.visible
+              ? (['triciclo_basico', 'moto_standard', 'moto_deportiva', 'auto_standard', 'auto_confort', 'mensajeria'] as const)
+              : (['triciclo_basico', 'moto_standard', 'auto_standard', 'auto_confort', 'mensajeria'] as const)
+            ).map((slug) => {
               const meta = SERVICE_META[slug];
+              const motoLocked = slug === 'moto_deportiva' && !motoCard.requestable;
               // Mensajería muestra el precio del VEHÍCULO elegido (no su config
               // plano): resuelve al slug del vehículo. Alinea con la web.
               const est =
@@ -3904,9 +4046,9 @@ function SelectingView({ openPicker }: {
                   ? allFareEstimates?.[deliveryVehicleToSlug(draft.delivery.deliveryVehicleType)]
                   : allFareEstimates?.[slug];
               const isSelected = draft.serviceType === slug;
-              const eta = etaByVehicleType[slug];
+              const eta = etaByVehicleType[slug === 'moto_deportiva' ? 'moto_standard' : slug];
               return (
-                <Pressable key={slug} onPress={() => { triggerHaptic('light'); setServiceType(slug); }} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, borderRadius: 12, marginBottom: 8, borderWidth: isSelected ? 2 : 1, borderColor: isSelected ? colors.brand.orange : (mode === 'dark' ? tokens.line : colors.neutral[200]), backgroundColor: isSelected ? (mode === 'dark' ? tokens.accent.orangeGlow : '#FFF5F0') : (mode === 'dark' ? tokens.bg.elev2 : '#fff') }}>
+                <Pressable key={slug} disabled={motoLocked} accessibilityState={{ disabled: motoLocked }} onPress={() => { triggerHaptic('light'); setServiceType(slug); }} style={{ opacity: motoLocked ? 0.55 : 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, borderRadius: 12, marginBottom: 8, borderWidth: isSelected ? 2 : 1, borderColor: isSelected ? colors.brand.orange : (mode === 'dark' ? tokens.line : colors.neutral[200]), backgroundColor: isSelected ? (mode === 'dark' ? tokens.accent.orangeGlow : '#FFF5F0') : (mode === 'dark' ? tokens.bg.elev2 : '#fff') }}>
                   <Image source={VEHICLE_ICONS[slug]} style={{ width: 36, height: 36, marginRight: 12 }} resizeMode="contain" />
                   <View style={{ flex: 1 }}>
                     <Text variant="body" style={{ fontWeight: '600' }}>{meta?.label ?? slug}</Text>
@@ -3915,7 +4057,29 @@ function SelectingView({ openPicker }: {
                     </Text>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
-                    {est ? (
+                    {motoLocked ? (
+                      <>
+                        <Text variant="caption" color="tertiary">
+                          {motoCard.reason === 'busy'
+                            ? t('moto_deportiva.busy', { defaultValue: 'Ocupada · en un viaje' })
+                            : t('moto_deportiva.unavailable', { defaultValue: 'No disponible ahora' })}
+                        </Text>
+                        {motoCard.waitlist !== 'none' ? (
+                          <Pressable
+                            onPress={() => { void (motoCard.waitlist === 'join' ? onNotifyMotoDeportiva() : onLeaveMotoDeportivaWaitlist()); }}
+                            accessibilityRole="button"
+                            hitSlop={8}
+                            style={{ marginTop: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: colors.brand.orange }}
+                          >
+                            <Text variant="caption" style={{ color: colors.brand.orange, fontWeight: '600' }}>
+                              {motoCard.waitlist === 'join'
+                                ? t('moto_deportiva.notify_me', { defaultValue: 'Avísame' })
+                                : t('moto_deportiva.notify_joined', { defaultValue: 'Te avisaremos' })}
+                            </Text>
+                          </Pressable>
+                        ) : null}
+                      </>
+                    ) : est ? (
                       <>
                         <Text variant="body" style={{ fontWeight: '700', color: isSelected ? colors.brand.orange : tokens.ink.primary }}>{formatFare(est.estimated_fare_cup, est.estimated_fare_trc)}</Text>
                         {est.estimated_duration_s ? (
@@ -4281,7 +4445,7 @@ function SelectingView({ openPicker }: {
             )}
 
           </ScrollView>
-          <Button title={selectedEstimate ? `${t('ride.request', { defaultValue: 'Solicitar' })} ${t(`service_type.${draft.serviceType}` as const)} · ${formatFare(netCup, netTrc)}` : isFareEstimating ? t('home.calculating', { defaultValue: 'Calculando tarifa...' }) : t('ride.select_locations', { defaultValue: 'Selecciona recogida y destino' })} size="lg" fullWidth onPress={debouncedConfirmRide} loading={isFareEstimating || validatingPromo} disabled={!selectedEstimate} style={{ marginTop: 8 }} />
+          <Button title={selectedEstimate ? `${t('ride.request', { defaultValue: 'Solicitar' })} ${t(`service_type.${draft.serviceType}` as const, { defaultValue: SERVICE_META[draft.serviceType]?.label ?? draft.serviceType })} · ${formatFare(netCup, netTrc)}` : isFareEstimating ? t('home.calculating', { defaultValue: 'Calculando tarifa...' }) : t('ride.select_locations', { defaultValue: 'Selecciona recogida y destino' })} size="lg" fullWidth onPress={debouncedConfirmRide} loading={isFareEstimating || validatingPromo} disabled={!selectedEstimate} style={{ marginTop: 8 }} />
         </View>
       )}
     </View>
@@ -4362,7 +4526,10 @@ function ReviewingView() {
   }, [recommendedSlug, draft.serviceType, servicePreSelected, setServiceType]);
 
   // UBER-1.1: Derive other (non-selected) services for secondary chips
+  const motoStatus = useMotoDeportivaStore((st) => st.status);
+  const motoRequestable = buildMotoDeportivaCard(motoStatus).requestable;
   const allServiceSlugs: ServiceTypeSlug[] = ['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort', 'mensajeria'];
+  if (motoRequestable) allServiceSlugs.splice(1, 0, 'moto_deportiva');
   const selectedSlug = draft.serviceType || recommendedSlug;
   const otherServices = allServiceSlugs.filter((s) => s !== selectedSlug);
 
@@ -4393,7 +4560,7 @@ function ReviewingView() {
   const discount = promoDiscount + shareDiscount;
 
   // UBER-1.2: Smart confirm label
-  const selectedServiceLabel = t(`service_type.${selectedSlug}` as const);
+  const selectedServiceLabel = t(`service_type.${selectedSlug}` as const, { defaultValue: SERVICE_META[selectedSlug]?.label ?? selectedSlug });
   const confirmLabel = fareEstimate
     ? t('home.request_with_details', {
         service: selectedServiceLabel,
@@ -4471,7 +4638,7 @@ function ReviewingView() {
           />
           <View className="flex-1 ml-3">
             <Text variant="h3" className="font-bold">
-              {t(`service_type.${selectedSlug}` as const)}
+              {t(`service_type.${selectedSlug}` as const, { defaultValue: SERVICE_META[selectedSlug]?.label ?? selectedSlug })}
             </Text>
             <View className="flex-row items-center mt-1">
               {fareEstimate.estimated_duration_s != null && fareEstimate.estimated_duration_s > 0 && (
@@ -4540,7 +4707,7 @@ function ReviewingView() {
                   className="bg-neutral-100 dark:bg-neutral-800 rounded-full px-4 py-2 flex-row items-center"
                   onPress={() => handleServiceSwap(slug)}
                   accessibilityRole="radio"
-                  accessibilityLabel={t(`service_type.${slug}` as const)}
+                  accessibilityLabel={t(`service_type.${slug}` as const, { defaultValue: SERVICE_META[slug]?.label ?? slug })}
                   accessibilityState={{ selected: false }}
                 >
                   <Image
@@ -5217,6 +5384,27 @@ function SearchingView() {
   });
   const pastTypicalWait = wait.progress === 'sweep';
 
+  // Moto Deportiva has a single pilot: after 2 minutes with no taker, offer a
+  // regular moto for the same trip. Cancelling while searching is free.
+  const offerMotoFallback = shouldOfferMotoFallback({
+    serviceType: activeRide?.service_type,
+    status: activeRide?.status,
+    elapsedSeconds,
+  });
+  const switchToMoto = useCallback(async () => {
+    const saved = useRideStore.getState().draft;
+    await cancelRide('moto_deportiva_fallback');
+    // cancelRide resets the store only when the cancel went through.
+    if (useRideStore.getState().activeRide) return;
+    const restore = () => useRideStore.setState({ draft: { ...saved, serviceType: 'moto_standard' }, flowStep: 'selecting' });
+    restore();
+    // resetAll may still be settling: set it again after the current tick if it came back empty.
+    setTimeout(() => {
+      const d = useRideStore.getState().draft;
+      if (!d.pickup || !d.dropoff) restore();
+    }, 0);
+  }, [cancelRide]);
+
   // UBER-2.1: Progress bar over the TYPICAL wait (79 % of accepted rides land
   // inside it). Once it is full the wait is simply slower than most — not
   // over — so the bar hands off to an indeterminate sweep rather than sitting
@@ -5497,6 +5685,27 @@ function SearchingView() {
           )}
         </>
       ) : null}
+
+      {offerMotoFallback && (
+        <View
+          style={{ marginBottom: 12, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: colors.brand.orange, backgroundColor: 'rgba(255, 77, 0, 0.06)' }}
+          accessibilityRole="alert"
+        >
+          <Text variant="body" style={{ fontWeight: '700' }}>
+            {t('moto_deportiva.fallback_title', { defaultValue: 'La Moto Deportiva no respondió' })}
+          </Text>
+          <Text variant="bodySmall" color="secondary" style={{ marginTop: 4, marginBottom: 10 }}>
+            {t('moto_deportiva.fallback_body', { defaultValue: 'Puedes pedir una Moto normal con el mismo destino.' })}
+          </Text>
+          <Button
+            title={t('moto_deportiva.fallback_cta', { defaultValue: 'Cambiar a Moto' })}
+            size="md"
+            fullWidth
+            onPress={() => { void switchToMoto(); }}
+            disabled={isLoading}
+          />
+        </View>
+      )}
 
       <Button
         /* UX: append elapsed wait to the cancel label so the rider has

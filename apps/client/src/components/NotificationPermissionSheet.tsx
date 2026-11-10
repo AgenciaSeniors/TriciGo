@@ -30,6 +30,14 @@ const RESHOW_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 // on every single launch.
 const ERROR_RETRY_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+// Lets other screens (the Moto Deportiva "Avísame" button) open this sheet on
+// demand when the OS will not ask again. The sheet stays the only owner of the
+// Settings deep-link and of the 7-day cooldown.
+const openRequestListeners = new Set<() => void>();
+export function requestNotificationPermissionSheet(): void {
+  openRequestListeners.forEach((fn) => fn());
+}
+
 /**
  * Friendly bottom sheet explaining why notifications are needed. Re-surfaces
  * periodically while permission is not granted (capped to once per 7 days so
@@ -42,6 +50,12 @@ export function NotificationPermissionSheet() {
   const insets = useSafeAreaInsets();
   const [visible, setVisible] = useState(false);
   const [denied, setDenied] = useState(false);
+
+  useEffect(() => {
+    const open = () => { setDenied(true); setVisible(true); };
+    openRequestListeners.add(open);
+    return () => { openRequestListeners.delete(open); };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
