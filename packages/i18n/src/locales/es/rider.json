@@ -2,6 +2,7 @@
   "moto_deportiva": {
     "busy": "Ocupada · en un viaje",
     "unavailable": "No disponible ahora",
+    "mode_blocked": "No disponible para viajes de empresa o programados",
     "notify_me": "Avísame",
     "notify_joined": "Te avisaremos",
     "notify_failed": "No pudimos guardar tu aviso. Intenta de nuevo.",

@@ -402,14 +402,16 @@ export default function BookPage() {
   const onNotifyMotoDeportiva = async () => {
     try { await setMotoWaitlist(true); } catch { /* best effort */ }
   };
+  // The server rejects Moto Deportiva for company-paid and scheduled rides.
+  const motoModeBlocked = !!selectedCorporateId || isScheduled;
   // Leave the selection when it stops being requestable.
   useEffect(() => {
-    if (serviceType === 'moto_deportiva' && !motoCard.requestable) setServiceType('moto_standard');
-  }, [serviceType, motoCard.requestable]);
+    if (serviceType === 'moto_deportiva' && (!motoCard.requestable || motoModeBlocked)) setServiceType('moto_standard');
+  }, [serviceType, motoCard.requestable, motoModeBlocked]);
   // Price it as soon as it becomes requestable while the trip is already set.
   const prevMotoRequestableRef = useRef(motoCard.requestable);
   useEffect(() => {
-    if (!prevMotoRequestableRef.current && motoCard.requestable && pickup && dropoff) setAllEstimates({});
+    if (!prevMotoRequestableRef.current && motoCard.requestable && pickup && dropoff) void handleEstimateAll();
     prevMotoRequestableRef.current = motoCard.requestable;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [motoCard.requestable]);
@@ -1414,7 +1416,7 @@ export default function BookPage() {
                   const isLoading = estimateLoading && !est;
                   const vt = serviceTypeToVehicleType(svc.slug) as VehicleType | null;
                   const pickupEta = vt ? etaByType[vt] : null;
-                  const motoLocked = svc.slug === 'moto_deportiva' && !motoCard.requestable;
+                  const motoLocked = svc.slug === 'moto_deportiva' && (!motoCard.requestable || motoModeBlocked);
 
                   return (
                     <button
@@ -1460,7 +1462,9 @@ export default function BookPage() {
                         {motoLocked ? (
                           <>
                             <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>
-                              {motoCard.reason === 'busy'
+                              {motoModeBlocked && motoCard.requestable
+                                ? t('moto_deportiva.mode_blocked', { defaultValue: 'No disponible para viajes de empresa o programados' })
+                                : motoCard.reason === 'busy'
                                 ? t('moto_deportiva.busy', { defaultValue: 'Ocupada · en un viaje' })
                                 : t('moto_deportiva.unavailable', { defaultValue: 'No disponible ahora' })}
                             </div>

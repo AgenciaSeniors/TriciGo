@@ -919,8 +919,14 @@ export default function TrackRidePage() {
                   setSwitchingToMoto(true);
                   try {
                     await rideService.cancelRide(rideId, userId ?? undefined, 'moto_deportiva_fallback');
-                  } catch {
-                    // Already closed or failed: still send the rider back to book.
+                  } catch (err) {
+                    // Already closed server-side is fine; any other failure keeps the
+                    // rider here (the ride may still be searching) and says so.
+                    if ((err as { code?: string } | null)?.code !== 'RIDE_ALREADY_CLOSED') {
+                      alert(t('track.cancel_failed', { defaultValue: 'No se pudo cancelar el viaje. Verifica tu conexión e intenta de nuevo.' }));
+                      setSwitchingToMoto(false);
+                      return;
+                    }
                   }
                   try {
                     const toPreset = (loc: unknown, address: string | null | undefined) => {

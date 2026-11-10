@@ -2,6 +2,7 @@
   "moto_deportiva": {
     "busy": "Busy · on a trip",
     "unavailable": "Not available now",
+    "mode_blocked": "Not available for company or scheduled rides",
     "notify_me": "Notify me",
     "notify_joined": "We'll let you know",
     "notify_failed": "We couldn't save your alert. Try again.",
