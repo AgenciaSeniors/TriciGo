@@ -353,6 +353,7 @@ export default function RidesPage() {
               <option value="">{t('rides.type_all', { defaultValue: 'Todos' })}</option>
               <option value="triciclo_basico">{t('rides.type_triciclo', { defaultValue: 'Triciclo' })}</option>
               <option value="moto_standard">{t('rides.type_moto', { defaultValue: 'Moto' })}</option>
+              <option value="moto_deportiva">{t('rides.type_moto_deportiva', { defaultValue: 'Moto Deportiva' })}</option>
               <option value="auto_standard">{t('rides.type_auto', { defaultValue: 'Auto' })}</option>
               <option value="auto_confort">{t('rides.type_auto_confort', { defaultValue: 'Confort' })}</option>
             </select>
