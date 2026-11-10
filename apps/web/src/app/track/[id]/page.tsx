@@ -6,7 +6,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient, rideService, deliveryService, reviewService, nearbyService, trustedContactService, incidentService, notificationService, useFeatureFlag } from '@tricigo/api';
-import { formatCUP, generateReceiptHTML, haversineDistance, riderChargedTotal } from '@tricigo/utils';
+import { formatCUP, generateReceiptHTML, haversineDistance, riderChargedTotal, shouldOfferMotoFallback } from '@tricigo/utils';
 import type { RideWithDriver, RideStatus, Waypoint } from '@tricigo/types';
 import { useDriverPosition } from '../../../hooks/useDriverPosition';
 import { useRiderLocationSharing } from '../../../hooks/useRiderLocationSharing';
@@ -189,6 +189,15 @@ export default function TrackRidePage() {
   const [shareCopied, setShareCopied] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [canceling, setCanceling] = useState(false);
+  // Moto Deportiva has a single pilot: after 2 minutes searching, offer a regular moto.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [switchingToMoto, setSwitchingToMoto] = useState(false);
+  const searchingMoto = ride?.status === 'searching' && ride?.service_type === 'moto_deportiva';
+  useEffect(() => {
+    if (!searchingMoto) return;
+    const id = setInterval(() => setNowMs(Date.now()), 5_000);
+    return () => clearInterval(id);
+  }, [searchingMoto]);
   const [deliveryDetails, setDeliveryDetails] = useState<{
     recipient_name?: string; recipient_phone?: string; package_description?: string;
     package_category?: string; estimated_weight_kg?: number; client_accompanies?: boolean;
@@ -883,6 +892,54 @@ export default function TrackRidePage() {
           ) : (
             <div className="track-card">
               <StatusStepper steps={statusSteps} currentIdx={currentStepIdx} />
+            </div>
+          )}
+
+          {/* Moto Deportiva fallback: cancel (free while searching) and go back to
+              /book with the same trip and the regular moto preselected. */}
+          {ride.status === 'searching' && userId === ride.customer_id && shouldOfferMotoFallback({
+            serviceType: ride.service_type,
+            status: ride.status,
+            elapsedSeconds: Math.max(0, (nowMs - Math.max(
+              new Date(ride.created_at).getTime(),
+              ride.scheduled_at ? new Date(ride.scheduled_at).getTime() : 0,
+            )) / 1000),
+          }) && (
+            <div className="track-card" style={{ border: '1px solid var(--border)' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>
+                {t('moto_deportiva.fallback_title', { defaultValue: 'La Moto Deportiva no respondió' })}
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', margin: '4px 0 10px' }}>
+                {t('moto_deportiva.fallback_body', { defaultValue: 'Puedes pedir una Moto normal con el mismo destino.' })}
+              </div>
+              <button
+                className="track-action-btn"
+                disabled={switchingToMoto}
+                onClick={async () => {
+                  setSwitchingToMoto(true);
+                  try {
+                    await rideService.cancelRide(rideId, userId ?? undefined, 'moto_deportiva_fallback');
+                  } catch {
+                    // Already closed or failed: still send the rider back to book.
+                  }
+                  try {
+                    const toPreset = (loc: unknown, address: string | null | undefined) => {
+                      const l = loc as { latitude?: number; longitude?: number } | null;
+                      return l && typeof l.latitude === 'number' && typeof l.longitude === 'number'
+                        ? { label: address ?? '', address: address ?? '', latitude: l.latitude, longitude: l.longitude }
+                        : undefined;
+                    };
+                    sessionStorage.setItem('tricigo_book_draft', JSON.stringify({
+                      pickup: toPreset(ride.pickup_location, ride.pickup_address),
+                      dropoff: toPreset(ride.dropoff_location, ride.dropoff_address),
+                      serviceType: 'moto_standard',
+                    }));
+                  } catch { /* storage unavailable: book opens empty */ }
+                  router.push('/book');
+                }}
+              >
+                {t('moto_deportiva.fallback_cta', { defaultValue: 'Cambiar a Moto' })}
+              </button>
             </div>
           )}
 
