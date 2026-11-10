@@ -80,7 +80,7 @@ export const OPERATOR_ROUTES: readonly string[] = [
 const OPERATOR_DENIED: readonly RegExp[] = [/^\/wallet\/gifts(?:\/|$)/];
 
 /** The pages only super admins may open (00661, team invitations). Each one also covers its sub-pages. */
-export const SUPER_ADMIN_ROUTES: readonly string[] = ['/equipo'];
+export const SUPER_ADMIN_ROUTES: readonly string[] = ['/equipo', '/moto-deportiva'];
 
 /** Where marketing lands, and where the middleware sends it from any other page. */
 export const MARKETING_HOME = '/launch-pulse';
