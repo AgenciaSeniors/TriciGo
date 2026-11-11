@@ -544,6 +544,46 @@ val "B17b a repeated on (already on shift) does not restart the minute of a ride
       SELECT public.support_handoff_tick();
       SELECT missed_in_a_row FROM public.support_staff WHERE user_id = '$OP1'; $PUSHES")" \
     "0,0,0;1;1;support-all-missed:$ALL3"
+# Ruling 15 ("Cambiar número" sends the current state with the new number). Only a transition hands
+# over (on to off) or picks up and resets the misses (off to on). A call that keeps the state stores
+# the number and logs support_shift_number; with neither changed it logs nothing.
+# a: OP1 off since 10 min, keeping R1 (searching, opened); OP2 on shift.
+val "B20a off already, a new number: only the number changes; the ride she kept and opened stays hers; one support_shift_number row" \
+    "$(tx "INSERT INTO public.support_staff (user_id, whatsapp_phone, on_shift, shift_started_at, shift_ended_at) VALUES
+        ('$OP1', '+5355123456', false, now() - interval '1 hour', now() - interval '10 minutes'),
+        ('$OP2', '+5355123457', true, now() - interval '1 hour', NULL);
+      $(owned $R1 $OP1 900)
+      UPDATE public.ride_assist SET owner_opened_at = now() - interval '14 minutes' WHERE ride_id = '$R1';
+      $(toggle $OP1 "false, '+5355999999'")
+      $(owner $R1)
+      SELECT whatsapp_phone || ',' || on_shift || ',' || (shift_ended_at = now() - interval '10 minutes')
+        FROM public.support_staff WHERE user_id = '$OP1';
+      SELECT count(*) FROM public.admin_actions;
+      SELECT action || ',' || admin_id || ',' || (old_values ->> 'whatsapp_phone') || ',' || (new_values ->> 'whatsapp_phone')
+        FROM public.admin_actions;
+      $PUSHES")" \
+    "0,0,0;Lete;+5355999999,false,true;1;support_shift_number,$OP1,+5355123456,+5355999999;none"
+# b: OP1 on since 10 min with one miss and R1 (hers, unopened, of this shift); R4 alerted with no owner.
+val "B20b on already, a new number: only the number changes; no pickup, the misses stay; one support_shift_number row" \
+    "$(tx "INSERT INTO public.support_staff (user_id, whatsapp_phone, on_shift, shift_started_at, missed_in_a_row) VALUES
+        ('$OP1', '+5355123456', true, now() - interval '10 minutes', 1);
+      $(owned $R1 $OP1 20) $(alerted $R4 wait)
+      $(toggle $OP1 "true, '+5355999999'")
+      $(owner $R1) $(owner $R4)
+      SELECT whatsapp_phone || ',' || missed_in_a_row || ',' || (shift_started_at = now() - interval '10 minutes')
+        FROM public.support_staff WHERE user_id = '$OP1';
+      SELECT count(*) FROM public.admin_actions;
+      SELECT action || ',' || (new_values ->> 'whatsapp_phone') FROM public.admin_actions;
+      $PUSHES")" \
+    "0,0,0;Lete;none;+5355999999,1,true;1;support_shift_number,+5355999999;none"
+val "B20c a call that changes neither the state nor the number logs nothing" \
+    "$(tx "INSERT INTO public.support_staff (user_id, whatsapp_phone, on_shift, shift_started_at) VALUES
+        ('$OP1', '+5355123456', true, now());
+      INSERT INTO public.support_staff (user_id, whatsapp_phone, on_shift, shift_ended_at) VALUES
+        ('$OP2', '+5355123457', false, now());
+      $(toggle $OP1 "true, '+5355123456'") $(toggle $OP1 "true") $(toggle $OP2 "false, '+5355123457'") $(toggle $OP2 "false")
+      SELECT count(*) FROM public.admin_actions; $PUSHES")" \
+    "0,0,0;0,0,0;0,0,0;0,0,0;0;none"
 
 # ── A push that fails ─────────────────────────────────────────
 val "B13 a push that fails keeps the assignment and the handover, and logs alert_failed" \

@@ -234,12 +234,15 @@ $function$;
 
 -- The "En turno" switch. On needs a number in E.164 (the panel normalizes what she types): the one
 -- given, else the one stored. It never falls back to users.phone, so an account phone in another
--- format never reaches riders unchecked. A number given while turning off is stored too. Turning on
--- resets the missed rides. Each change is logged (support_shift_on / support_shift_off).
--- Turning off hands her open rides over (_support_handoff_rides_of: handed_over, and kept for those
--- with nobody to take them); turning on picks up the rides waiting for someone (_support_pickup_for:
--- picked_up). Both run under the support lock and her row, so they touch ride_assist only with SKIP
--- LOCKED (see section E).
+-- format never reaches riders unchecked. A number given while turning off is stored too.
+-- Only a transition does more than store the number. Going off (on to off) hands her open rides
+-- over (_support_handoff_rides_of: handed_over, and kept for those with nobody to take them); coming
+-- on (off to on) resets the missed rides and picks up the rides waiting for someone
+-- (_support_pickup_for: picked_up). Both run under the support lock and her row, so they touch
+-- ride_assist only with SKIP LOCKED (see section E). A call that keeps the state (the panel's
+-- "Cambiar número") only stores the number and answers 0, 0, 0. Logged: support_shift_on /
+-- support_shift_off for a transition, support_shift_number for a number change alone, nothing when
+-- neither changed.
 CREATE OR REPLACE FUNCTION public.ops_set_support_shift(p_on boolean, p_whatsapp text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -255,6 +258,7 @@ DECLARE
   v_handed integer := 0;
   v_kept   integer := 0;
   v_picked integer := 0;
+  v_was    boolean;
   c_support_lock CONSTANT bigint := 6790000000001;  -- the support lock (see _support_pick_owner)
 BEGIN
   IF v_me IS NULL OR NOT public.is_ops_staff() THEN
@@ -273,6 +277,7 @@ BEGIN
   IF p_on AND COALESCE(v_new, v_old.whatsapp_phone) IS NULL THEN
     RETURN jsonb_build_object('error', 'whatsapp_required');
   END IF;
+  v_was := COALESCE(v_old.on_shift, false);
 
   INSERT INTO public.support_staff (user_id) VALUES (v_me) ON CONFLICT (user_id) DO NOTHING;
   UPDATE public.support_staff
@@ -280,26 +285,28 @@ BEGIN
          on_shift         = p_on,
          shift_started_at = CASE WHEN p_on AND NOT on_shift THEN now() ELSE shift_started_at END,
          shift_ended_at   = CASE WHEN NOT p_on AND on_shift THEN now() ELSE shift_ended_at END,
-         missed_in_a_row  = CASE WHEN p_on THEN 0 ELSE missed_in_a_row END,
+         missed_in_a_row  = CASE WHEN p_on AND NOT on_shift THEN 0 ELSE missed_in_a_row END,
          updated_at       = now()
    WHERE user_id = v_me
   RETURNING * INTO v_row;
 
-  -- Her open rides pass to someone else on shift when she goes off; the rides waiting for someone
-  -- are picked up when she comes on.
-  IF p_on THEN
+  -- Only a transition: her open rides pass to someone else on shift when she goes off; the rides
+  -- waiting for someone are picked up when she comes on. A call that keeps the state does neither.
+  IF p_on AND NOT v_was THEN
     v_picked := public._support_pickup_for(v_me);
-  ELSE
+  ELSIF NOT p_on AND v_was THEN
     v_res := public._support_handoff_rides_of(v_me);
     v_handed := (v_res ->> 'handed_over')::integer;
     v_kept := (v_res ->> 'kept')::integer;
   END IF;
 
-  IF COALESCE(v_old.on_shift, false) IS DISTINCT FROM v_row.on_shift
+  IF v_was IS DISTINCT FROM v_row.on_shift
      OR v_old.whatsapp_phone IS DISTINCT FROM v_row.whatsapp_phone THEN
     INSERT INTO public.admin_actions (admin_id, action, target_type, target_id, old_values, new_values)
-    VALUES (v_me, CASE WHEN p_on THEN 'support_shift_on' ELSE 'support_shift_off' END, 'support_staff', v_me::text,
-            jsonb_build_object('on_shift', COALESCE(v_old.on_shift, false), 'whatsapp_phone', v_old.whatsapp_phone),
+    VALUES (v_me, CASE WHEN v_was = v_row.on_shift THEN 'support_shift_number'
+                       WHEN p_on THEN 'support_shift_on' ELSE 'support_shift_off' END,
+            'support_staff', v_me::text,
+            jsonb_build_object('on_shift', v_was, 'whatsapp_phone', v_old.whatsapp_phone),
             jsonb_build_object('on_shift', v_row.on_shift, 'whatsapp_phone', v_row.whatsapp_phone,
                                'handed_over', v_handed, 'kept', v_kept, 'picked_up', v_picked));
   END IF;
