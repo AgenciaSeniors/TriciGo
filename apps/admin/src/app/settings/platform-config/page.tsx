@@ -115,6 +115,10 @@ const KNOWN_KEYS: Record<string, KnownKey> = {
   low_rating_rider_dispatch_limit: { type: 'number', helpKey: 'platform_config.low_rating_rider_dispatch_limit_help' },
   low_rating_rider_radius_m: { type: 'number', helpKey: 'platform_config.low_rating_rider_radius_m_help' },
 
+  // ── Support shift: handover of rides nobody opens (00679) ──
+  support_handoff_after_s: { type: 'number', helpKey: 'platform_config.support_handoff_after_s_help' },
+  support_auto_offshift_misses: { type: 'number', helpKey: 'platform_config.support_auto_offshift_misses_help' },
+
   // ── Wait charge (cargo por espera; cap server-side, mig 00432 DSP-01) ──
   max_billable_wait_minutes: { type: 'number', helpKey: 'platform_config.max_billable_wait_minutes_help' },
 

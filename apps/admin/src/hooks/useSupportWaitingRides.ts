@@ -7,15 +7,21 @@
  */
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { rideAssistService, type SupportWaitingRide } from '@tricigo/api';
+import { sortWaitingForViewer } from '@tricigo/utils';
 import { playChime } from '@/lib/chime';
+import { useAdminUser } from '@/lib/useAdminUser';
 
 /** One failed poll is a blip; three in a row (45 s) means support is no longer being told. */
 const FAILURES_BEFORE_NOTICE = 3;
 
 export function useSupportWaitingRides(pollMs = 15_000) {
-  const [rides, setRides] = useState<SupportWaitingRide[]>([]);
+  const { userId } = useAdminUser();
+  const viewerId = userId || null;
+  const viewerRef = useRef<string | null>(viewerId);
+  viewerRef.current = viewerId;
+  const [fetched, setRides] = useState<SupportWaitingRide[]>([]);
   const [loadFailed, setLoadFailed] = useState(false);
   const seenRef = useRef<Set<string>>(new Set());
   const failuresRef = useRef(0);
@@ -25,7 +31,10 @@ export function useSupportWaitingRides(pollMs = 15_000) {
     try {
       const next = await rideAssistService.getWaitingRides();
       if (!mountedRef.current) return;
-      const keys = next.map((r) => `${r.ride_id}:${r.help_requested_at ? 'help' : 'wait'}`);
+      // A ride that becomes hers (assigned or handed over) chimes again, like a new one.
+      const keys = next.map(
+        (r) => `${r.ride_id}:${r.help_requested_at ? 'help' : 'wait'}:${r.owner_id !== null && r.owner_id === viewerRef.current ? 'mine' : ''}`,
+      );
       const isNew = keys.some((k) => !seenRef.current.has(k));
       seenRef.current = new Set(keys);
       failuresRef.current = 0;
@@ -51,5 +60,8 @@ export function useSupportWaitingRides(pollMs = 15_000) {
     };
   }, [load, pollMs]);
 
-  return { rides, loadFailed, refresh: load };
+  // Her own rides first; the rest keep the server's order.
+  const rides = useMemo(() => sortWaitingForViewer(fetched, viewerId), [fetched, viewerId]);
+
+  return { rides, loadFailed, viewerId, refresh: load };
 }

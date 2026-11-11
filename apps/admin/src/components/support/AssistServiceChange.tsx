@@ -29,9 +29,11 @@ interface Props {
   /** The latest proposal's state, already worded by the page, or null. */
   proposalLine: string | null;
   onChanged: () => void;
+  /** Someone else owns the ride (00679): quoting, proposing and applying stay disabled. */
+  disabled?: boolean;
 }
 
-export function AssistServiceChange({ ride, configs, proposalLine, onChanged }: Props) {
+export function AssistServiceChange({ ride, configs, proposalLine, onChanged, disabled = false }: Props) {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
   const [target, setTarget] = useState<ServiceTypeSlug | ''>('');
@@ -162,7 +164,7 @@ export function AssistServiceChange({ ride, configs, proposalLine, onChanged }: 
                   setTarget(e.target.value as ServiceTypeSlug | '');
                   setQuote(null);
                 }}
-                disabled={quoting}
+                disabled={quoting || disabled}
                 className="rounded-lg border border-line bg-surface px-2 py-1 text-sm text-ink disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <option value="">—</option>
@@ -176,7 +178,7 @@ export function AssistServiceChange({ ride, configs, proposalLine, onChanged }: 
             <button
               type="button"
               onClick={() => void calculate()}
-              disabled={!target || quoting}
+              disabled={!target || quoting || disabled}
               className="rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-50"
             >
               {t('ride_assist.change_quote')}
@@ -198,7 +200,7 @@ export function AssistServiceChange({ ride, configs, proposalLine, onChanged }: 
                 <button
                   type="button"
                   onClick={() => void propose()}
-                  disabled={proposing}
+                  disabled={proposing || disabled}
                   className="rounded-lg bg-primary-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {t('ride_assist.change_propose')}
@@ -209,7 +211,8 @@ export function AssistServiceChange({ ride, configs, proposalLine, onChanged }: 
                     setReason('');
                     setApplyOpen(true);
                   }}
-                  className="rounded-lg border border-line px-3 py-1.5 text-sm font-semibold text-ink hover:bg-surface-sunken"
+                  disabled={disabled}
+                  className="rounded-lg border border-line px-3 py-1.5 text-sm font-semibold text-ink hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {t('ride_assist.change_apply')}
                 </button>
