@@ -125,6 +125,7 @@
   },
 
   "trip": {
+    "moto_deportiva_badge": "Sport Motorbike",
     "support_assigned_title": "Support assigned you a ride",
     "support_assigned_body": "It is on your screen now. Go pick up the rider.",
     "queued_offline": "Saved offline",

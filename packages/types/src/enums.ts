@@ -35,6 +35,7 @@ export type ServiceTypeSlug =
   | 'triciclo_premium'
   | 'triciclo_cargo'
   | 'moto_standard'
+  | 'moto_deportiva'
   | 'auto_standard'
   | 'auto_confort'
   | 'mensajeria';

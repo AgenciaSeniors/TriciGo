@@ -347,7 +347,7 @@ function IncomingRideCardInner({
   const vehicleIcon =
     ride.service_type === 'triciclo_basico' || ride.service_type === 'triciclo_cargo'
       ? ('bicycle-outline' as const)
-      : ride.service_type === 'moto_standard'
+      : ride.service_type === 'moto_standard' || ride.service_type === 'moto_deportiva'
         ? ('flash-outline' as const)
         : ('car-outline' as const);
 
@@ -582,6 +582,13 @@ function IncomingRideCardInner({
           marginBottom: 16,
         }}>
           <Chip icon={vehicleIcon} />
+          {ride.service_type === 'moto_deportiva' && (
+            <Chip
+              icon="flash"
+              label={t('trip.moto_deportiva_badge', { defaultValue: 'Moto Deportiva' })}
+              variant="accent"
+            />
+          )}
           <Chip label={paymentLabel} />
           {isCargoRide(ride) && (
             <Chip

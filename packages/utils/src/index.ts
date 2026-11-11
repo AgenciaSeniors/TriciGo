@@ -200,3 +200,4 @@ export { EMAIL_NOTICE_SNOOZE_MS, emailNoticeVisible, emailNoticeErrorKey, profil
 export type { EmailNoticeErrorKey } from './emailNotice';
 export { createLatestLoader } from './latestLoader';
 export type { LatestLoader } from './latestLoader';
+export * from './motoDeportiva';

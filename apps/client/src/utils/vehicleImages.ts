@@ -12,6 +12,7 @@ export const vehicleSelectionImages: Record<ServiceTypeSlug, ImageSourcePropType
   triciclo_premium: require('../../assets/vehicles/selection/triciclo.png'),
   triciclo_cargo: require('../../assets/vehicles/selection/triciclo.png'),
   moto_standard: require('../../assets/vehicles/selection/moto.png'),
+  moto_deportiva: require('../../assets/vehicles/selection/moto_deportiva.png'),
   // TODO: dedicated selection-style almendrón asset still pending.
   // Using the marker image (top-down) in selection UI looked off — reverted
   // to selection/auto.png (modern sedan) until a proper side-view almendrón
@@ -29,6 +30,7 @@ export const vehicleMarkerImages: Record<ServiceTypeSlug, ImageSourcePropType> =
   triciclo_premium: require('../../assets/vehicles/markers/triciclo.png'),
   triciclo_cargo: require('../../assets/vehicles/markers/triciclo.png'),
   moto_standard: require('../../assets/vehicles/markers/moto.png'),
+  moto_deportiva: require('../../assets/vehicles/markers/moto.png'),
   auto_standard: require('../../assets/vehicles/markers/auto_clasico.png'),
   auto_confort: require('../../assets/vehicles/markers/confort.png'),
   // mensajeria now has its own marker (kraft box, top-down) — no longer

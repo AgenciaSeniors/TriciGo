@@ -8,6 +8,7 @@ type TFunction = (key: string, options?: { defaultValue?: string }) => string;
 const TYPE_KEY: Record<string, { key: string; fallback: string }> = {
   triciclo_basico: { key: 'rides.type_triciclo', fallback: 'Triciclo' },
   triciclo_premium: { key: 'rides.type_triciclo_premium', fallback: 'Triciclo Premium' },
+  moto_deportiva: { key: 'rides.type_moto_deportiva', fallback: 'Moto Deportiva' },
   moto_standard: { key: 'rides.type_moto', fallback: 'Moto' },
   auto_standard: { key: 'rides.type_auto', fallback: 'Auto' },
   auto_confort: { key: 'rides.type_auto_confort', fallback: 'Confort' },

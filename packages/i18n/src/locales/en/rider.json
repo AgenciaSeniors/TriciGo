@@ -1,4 +1,15 @@
 {
+  "moto_deportiva": {
+    "busy": "Busy · on a trip",
+    "unavailable": "Not available now",
+    "mode_blocked": "Not available for company or scheduled rides",
+    "notify_me": "Notify me",
+    "notify_joined": "We'll let you know",
+    "notify_failed": "We couldn't save your alert. Try again.",
+    "fallback_title": "The Sport Motorbike didn't respond",
+    "fallback_body": "You can request a regular Moto to the same destination.",
+    "fallback_cta": "Switch to Moto"
+  },
   "delivery": {
     "accompany": "I'm travelling with the package",
     "description_placeholder": "What's in the package",
@@ -513,6 +524,7 @@
   },
 
   "service_type": {
+    "moto_deportiva": "Sport Motorbike",
     "triciclo_basico": "Tricycle",
     "triciclo_premium": "Premium Tricycle",
     "triciclo_cargo": "Tricycle Cargo",

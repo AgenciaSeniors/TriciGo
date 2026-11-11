@@ -7,10 +7,11 @@ import { useRouter } from 'next/navigation';
 import { useTranslation } from '@tricigo/i18n';
 import { formatTRC, formatTRCasUSD, formatCUP, findNearestPreset, serviceTypeToVehicleType, fetchETAsToPickup, enrichWithCrossStreets, adjustETAForVehicle, RIDE_CONFIG, haversineDistance, getErrorMessage, trimNotes, discountBaseCup, isSignupPromoCode, signupPromoAction, signupPromoPrefill } from '@tricigo/utils';
 import type { LocationPreset } from '@tricigo/utils';
-import { rideService, nearbyService, customerService, corporateService, walletService, deliveryService, useFeatureFlag, type SignupPromotion } from '@tricigo/api';
+import { rideService, nearbyService, customerService, corporateService, walletService, deliveryService, motoDeportivaService, useFeatureFlag, type SignupPromotion } from '@tricigo/api';
 import type { FareEstimate, ServiceTypeSlug, PaymentMethod, NearbyVehicle, VehicleType, CorporateAccount, PackageCategory, RidePreferences } from '@tricigo/types';
 import { useGeolocation } from '../../hooks/useGeolocation';
 import { useDestinationPredictions } from '../../hooks/useDestinationPredictions';
+import { useMotoDeportivaStatus, isMotoDeportivaRequestable, refreshMotoDeportivaStatus } from '../../hooks/useMotoDeportivaStatus';
 import { fetchRoute, reverseGeocode } from '../../services/geoService';
 import { useAuth } from '../providers';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
@@ -49,6 +50,7 @@ const BookingMap = dynamic(() => import('./BookingMap'), {
 const SERVICE_TYPE_KEYS: { slug: ServiceTypeSlug; abbr: string; label: string; desc: string; icon: string }[] = [
   { slug: 'triciclo_basico', abbr: 'TC', label: 'Triciclo', desc: 'Econ\u00f3mico', icon: '/images/vehicles/triciclo.png' },
   { slug: 'moto_standard', abbr: 'MT', label: 'Moto', desc: 'R\u00e1pido', icon: '/images/vehicles/moto.png' },
+  { slug: 'moto_deportiva', abbr: 'MD', label: 'Moto Deportiva', desc: 'Exclusiva', icon: '/images/vehicles/moto_deportiva.png' },
   { slug: 'auto_standard', abbr: 'AT', label: 'Auto', desc: 'C\u00f3modo', icon: '/images/vehicles/auto.png' },
   { slug: 'auto_confort', abbr: 'CF', label: 'Confort', desc: 'Premium', icon: '/images/vehicles/confort.png' },
   { slug: 'mensajeria', abbr: 'DL', label: 'Env\u00edo', desc: 'Delivery', icon: '/images/vehicles/mensajeria.png' },
@@ -395,8 +397,43 @@ export default function BookPage() {
   /* ─── Destination predictions (clustered from completed-ride history) ─── */
   const { predictions: destinationPredictions } = useDestinationPredictions(user?.id);
 
+  /* ─── Moto Deportiva (single-pilot exclusive service) ─── */
+  const { card: motoCard, setWaitlist: setMotoWaitlist } = useMotoDeportivaStatus(true);
+  const onNotifyMotoDeportiva = async () => {
+    try { await setMotoWaitlist(true); } catch { /* best effort */ }
+  };
+  // The server rejects Moto Deportiva for company-paid and scheduled rides.
+  const motoModeBlocked = !!selectedCorporateId || isScheduled;
+  // Leave the selection when it stops being requestable.
+  useEffect(() => {
+    if (serviceType === 'moto_deportiva' && (!motoCard.requestable || motoModeBlocked)) setServiceType('moto_standard');
+  }, [serviceType, motoCard.requestable, motoModeBlocked]);
+  // Price it as soon as it becomes requestable while the trip is already set.
+  const prevMotoRequestableRef = useRef(motoCard.requestable);
+  useEffect(() => {
+    if (!prevMotoRequestableRef.current && motoCard.requestable && pickup && dropoff) void handleEstimateAll();
+    prevMotoRequestableRef.current = motoCard.requestable;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [motoCard.requestable]);
+
   /* ─── Auto-set pickup from user location (like Uber) ─── */
   const autoSetPickupRef = useRef(false);
+
+  // Coming back from "Cambiar a Moto" (track page): restore the same trip with
+  // the regular moto preselected.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('tricigo_book_draft');
+      if (!raw) return;
+      sessionStorage.removeItem('tricigo_book_draft');
+      const d = JSON.parse(raw) as { pickup?: LocationPreset; dropoff?: LocationPreset; serviceType?: ServiceTypeSlug };
+      const ok = (l?: LocationPreset): l is LocationPreset => !!l && Number.isFinite(l.latitude) && Number.isFinite(l.longitude);
+      if (ok(d.pickup)) { autoSetPickupRef.current = true; handleSetPickup(d.pickup); }
+      if (ok(d.dropoff)) handleSetDropoff(d.dropoff);
+      if (d.serviceType === 'moto_standard') setServiceType('moto_standard');
+    } catch { /* ignore a broken draft */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (autoSetPickupRef.current) return; // Only once
@@ -622,6 +659,8 @@ export default function BookPage() {
     setAllEstimates({});
 
     const serviceTypes: ServiceTypeSlug[] = ['triciclo_basico', 'moto_standard', 'auto_standard', 'auto_confort'];
+    // Moto Deportiva is priced only while it can be requested.
+    if (isMotoDeportivaRequestable()) serviceTypes.splice(2, 0, 'moto_deportiva');
 
     try {
       const results = await Promise.allSettled(
@@ -945,7 +984,10 @@ export default function BookPage() {
       console.error('[Book] createRide failed:', err);
       const msg = err instanceof Error ? err.message : String(err);
 
-      if (msg.includes('Not authenticated') || msg.includes('Missing')) {
+      if ((err as { code?: string } | null)?.code === 'MOTO_DEPORTIVA_UNAVAILABLE') {
+        setError(msg);
+        void motoDeportivaService.getStatus().then((st) => refreshMotoDeportivaStatus(st));
+      } else if (msg.includes('Not authenticated') || msg.includes('Missing')) {
         setError('Debes iniciar sesión para solicitar un viaje.');
       } else if (msg.includes('outside the service area')) {
         setError('La ubicación está fuera del área de servicio.');
@@ -1367,20 +1409,23 @@ export default function BookPage() {
                 {t('book.choose_service', { defaultValue: 'Elige tu servicio' })}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', opacity: pickup && dropoff ? 1 : 0.5, pointerEvents: pickup && dropoff ? 'auto' : 'none' }}>
-                {SERVICE_TYPE_KEYS.map((svc) => {
+                {SERVICE_TYPE_KEYS.filter((svc) => svc.slug !== 'moto_deportiva' || motoCard.visible).map((svc) => {
                   const isMensajeria = svc.slug === 'mensajeria';
                   const est = isMensajeria ? allEstimates[deliveryVehicle] : allEstimates[svc.slug];
                   const isSelected = serviceType === svc.slug;
                   const isLoading = estimateLoading && !est;
                   const vt = serviceTypeToVehicleType(svc.slug) as VehicleType | null;
                   const pickupEta = vt ? etaByType[vt] : null;
+                  const motoLocked = svc.slug === 'moto_deportiva' && (!motoCard.requestable || motoModeBlocked);
 
                   return (
                     <button
                       key={svc.slug}
                       type="button"
-                      onClick={() => setServiceType(svc.slug)}
+                      onClick={() => { if (!motoLocked) setServiceType(svc.slug); }}
+                      aria-disabled={motoLocked}
                       style={{
+                        opacity: motoLocked ? 0.55 : 1,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
@@ -1388,7 +1433,7 @@ export default function BookPage() {
                         borderRadius: 12,
                         border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border)',
                         background: isSelected ? 'rgba(var(--primary-rgb, 255,77,0), 0.06)' : 'var(--card-bg)',
-                        cursor: 'pointer',
+                        cursor: motoLocked ? 'default' : 'pointer',
                         transition: 'all 0.15s',
                         textAlign: 'left',
                       }}
@@ -1414,7 +1459,28 @@ export default function BookPage() {
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        {isLoading ? (
+                        {motoLocked ? (
+                          <>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>
+                              {motoModeBlocked && motoCard.requestable
+                                ? t('moto_deportiva.mode_blocked', { defaultValue: 'No disponible para viajes de empresa o programados' })
+                                : motoCard.reason === 'busy'
+                                ? t('moto_deportiva.busy', { defaultValue: 'Ocupada · en un viaje' })
+                                : t('moto_deportiva.unavailable', { defaultValue: 'No disponible ahora' })}
+                            </div>
+                            {motoCard.waitlist !== 'none' && (
+                              <span
+                                role="button"
+                                onClick={(e) => { e.stopPropagation(); void (motoCard.waitlist === 'join' ? onNotifyMotoDeportiva() : setMotoWaitlist(false)); }}
+                                style={{ display: 'inline-block', marginTop: 4, fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', cursor: 'pointer' }}
+                              >
+                                {motoCard.waitlist === 'join'
+                                  ? t('moto_deportiva.notify_me', { defaultValue: 'Avísame' })
+                                  : t('moto_deportiva.notify_joined', { defaultValue: 'Te avisaremos' })}
+                              </span>
+                            )}
+                          </>
+                        ) : isLoading ? (
                           <div style={{ width: 60, height: 14, borderRadius: 4, background: 'var(--border-light)', animation: 'pulse 1.5s ease-in-out infinite' }} />
                         ) : est ? (
                           <>

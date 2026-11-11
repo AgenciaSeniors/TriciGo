@@ -57,6 +57,7 @@ const WEB_SERVICE_LABELS: Record<string, string> = {
   triciclo_premium: 'Triciclo Premium',
   triciclo_cargo: 'Triciclo Cargo',
   moto_standard: 'Moto',
+  moto_deportiva: 'Moto Deportiva',
   auto_standard: 'Auto',
   auto_confort: 'Confort',
   mensajeria: 'Envío',
@@ -473,6 +474,7 @@ function NativeRidesScreen() {
     { value: 'triciclo_basico', label: t('service_types.triciclo_basico', { defaultValue: 'Triciclo Básico' }) },
     { value: 'triciclo_premium', label: t('service_types.triciclo_premium', { defaultValue: 'Triciclo Premium' }) },
     { value: 'moto_standard', label: t('service_types.moto_standard', { defaultValue: 'Moto' }) },
+    { value: 'moto_deportiva', label: t('service_types.moto_deportiva', { defaultValue: 'Moto Deportiva' }) },
     { value: 'auto_standard', label: t('service_types.auto_standard', { defaultValue: 'Auto' }) },
     { value: 'mensajeria', label: t('service_types.mensajeria', { defaultValue: 'Mensajería' }) },
   ];

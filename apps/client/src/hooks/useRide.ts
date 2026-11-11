@@ -4,12 +4,13 @@ import { AppState } from 'react-native';
 import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { rideService, deliveryService, walletService, corporateService, partnerPlaceService } from '@tricigo/api';
+import { rideService, deliveryService, walletService, corporateService, partnerPlaceService, motoDeportivaService } from '@tricigo/api';
 import { triggerHaptic, trackEvent, getErrorMessage, logger, mapLogger, deliveryVehicleToSlug, haversineDistance, isPlaceholderAddress, reverseGeocode, trimNotes, discountBaseCup } from '@tricigo/utils';
 import { RIDE_CONFIG } from '@/config/ride';
 import { recentAddressService } from '@/services/recentAddresses';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
+import { isMotoDeportivaRequestable, useMotoDeportivaStore } from '@/hooks/useMotoDeportivaStatus';
 import { shouldSendSearchHeartbeat } from '@/hooks/searchHeartbeat';
 import { fireRideStatusEffects, muteCancelAnnouncementFor } from '@/hooks/rideStatusEffects';
 const SEARCH_TIMEOUT_MS = RIDE_CONFIG.SEARCH_TIMEOUT_MS;
@@ -211,6 +212,10 @@ export function useRideInit() {
 
       try {
         const fresh = await rideService.getActiveRide(user.id);
+        // The ride changed while this poll was in flight (cancelled by the
+        // rider, e.g. "Cambiar a Moto" restoring the draft): its answer is
+        // about a ride that is no longer on screen, so drop it.
+        if (useRideStore.getState().activeRide?.id !== pinned.id) return;
         if (!fresh) {
           // BUG-257: getActiveRide filters by ACTIVE statuses only
           // (searching/accepted/.../in_progress/arrived_at_destination).
@@ -500,6 +505,8 @@ export function useRideActions() {
 
       // Estimate other service types in background for comparison UI
       const allSlugs: import('@tricigo/types').ServiceTypeSlug[] = ['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort', 'mensajeria'];
+      // Moto Deportiva is priced only while it can be requested (the server rejects it otherwise).
+      if (isMotoDeportivaRequestable()) allSlugs.push('moto_deportiva');
       const otherSlugs = allSlugs.filter((s) => s !== primarySlug);
       const { setAllFareEstimates } = useRideStore.getState();
       // Seed with current estimate
@@ -1075,6 +1082,17 @@ export function useRideActions() {
         } catch {
           setFlowStep('selecting');
         }
+      } else if ((err as { code?: string } | null)?.code === 'MOTO_DEPORTIVA_UNAVAILABLE') {
+        // The pilot went offline / busy between the last poll and the request.
+        // Show the server's message, refresh the card and keep the draft.
+        setFlowStep('selecting');
+        Toast.show({
+          type: 'info',
+          text1: i18next.t('rider:moto_deportiva.unavailable', { defaultValue: 'No disponible ahora' }),
+          text2: errMsg,
+          visibilityTime: 5000,
+        });
+        void motoDeportivaService.getStatus().then((st) => useMotoDeportivaStore.getState().setStatus(st));
       } else if (errMsg.includes('ride_rate_limited')) {
         // F1 (00368): server-side throttle on ride creation. Friendly,
         // non-destructive — keep the user on 'selecting' so they can retry

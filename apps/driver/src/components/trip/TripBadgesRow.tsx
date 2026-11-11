@@ -20,6 +20,8 @@ import { midnightEmber } from '@tricigo/theme';
 interface TripBadgesRowProps {
   isCargo: boolean;
   isCorporate: boolean;
+  /** A Moto Deportiva ride: only listed pilots get these. */
+  isMotoDeportiva?: boolean;
 }
 
 interface BadgeProps {
@@ -53,10 +55,10 @@ function Badge({ icon, label, bgColor, fgColor }: BadgeProps) {
   );
 }
 
-export function TripBadgesRow({ isCargo, isCorporate }: TripBadgesRowProps) {
+export function TripBadgesRow({ isCargo, isCorporate, isMotoDeportiva = false }: TripBadgesRowProps) {
   const { t } = useTranslation('driver');
 
-  if (!isCargo && !isCorporate) return null;
+  if (!isCargo && !isCorporate && !isMotoDeportiva) return null;
 
   return (
     <View
@@ -68,6 +70,14 @@ export function TripBadgesRow({ isCargo, isCorporate }: TripBadgesRowProps) {
         marginBottom: 12,
       }}
     >
+      {isMotoDeportiva && (
+        <Badge
+          icon="flash"
+          label={t('trip.moto_deportiva_badge', { defaultValue: 'Moto Deportiva' })}
+          bgColor={midnightEmber.accent[500]}
+          fgColor={midnightEmber.map.text.onAccent}
+        />
+      )}
       {isCargo && (
         <Badge
           icon="cube"
