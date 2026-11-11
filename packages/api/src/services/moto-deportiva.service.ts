@@ -4,7 +4,8 @@ import { parseMotoDeportivaStatus, type MotoDeportivaStatus } from '@tricigo/uti
 
 export interface MotoDeportivaPilot { driver_profile_id: string; full_name: string | null; is_online: boolean; status: string }
 export interface MotoDeportivaOverview {
-  active: boolean; status: string; waitlist_count: number; last_notice_at: string | null; pilots: MotoDeportivaPilot[];
+  /** visible: false when the panel hid the card (00680); absent before that migration. */
+  active: boolean; visible?: boolean; status: string; waitlist_count: number; last_notice_at: string | null; pilots: MotoDeportivaPilot[];
 }
 export interface MotoDeportivaMetrics {
   days: number; subscribers_now: number; subscribers_new: number; notices_sent: number; people_notified: number;
@@ -49,6 +50,11 @@ export const motoDeportivaService = {
   },
   async setActive(active: boolean): Promise<{ notified: number }> {
     const { data, error } = await getSupabaseClient().rpc('admin_set_moto_deportiva', { p_active: active });
+    return rpcResult<{ notified: number }>(data, error);
+  },
+  /** Shows or hides the card in the apps (00680). Hidden: no card, no orders, no notices. */
+  async setVisible(visible: boolean): Promise<{ notified: number }> {
+    const { data, error } = await getSupabaseClient().rpc('admin_set_moto_deportiva_visible', { p_visible: visible });
     return rpcResult<{ notified: number }>(data, error);
   },
   async metrics(days = 30): Promise<MotoDeportivaMetrics> {

@@ -1,5 +1,15 @@
 {
   "moto_deportiva": {
+    "show_card_title": "Poner la tarjeta en la app",
+    "show_card_message": "La tarjeta vuelve a aparecer en la app y en la web. Si el piloto está disponible, se avisará a las personas suscritas.",
+    "show_card": "Poner tarjeta en la app",
+    "hide_card_title": "Quitar la tarjeta de la app",
+    "hide_card_message": "La Moto Deportiva dejará de aparecer en la app y en la web, aunque el piloto esté conectado. Nadie podrá pedirla y no saldrán avisos.",
+    "hide_card": "Quitar tarjeta de la app",
+    "card_shown_toast": "La tarjeta vuelve a aparecer en la app.",
+    "card_hidden_toast": "La tarjeta ya no aparece en la app.",
+    "card_hidden_badge": "Tarjeta quitada de la app",
+    "card_help": "Quitar tarjeta: la Moto Deportiva desaparece de la app y de la web, no se puede pedir y no salen avisos. Las personas suscritas siguen suscritas.",
     "subscribers": "Suscritos al aviso ({{count}})",
     "remove_subscriber_message": "{{name}} dejará de recibir el aviso cuando Moto Deportiva esté disponible.",
     "remove_pilot_message": "{{name}} dejará de ser piloto de Moto Deportiva.",

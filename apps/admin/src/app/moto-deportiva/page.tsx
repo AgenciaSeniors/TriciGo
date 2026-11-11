@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Bike, Plus, Search } from 'lucide-react';
+import { Bike, Plus, Search, Eye, EyeOff } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
 import {
   motoDeportivaService,
@@ -40,6 +40,7 @@ export default function MotoDeportivaPage() {
   const [unavailable, setUnavailable] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [toggleOpen, setToggleOpen] = useState(false);
+  const [cardOpen, setCardOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [phone, setPhone] = useState('');
   const [pilotToRemove, setPilotToRemove] = useState<MotoDeportivaPilot | null>(null);
@@ -100,6 +101,9 @@ export default function MotoDeportivaPage() {
   }, [days, loadMetrics]);
 
   const active = overview?.active ?? false;
+  // Before migration 00680 the overview has no `visible`: the card is always shown.
+  const cardVisible = overview?.visible ?? true;
+  const cardSwitchAvailable = overview?.visible !== undefined;
 
   const confirmToggle = async () => {
     setToggleOpen(false);
@@ -114,6 +118,29 @@ export default function MotoDeportivaPage() {
           active
             ? t('moto_deportiva.deactivated_toast', { defaultValue: 'Moto Deportiva desactivada.' })
             : t('moto_deportiva.activated_toast', { defaultValue: 'Moto Deportiva activada.' }),
+        );
+      }
+      await load();
+    } catch (err) {
+      showToast('error', errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmCard = async () => {
+    setCardOpen(false);
+    setBusy(true);
+    try {
+      const { notified } = await motoDeportivaService.setVisible(!cardVisible);
+      if (!cardVisible && notified > 0) {
+        showToast('success', t('moto_deportiva.notified_toast', { defaultValue: 'Se avisó a {{count}} personas', count: notified }));
+      } else {
+        showToast(
+          'success',
+          cardVisible
+            ? t('moto_deportiva.card_hidden_toast', { defaultValue: 'La tarjeta ya no aparece en la app.' })
+            : t('moto_deportiva.card_shown_toast', { defaultValue: 'La tarjeta vuelve a aparecer en la app.' }),
         );
       }
       await load();
@@ -311,9 +338,27 @@ export default function MotoDeportivaPage() {
               <Bike className="h-4 w-4" />
               {active ? t('moto_deportiva.deactivate', { defaultValue: 'Desactivar' }) : t('moto_deportiva.activate', { defaultValue: 'Activar' })}
             </button>
+            {cardSwitchAvailable && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setCardOpen(true)}
+                className="inline-flex items-center gap-2 rounded-full border border-line px-5 py-2.5 text-[14px] font-semibold text-ink transition-colors hover:bg-surface-sunken disabled:opacity-50"
+              >
+                {cardVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {cardVisible
+                  ? t('moto_deportiva.hide_card', { defaultValue: 'Quitar tarjeta de la app' })
+                  : t('moto_deportiva.show_card', { defaultValue: 'Poner tarjeta en la app' })}
+              </button>
+            )}
             <span className={`rounded-full px-3 py-1 text-[12.5px] font-medium ${STATUS_TONE[overview.status] ?? STATUS_TONE.off}`}>
               {statusLabel(overview.status)}
             </span>
+            {!cardVisible && (
+              <span className={`rounded-full px-3 py-1 text-[12.5px] font-medium ${STATUS_TONE.off}`}>
+                {t('moto_deportiva.card_hidden_badge', { defaultValue: 'Tarjeta quitada de la app' })}
+              </span>
+            )}
             <span className="text-[12.5px] text-ink-muted">
               {t('moto_deportiva.last_notice', {
                 defaultValue: 'Último aviso: {{when}}',
@@ -327,6 +372,14 @@ export default function MotoDeportivaPage() {
                 'Activada: se puede pedir mientras el piloto está conectado. Desactivada: no aparece disponible aunque el piloto esté conectado.',
             })}
           </p>
+          {cardSwitchAvailable && (
+            <p className="text-[12.5px] text-ink-muted">
+              {t('moto_deportiva.card_help', {
+                defaultValue:
+                  'Quitar tarjeta: la Moto Deportiva desaparece de la app y de la web, no se puede pedir y no salen avisos. Las personas suscritas siguen suscritas.',
+              })}
+            </p>
+          )}
         </section>
       )}
 
@@ -442,6 +495,35 @@ export default function MotoDeportivaPage() {
         variant={active ? 'warning' : 'default'}
         onConfirm={confirmToggle}
         onCancel={closeToggle}
+      />
+
+      <AdminConfirmModal
+        open={cardOpen}
+        title={
+          cardVisible
+            ? t('moto_deportiva.hide_card_title', { defaultValue: 'Quitar la tarjeta de la app' })
+            : t('moto_deportiva.show_card_title', { defaultValue: 'Poner la tarjeta en la app' })
+        }
+        message={
+          cardVisible
+            ? t('moto_deportiva.hide_card_message', {
+                defaultValue:
+                  'La Moto Deportiva dejará de aparecer en la app y en la web, aunque el piloto esté conectado. Nadie podrá pedirla y no saldrán avisos.',
+              })
+            : t('moto_deportiva.show_card_message', {
+                defaultValue:
+                  'La tarjeta vuelve a aparecer en la app y en la web. Si el piloto está disponible, se avisará a las personas suscritas.',
+              })
+        }
+        confirmLabel={
+          cardVisible
+            ? t('moto_deportiva.hide_card', { defaultValue: 'Quitar tarjeta de la app' })
+            : t('moto_deportiva.show_card', { defaultValue: 'Poner tarjeta en la app' })
+        }
+        cancelLabel={t('moto_deportiva.cancel', { defaultValue: 'Cancelar' })}
+        variant={cardVisible ? 'warning' : 'default'}
+        onConfirm={confirmCard}
+        onCancel={() => setCardOpen(false)}
       />
       <AdminConfirmModal
         open={!!pilotToRemove}
