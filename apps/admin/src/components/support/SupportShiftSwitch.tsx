@@ -143,6 +143,8 @@ export function SupportShiftSwitch() {
     latestLoad.current++;
     try {
       const r = await supportShiftService.setShift(turnOn, whatsapp);
+      // The server set exactly this state: a later read that shows it is not an automatic off-shift.
+      lastOnRef.current = turnOn;
       // Changing the number only stores it (the server returns 0/0/0): no on/off messages.
       if (numberOnly) showToast('success', t('ride_assist.shift_number_updated', { defaultValue: 'Número guardado.' }));
       else tellResult(r, turnOn);

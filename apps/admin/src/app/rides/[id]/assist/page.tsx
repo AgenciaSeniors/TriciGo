@@ -133,8 +133,8 @@ export default function RideAssistPage() {
   }, [id]);
 
   // The ride can be assigned to her while the page is already open (a handover, her shift
-  // coming on): the polled context then shows her as the owner and not yet opened. Once per
-  // assignment. openAssist swallows its errors, so a failed call (flaky mobile data) is retried on
+  // coming on): the polled context then shows her as the owner and not yet opened.
+  // openAssist swallows its errors, so a failed call (flaky mobile data) is retried on
   // every poll (`fetchedAt` changes with each one) until the context shows it opened. No reload is
   // chained after it: the next poll shows opened_at, and chaining one would loop.
   useEffect(() => {
