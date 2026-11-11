@@ -455,6 +455,7 @@
     "cancel_already_closed": "The ride was already closed",
     "cancel_forbidden": "You don't have permission to cancel rides",
     "cancel_self_ride": "As support, you can't cancel a ride you are the passenger or the driver of",
+    "cancel_owned_by_other": "Someone else is handling this ride. Take it first from Assist if you are going to act.",
     "page_eyebrow": "Operation - rides",
     "page_description": "All ride requests, in any state, across Cuba.",
     "load_error": "Could not load rides.",

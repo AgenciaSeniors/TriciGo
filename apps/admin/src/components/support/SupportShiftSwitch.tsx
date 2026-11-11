@@ -42,17 +42,22 @@ export function SupportShiftSwitch() {
   const lastOnRef = useRef<boolean | null>(null);
   const ownChangeRef = useRef(false);
 
+  // Only the newest read may write: a poll that read the status before setShift committed can
+  // answer after it, and would show the old state (or a false "auto off-shift" warning).
+  const latestLoad = useRef(0);
+
   const load = useCallback(async () => {
+    const seq = ++latestLoad.current;
     try {
       const next = await supportShiftService.getStatus();
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== latestLoad.current) return;
       const on = next.me?.on_shift ?? false;
+      // ownChangeRef stays set while this tab's own change is in flight (apply clears it).
       if (lastOnRef.current === true && !on && !ownChangeRef.current) {
         showToast('warning', t('ride_assist.shift_auto_off', {
           defaultValue: 'Te sacamos de turno: no abriste viajes seguidos. Actívalo de nuevo cuando puedas.',
         }), 12_000);
       }
-      ownChangeRef.current = false;
       lastOnRef.current = on;
       setStatus(next);
     } catch (err) {
@@ -134,17 +139,20 @@ export function SupportShiftSwitch() {
   const apply = async (turnOn: boolean, whatsapp?: string, numberOnly = false): Promise<boolean> => {
     setBusy(true);
     ownChangeRef.current = true;
+    // Drop any poll already in flight: it read the state from before this change.
+    latestLoad.current++;
     try {
       const r = await supportShiftService.setShift(turnOn, whatsapp);
+      // Changing the number only stores it (the server returns 0/0/0): no on/off messages.
       if (numberOnly) showToast('success', t('ride_assist.shift_number_updated', { defaultValue: 'Número guardado.' }));
       else tellResult(r, turnOn);
       return true;
     } catch (err) {
-      ownChangeRef.current = false;
       showToast('error', t(assistErrorKey(err)));
       return false;
     } finally {
       await load();
+      ownChangeRef.current = false;
       if (mountedRef.current) setBusy(false);
     }
   };
@@ -183,7 +191,8 @@ export function SupportShiftSwitch() {
   if (unavailable || !status) return null;
 
   return (
-    <div ref={rootRef} className="relative">
+    // Not positioned below sm: the popover then anchors to the (sticky, full-width) header.
+    <div ref={rootRef} className="sm:relative">
       <div
         className={`flex h-9 items-center rounded-full border transition-colors ${
           on ? 'border-green-600/50 bg-green-500/10' : 'border-line bg-surface'
@@ -232,7 +241,9 @@ export function SupportShiftSwitch() {
       </div>
 
       {menuOpen && (
-        <div className="absolute right-0 z-50 mt-2 w-72 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-line bg-surface-elevated shadow-elev-3 animate-fade-in">
+        // Phones: 12 px inside both edges of the header (as wide as the viewport), so it never
+        // spills off-screen whatever sits to the right of the switch. sm and up: 288 px under the switch.
+        <div className="absolute inset-x-3 top-full z-50 mt-2 overflow-hidden sm:inset-x-auto sm:right-0 sm:w-72 rounded-xl border border-line bg-surface-elevated shadow-elev-3 animate-fade-in">
           <div className="border-b border-line px-3 py-2.5">
             <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
               {t('ride_assist.shift_label', { defaultValue: 'En turno' })}

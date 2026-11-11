@@ -455,6 +455,7 @@
     "cancel_already_closed": "A viagem já estava fechada",
     "cancel_forbidden": "Você não tem permissão para cancelar viagens",
     "cancel_self_ride": "Como suporte, você não pode cancelar uma viagem em que é o passageiro ou o motorista",
+    "cancel_owned_by_other": "Outra pessoa está atendendo esta corrida. Assuma primeiro em Assistir se for agir.",
     "page_eyebrow": "Operacao - viagens",
     "page_description": "Todas as solicitacoes de viagem, em qualquer estado, em toda Cuba.",
     "load_error": "Nao foi possivel carregar as viagens.",
