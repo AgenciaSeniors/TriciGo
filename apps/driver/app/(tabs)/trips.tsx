@@ -98,6 +98,7 @@ function NativeTripsScreen() {
   const serviceTypes = [
     { value: 'triciclo_basico', label: t('onboarding.triciclo', { defaultValue: 'Triciclo' }) },
     { value: 'moto_standard', label: t('onboarding.moto', { defaultValue: 'Moto' }) },
+    { value: 'moto_deportiva', label: t('trip.moto_deportiva_badge', { defaultValue: 'Moto Deportiva' }) },
     { value: 'auto_standard', label: t('onboarding.auto', { defaultValue: 'Auto' }) },
   ];
 

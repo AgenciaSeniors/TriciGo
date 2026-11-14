@@ -173,6 +173,11 @@ Notifications.setNotificationHandler({
 
 /** Navigate to the appropriate screen based on notification data */
 function handleNotificationNavigation(data: Record<string, unknown> | undefined) {
+  // Moto Deportiva "ya está disponible" notice: open the home/selection screen.
+  if (data?.content_type === 'moto_deportiva') {
+    router.push('/(tabs)');
+    return;
+  }
   if (!data?.type) return;
 
   const fleetRoute = fleetUpdateRoute(data);

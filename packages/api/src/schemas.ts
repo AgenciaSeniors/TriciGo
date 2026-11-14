@@ -37,7 +37,7 @@ export const cubaLngSchema = IS_DEMO
   : z.number().min(-85.0).max(-74.0);
 
 // Enums
-export const serviceTypeSchema = z.enum(['triciclo_basico', 'triciclo_premium', 'triciclo_cargo', 'moto_standard', 'auto_standard', 'auto_confort', 'mensajeria']);
+export const serviceTypeSchema = z.enum(['triciclo_basico', 'triciclo_premium', 'triciclo_cargo', 'moto_standard', 'moto_deportiva', 'auto_standard', 'auto_confort', 'mensajeria']);
 export const paymentMethodSchema = z.enum(['cash', 'tricicoin', 'mixed', 'corporate']);
 
 // Ride schemas

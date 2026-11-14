@@ -48,6 +48,7 @@ const SERVICE_LABELS: Record<string, string> = {
   triciclo_basico: 'Triciclo Básico',
   triciclo_premium: 'Triciclo Premium',
   moto_standard: 'Moto Estándar',
+  moto_deportiva: 'Moto Deportiva',
   auto_standard: 'Auto Estándar',
   auto_premium: 'Auto Premium',
 };

@@ -44,6 +44,7 @@ import {
   UserRoundX,
   PhoneMissed,
   UserCog,
+  Bike,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useSidebar } from './SidebarContext';
@@ -157,6 +158,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/settings/cities', labelKey: 'sidebar.cities', defaultLabel: 'Ciudades', icon: MapPin },
       { href: '/settings', labelKey: 'sidebar.settings', defaultLabel: 'Ajustes', icon: Settings },
       { href: '/equipo', labelKey: 'sidebar.team', defaultLabel: 'Equipo', icon: UserCog },
+      { href: '/moto-deportiva', labelKey: 'sidebar.moto_deportiva', defaultLabel: 'Moto Deportiva', icon: Bike },
     ],
   },
 ];

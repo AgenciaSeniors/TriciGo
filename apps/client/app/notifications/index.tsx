@@ -164,6 +164,11 @@ export default function NotificationsScreen() {
       router.push(`/chat/${data.ride_id}`);
       return;
     }
+    // Moto Deportiva "ya está disponible" notice: open home/selection.
+    if (data?.content_type === 'moto_deportiva') {
+      router.push('/(tabs)');
+      return;
+    }
     if (data?.ride_id) {
       router.push(`/ride/${data.ride_id}`);
       return;

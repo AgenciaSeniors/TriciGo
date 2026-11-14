@@ -204,3 +204,4 @@ export { normalizeSupportWhatsapp, resolveSupportPhone, SUPPORT_PHONE_CACHE_KEY 
 export type { SupportContactResult, SupportPhoneStore } from './supportContact';
 export { assistOwnership, sortWaitingForViewer } from './supportOwnership';
 export type { AssistOwnership } from './supportOwnership';
+export * from './motoDeportiva';

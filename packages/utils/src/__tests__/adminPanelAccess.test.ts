@@ -126,6 +126,16 @@ describe('canOpenPanelPath', () => {
     expect(SUPER_ADMIN_ROUTES).toContain('/equipo');
   });
 
+  it('opens the Moto Deportiva page and its sub-pages only for super admins', () => {
+    for (const path of ['/moto-deportiva', '/moto-deportiva/x']) {
+      expect(canOpenPanelPath('super_admin', path)).toBe(true);
+      expect(canOpenPanelPath('admin', path)).toBe(false);
+      expect(canOpenPanelPath('marketing', path)).toBe(false);
+      expect(canOpenPanelPath('operator', path)).toBe(false);
+    }
+    expect(SUPER_ADMIN_ROUTES).toContain('/moto-deportiva');
+  });
+
   it('does not take a longer name for the Equipo page', () => {
     expect(canOpenPanelPath('admin', '/equipos')).toBe(true);
   });

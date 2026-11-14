@@ -50,6 +50,7 @@ const BREADCRUMB_LABELS: Record<string, string> = {
   settings: 'Ajustes',
   cities: 'Ciudades',
   equipo: 'Equipo',
+  'moto-deportiva': 'Moto Deportiva',
 };
 
 function buildBreadcrumbs(pathname: string) {

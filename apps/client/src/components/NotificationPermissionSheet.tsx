@@ -30,12 +30,20 @@ const RESHOW_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 // on every single launch.
 const ERROR_RETRY_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+// Lets other screens (the Moto Deportiva "Avísame" button) open this sheet on
+// demand when the OS will not ask again. The sheet stays the only owner of the
+// Settings deep-link and of the 7-day cooldown.
+const openRequestListeners = new Set<() => void>();
+export function requestNotificationPermissionSheet(): void {
+  openRequestListeners.forEach((fn) => fn());
+}
+
 /**
  * Friendly bottom sheet explaining why notifications are needed. Re-surfaces
  * periodically while permission is not granted (capped to once per 7 days so
  * it informs without nagging) and routes denied users to system Settings.
  */
-export function NotificationPermissionSheet() {
+export function NotificationPermissionSheet({ autoPrompt = true }: { autoPrompt?: boolean } = {}) {
   const { t } = useTranslation('common');
   // Rendered inside a transparent RN Modal, which does NOT inherit the app's
   // SafeAreaView — pad the CTAs clear of the home indicator / gesture bar.
@@ -44,6 +52,14 @@ export function NotificationPermissionSheet() {
   const [denied, setDenied] = useState(false);
 
   useEffect(() => {
+    const open = () => { setDenied(true); setVisible(true); };
+    openRequestListeners.add(open);
+    return () => { openRequestListeners.delete(open); };
+  }, []);
+
+  useEffect(() => {
+    // On-demand mounts (the booking selection) never prompt by themselves.
+    if (!autoPrompt) return;
     let cancelled = false;
 
     async function check() {
@@ -70,7 +86,7 @@ export function NotificationPermissionSheet() {
 
     check();
     return () => { cancelled = true; };
-  }, []);
+  }, [autoPrompt]);
 
   /**
    * Stamp the cooldown. `retryAfterMs` is how long until the sheet may
