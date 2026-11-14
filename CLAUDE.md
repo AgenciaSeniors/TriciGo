@@ -2585,7 +2585,7 @@ Desde la 00681, nadie del equipo tiene que hacer nada para disculparse con quien
   WHERE c.jobname = 'missed-ride-apology' ORDER BY c.called_at DESC LIMIT 10;
   ```
 - Cuerpos tras 00681 (md5/largo): `_apology_discount_text` `1710059086e0612c7d8a1bb4cd1af57b/397`, `grant_missed_ride_apologies` `3f4714fd9cee90970bddbff000a7ab0f/6233`.
-- **Estado:** ensayada en local el 2026-11-14 (sin la migración 1 de 33; con ella 40/40, aplicada dos veces, desde una copia CRLF y con pruebas negativas). No aplicada en prod.
+- **Estado: aplicada en prod el 2026-11-14** por MCP (`20261114151614`), con un `DO` que leyó el archivo del commit `23ddec0c` desde `net._http_response` y lo ejecutó solo si su md5 era el del repo (`ab903b20…`). Antes, ensayo local (sin la migración 1 de 33; con ella 40/40) y ensayo en prod en un bloque revertido con la pasajera demo marcada como real: `granted`, ticket `waiting_user`, un push encolado, la tarea en 84 ms. Verificado por objeto después: los dos md5 de arriba sin `\r`, `PERDON10` privada y sin aviso, la tarea activa y la tabla cerrada a `anon` y `authenticated`. `missed_ride_auto_apology_since` quedó en `2026-11-14T15:16:14Z`.
 
 ### Canales de Realtime: cuáles son privados y cómo agregar uno (00626, verificado 2026-10-07)
 
