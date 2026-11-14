@@ -28,7 +28,8 @@ their next ride, without anyone on the team doing anything. Measured on 2026-11-
 ### 1. The apology promotion
 
 The migration inserts a `grant_only` promotion: code `PERDON10`, 10 % off, `is_public = false`,
-`first_ride_only = false` (00674's CHECKs require both), `is_active = true`, no dates, no use limit.
+`first_ride_only = false` (00674's CHECKs require both), `is_active = true`, `notify_on_publish = false`
+(a private coupon is never announced), no end date, no use limit.
 `_missed_ride_current_coupon()` already picks the newest active grant-only promotion, so the WhatsApp
 path uses this promotion too.
 
@@ -82,13 +83,13 @@ All in tuteo, no dash punctuation.
 | Push title | "Perdón, no encontramos chofer" |
 | Push body | "Te regalamos {descuento} en tu próximo viaje. Se aplica solo cuando lo pidas." |
 | Ticket subject | "Disculpa por tu viaje sin chofer" |
-| Ticket message | "Hola {nombre}, sentimos que no encontraras chofer el {día}. Para agradecerte la paciencia, tu próximo viaje tiene {descuento}: se aplica solo cuando lo pidas. Si necesitas algo más, respóndenos aquí." |
+| Ticket message | "Hola {nombre}, sentimos que no encontraras chofer para tu viaje. Para agradecerte la paciencia, tu próximo viaje tiene {descuento}: se aplica solo cuando lo pidas. Si necesitas algo más, respóndenos aquí." |
 
 - `{descuento}` comes from the granted promotion: "10 % de descuento" for a percentage, "N CUP de
   descuento" for a fixed amount. That way, an edit in Promociones changes the text too.
 - `{nombre}` is the first name, from `_third_party_person_name`; without a name, the message starts
   with "Hola,".
-- `{día}` is the failed ride's day in Cuba's time zone.
+- The message has no date: it goes out within two hours of the failure, so "tu viaje" is clear.
 
 ### 4. Push
 
