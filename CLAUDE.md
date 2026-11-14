@@ -2524,7 +2524,20 @@ Marketing le vincula una promoción a un código de origen (MOTORENKO) desde `/c
   - Se mandó dentro de un bloque `DO` que reconstruye la única barra invertida del archivo (la de un retorno de carro citado en un comentario) y compara el md5 del texto con el del archivo (`08cd9913…`) antes de ejecutarlo.
   - Verificado por objeto: los cuatro md5 de arriba, sin retornos de carro; `rides_signup_promo` dispara antes de `rides_validate_promo_discount`; la FK tiene `ON DELETE SET NULL`; `anon` no ejecuta ninguna de las funciones.
   - Probado como pasajero y como admin reales, en un bloque revertido. El pasajero no recibe promoción y las estadísticas le dan 42501. El admin las lee (0 filas: en prod todavía no hay ningún código de origen).
-  - Falta: el merge (despliega panel y web), revisar el panel y el OTA de la app del pasajero al runtime 1.8.0.
+  - Después, el mismo día (20:46 UTC), se probó en prod el camino completo de un viaje, en otro bloque revertido. Se armó con un código de prueba `PRUEBA665` vinculado a BIENVENIDA (25 %) y la pasajera demo registrada con él:
+    - `get_my_signup_promotion()` devolvió BIENVENIDA;
+    - un envío salió sin promoción y sin descuento;
+    - con SUPERFLA escrita, el viaje se quedó con SUPERFLA (625 de 2.500 CUP);
+    - un viaje de pasajero sin código obtuvo BIENVENIDA (625 CUP), con su fila en `promotion_uses`, el teléfono en `taken` y `current_uses` en 1, y la búsqueda dejó de devolverla;
+    - una vez completado ese viaje, `admin_signup_code_stats()` dio `signups=1` y `promo_rides=1`.
+
+    Al terminar no quedó nada guardado: ningún código de origen, la pasajera demo sin `signup_code`, BIENVENIDA con 0 usos y su teléfono en `free`.
+  - El merge (#1171) entró el mismo día y desplegó el panel y la web. El OTA de la app del pasajero para el runtime 1.8.0 salió el 2026-11-14 (grupo `e9084761…`, al 50 %). Sin ese OTA, la app igual recibe el descuento, porque lo aplica el servidor; lo que no hace es mostrarlo antes de pedir.
+  - **Uso real, medido el 2026-11-14:**
+    - Hay 4 códigos (VIGO, VLACK, YOANDRY y SANTI45), cada uno con una promoción del 10 % y `first_ride_only`. 28 personas se registraron con alguno.
+    - 9 viajes salieron con el descuento sin que la persona escribiera nada, y ninguno se completó: los 9 se cancelaron antes de que un conductor aceptara. Cada cancelación devolvió el uso (no quedó fila en `promotion_uses`) y dejó el teléfono en `free`, como estaba previsto.
+    - Por eso `promo_rides`, que cuenta solo viajes completados, vale 0 en los cuatro códigos. En el panel, "Usaron el descuento: 0" no significa que el descuento no se aplicó.
+    - En tres viajes en triciclo el descuento fue del 31 %: es el 10 % de la promoción más el 21 % del viaje compartido (00347, 7 % por cada uno de los 3 asientos libres). Las dos cosas se suman en `discount_amount_cup`; no es un error.
 
 ### Marketing maneja promociones y montos de referidos; un código de origen puede pagarle a un chofer nuevo (00666)
 
@@ -2902,12 +2915,11 @@ Además de Google, una invitación se acepta con un código de 6 dígitos que se
   ORDER BY i.created_at DESC LIMIT 10;
   ```
   más los logs de `team-invitation-code` (`[team-invitation-code] … failed`). Un "Sin conexión a internet" en la página también aparece si el navegador bloquea el pedido por CORS: revisar que `admin.tricigo.com` siga en `ALLOWED_ORIGINS`.
-- **Estado (2026-10-16): nada aplicado ni desplegado.** Cuerpos tras la migración (md5/largo): `_team_code_account` `239dd2fc…/2112`, `_team_code_hash` `7cb663c0…/155`, `accept_team_invitation_by_code` `7f31564e…/3713`, `team_invitation_code_check` `1a513d9d…/2357`, `team_invitation_code_issue` `b0a78658…/2836`. El despliegue va paso por paso con el OK del dueño:
-  1. **Migración.** Sus funciones tienen `DELETE FROM` en el cuerpo, así que por MCP casi seguro se queda esperando la aprobación (§ "Aplicar migraciones pesadas por MCP"): aplicarla desde el SQL Editor (el bloque `$crlf$` corrige un pegado desde Windows) y verificar los cinco md5 de arriba.
-  2. **Probar el enlace mágico de `verify-otp`** con la cuenta demo del pasajero: desplegar `verify-otp`, marcar la cuenta, entrar por teléfono, mirar el log y desmarcarla.
-  3. **Desplegar `team-invitation-code`** con `_shared/rate-limiter.ts` y `_shared/service-key.ts` y `verify_jwt = false` (la CLI lo lee de `config.toml`; por MCP hay que pasarlo).
-  4. **Redesplegar `send-email` y mergear seguidos:** desde el redeploy, el correo de invitación ya menciona el código, y la página lo muestra recién con el merge (que despliega el panel). Las dos desde una exportación LF del árbol de git.
-  5. **Prueba real** con una dirección del dueño, y quitar el acceso al final.
+- **Estado: aplicada en prod el 2026-10-17** desde el SQL Editor, así que no figura en `schema_migrations`. Verificada por objeto el 2026-11-14: los cinco cuerpos tienen estos md5 y largos, sin `\r`: `_team_code_account` `239dd2fc…/2112`, `_team_code_hash` `7cb663c0…/155`, `accept_team_invitation_by_code` `7f31564e…/3713`, `team_invitation_code_check` `1a513d9d…/2357`, `team_invitation_code_issue` `b0a78658…/2836`. El despliegue se hizo ese mismo día, en este orden:
+  1. **`verify-otp` v46** (12:43 UTC). Se probó con la pasajera demo marcada: `verify-otp` validó el código, entró por enlace mágico (`login_method: otp`) y no probó ni escribió la contraseña. Después se le borró la marca.
+  2. **`team-invitation-code` v1** (13:42 UTC), con `verify_jwt = false`.
+  3. **`send-email`**, redesplegado con la plantilla `team_invitation_code`, y enseguida el merge de #1167 (13:52 UTC), que desplegó el panel.
+  - **Uso real, medido el 2026-11-14:** se aceptaron dos invitaciones de marketing con código, el 17/10 y el 19/10. Las dos cuentas ya tenían una identidad de Google con esa misma dirección (caso `proven`). Los casos `new` (crear la cuenta) y `password_only` todavía no se usaron nunca en prod. Las únicas cuentas con `password_set_at` son esas dos; las dos cuentas demo están sin marcar.
 
 ### Campañas: las manda el servidor, a la hora elegida (00649, PR #1129)
 
