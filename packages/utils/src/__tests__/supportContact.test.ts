@@ -176,10 +176,15 @@ describe('parseSupportPhone — the number an operator types to go on shift (006
     expect(parseSupportPhone('5512 3456')).toBe('+5355123456');
   });
 
-  it('rejects what WhatsApp could not open', () => {
-    for (const value of ['', '   ', '12345678', '+53 1234', '+0 5512 3456']) {
+  it('rejects empty input and an 8-digit number that is not a Cuban mobile', () => {
+    for (const value of ['', '   ', '12345678']) {
       expect(parseSupportPhone(value)).toBeNull();
     }
+  });
+
+  it('rejects fewer than 10 digits, the least WhatsApp can open', () => {
+    expect(parseSupportPhone('+53 1234')).toBeNull();
+    expect(parseSupportPhone('+53 5512 345')).toBeNull();
   });
 });
 

@@ -171,7 +171,7 @@
 
 **Interfaces:**
 - Produces:
-  - `normalizeSupportWhatsapp(raw: string): string | null`
+  - `normalizeSupportWhatsapp(raw: string): string | null` *(superseded by Ruling 21: removed; #1197's `parseSupportPhone` is the one normalizer)*
   - `type SupportContactResult = { status: 'ok'; phone: string | null } | { status: 'unreachable' }`
   - `interface SupportPhoneStore { getItem(key: string): Promise<string | null>; setItem(key: string, value: string): Promise<void>; removeItem(key: string): Promise<void> }`
   - `const SUPPORT_PHONE_CACHE_KEY = 'tricigo.support_phone'`
@@ -180,12 +180,12 @@
   - `sortWaitingForViewer<T extends { owner_id: string | null; help_requested_at: string | null }>(rides: T[], viewerId: string | null): T[]`
 
 - [ ] **Step 1: Write the failing tests:**
-  - `normalizeSupportWhatsapp('+53 5512-3456')` → `'+5355123456'`; `('55123456')` → `'+5355123456'`; `('(305) 555-0100')` → `null` (no `+`, not a Cuban mobile); `('+1 305 555 0100')` → `'+13055550100'`; `('')` → `null`; `('+53 1234')` → `null`.
+  - `normalizeSupportWhatsapp('+53 5512-3456')` → `'+5355123456'`; `('55123456')` → `'+5355123456'`; `('(305) 555-0100')` → `null` (no `+`, not a Cuban mobile); `('+1 305 555 0100')` → `'+13055550100'`; `('')` → `null`; `('+53 1234')` → `null`. *Superseded by Ruling 21: the dialog's cases test `parseSupportPhone`, which also reads a 10-digit number without `+` (`'(305) 555-0100'` → `'+3055550100'`).*
   - `resolveSupportPhone`: ok with a phone → returns it and stores it; ok with `null` → returns `null` and removes the cache; unreachable with a cached value → the cached value; unreachable with nothing cached → `null`; a store that throws on read → behaves as empty.
   - `assistOwnership('u1','u1')` → `'mine'`; `('u1','u2')` → `'other'`; `(null,'u2')` → `'none'`; `('u1', null)` → `'other'`.
   - `sortWaitingForViewer`: the viewer's rides first, then the original order (which already puts help first); stable for equal keys.
 - [ ] **Step 2: Run** `pnpm --filter @tricigo/utils test` → FAIL (modules missing).
-- [ ] **Step 3: Implement** in the two files; `normalizeSupportWhatsapp` strips spaces, dashes, dots and parentheses, keeps a leading `+`, adds `+53` to an 8-digit number starting with 5, and validates `^\+[1-9][0-9]{7,14}$`.
+- [ ] **Step 3: Implement** in the two files; `normalizeSupportWhatsapp` strips spaces, dashes, dots and parentheses, keeps a leading `+`, adds `+53` to an 8-digit number starting with 5, and validates `^\+[1-9][0-9]{7,14}$`. *Superseded by Ruling 21: the function is gone; that regex now only checks a cached server number, and typed numbers go through `parseSupportPhone`.*
 - [ ] **Step 4: Run** → PASS.
 - [ ] **Step 5: Commit** `feat(utils): support phone resolution and ride ownership helpers`.
 
@@ -221,7 +221,7 @@
 - Modify: `apps/admin/src/components/layout/Header.tsx` (mount the switch for ops staff, next to `NotificationBell`), `apps/admin/src/components/support/SupportWaitingBanner.tsx`, `apps/admin/src/hooks/useSupportWaitingRides.ts`, `apps/admin/src/app/rides/[id]/assist/page.tsx`, `apps/admin/src/components/support/AssistActiveRide.tsx`, `apps/admin/src/components/support/AssistCandidates.tsx`, `apps/admin/src/components/support/AssistServiceChange.tsx`, `apps/admin/src/components/support/assistErrors.ts`, `apps/admin/src/app/settings/platform-config/page.tsx` (the two config keys, `type: 'number'`), `packages/i18n/src/locales/{es,en,pt}/admin.json`
 
 **Interfaces:**
-- Consumes: T4 `normalizeSupportWhatsapp`, `assistOwnership`, `sortWaitingForViewer`; T5 services and types; `useAdminUser()` for the viewer id.
+- Consumes: T4 `normalizeSupportWhatsapp` (since Ruling 21: `parseSupportPhone`), `assistOwnership`, `sortWaitingForViewer`; T5 services and types; `useAdminUser()` for the viewer id.
 
 - [ ] **Step 1: Switch.** Off by default; turning it on with no stored number opens a dialog prefilled with `suggested_whatsapp`, validated with `normalizeSupportWhatsapp` (since Ruling 21: `parseSupportPhone`) before sending; shows "{{name}} también está en turno" for each other person on shift; turning it off shows the `handed_over` / `kept` result in a toast ("{{count}} viajes pasaron a {{name}}" / "Tus {{count}} viajes siguen contigo: no hay nadie más en turno"). Polls `getStatus` every 30 s so an automatic off-shift shows up.
 - [ ] **Step 2: Banner.** Rows sorted with `sortWaitingForViewer`; chip "Tuyo" / "Lo atiende {{name}}" / "Sin asignar" from `assistOwnership`; an owner off shift reads "{{name}} (fuera de turno)".
@@ -243,7 +243,7 @@
 - [ ] **Step 1: Write the failing guard test** `noHardcodedSupportPhone.test.ts`: walks `apps/*/src`, `apps/*/app`, `apps/web/src` and `packages/*/src` (`.ts`, `.tsx`, `.json`), skipping `node_modules`, `store-metadata` and test files, and expects no file to contain `56621636`. Run `pnpm --filter @tricigo/utils test` → FAIL listing the 11 places.
 - [ ] **Step 2: Help button.** `SupportHelpButton` and `SupportHelpCard` use `res?.supportPhone`, else `useSupportPhone().phone`; with a number, open `waMeLink(phone, …)` as today; with none, or when WhatsApp fails to open, show `home.support_help_no_whatsapp` with `{{phone}}` and `{{code}}`, or the new `home.support_help_no_contact` ("Escríbenos a soporte@tricigo.com con el código {{code}}.") when there is no number. *Superseded by Ruling 21: the button opens `supportHelpPhone(res?.supportPhone, useSupportPhone().phone, useSupportPhones())`, which always has a number; the e-mail-only path and `support_help_no_contact` are gone.*
 - [ ] **Step 3: Help screens.** The five other screens take `useSupportPhone()`; the WhatsApp row/link renders only with a number; e-mail and tickets stay. *Superseded by Ruling 21: they list `orderSupportPhones(useSupportPhone().phone, useSupportPhones())` (the contact first, then the rest of #1197's list), so WhatsApp always shows; e-mail and tickets stay.*
-- [ ] **Step 4: Copy.** `faq_a7`: "Puedes crear un ticket desde esta pantalla, escribir a soporte@tricigo.com o usar el botón de WhatsApp." (es, with en/pt equivalents); `support_help_no_whatsapp`: "No pudimos abrir WhatsApp. Escríbenos al {{phone}} con el código {{code}}.".
+- [ ] **Step 4: Copy.** `faq_a7`: "Puedes crear un ticket desde esta pantalla, escribir a soporte@tricigo.com o usar el botón de WhatsApp." (es, with en/pt equivalents); `support_help_no_whatsapp`: "No pudimos abrir WhatsApp. Escríbenos al {{phone}} con el código {{code}}.". *Superseded by Ruling 21 for `faq_a7`: it keeps #1197's wording ("… o llamar al {{phone}}."), with the first number of `orderSupportPhones`.*
 - [ ] **Step 5: Remove** `SUPPORT_WHATSAPP_PHONE` and its test case.
 - [ ] **Step 6: Verify** the guard test PASSes; `pnpm --filter @tricigo/utils test`, `pnpm --filter client test`, `pnpm --filter driver test`, `pnpm check-types`, `pnpm lint`, `pnpm --filter web build`.
 - [ ] **Step 7: Commit** `feat: take the support number from the operator on shift, not the code`.

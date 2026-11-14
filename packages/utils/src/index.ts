@@ -204,19 +204,17 @@ export {
   supportWhatsAppUrl,
   orderSupportPhones,
   supportHelpPhone,
+  readCachedSupportPhone,
+  resolveSupportPhone,
+  SUPPORT_PHONE_CACHE_KEY,
 } from './supportContact';
+export type { SupportContactResult, SupportPhoneStore } from './supportContact';
 export { apologyDiscountText, cubaDayMonth, missedRideApologyMessage } from './missedRideOutreach';
 export type { ApologyCoupon, MissedRideMessageInput } from './missedRideOutreach';
 export { EMAIL_NOTICE_SNOOZE_MS, emailNoticeVisible, emailNoticeErrorKey, profileEmailSavePlan } from './emailNotice';
 export type { EmailNoticeErrorKey } from './emailNotice';
 export { createLatestLoader } from './latestLoader';
 export type { LatestLoader } from './latestLoader';
-export {
-  readCachedSupportPhone,
-  resolveSupportPhone,
-  SUPPORT_PHONE_CACHE_KEY,
-} from './supportContact';
-export type { SupportContactResult, SupportPhoneStore } from './supportContact';
 export { assistOwnership, sortWaitingForViewer } from './supportOwnership';
 export type { AssistOwnership } from './supportOwnership';
 export * from './motoDeportiva';

@@ -62,9 +62,10 @@ export function resolveSupportPhones(raw: unknown): string[] {
 }
 
 /**
- * The number a one-tap button opens ("Pedir ayuda", WhatsApp in Soporte, the
- * driver's support button): the first of the list. The one place to change
- * if support ever splits riders between its numbers.
+ * The first number of a list, or the first built-in one when the list is empty. A one-tap
+ * button (the driver's support button, the web's WhatsApp link) opens the first number of
+ * orderSupportPhones, so the operator on shift comes before the configured list; "Pedir ayuda"
+ * goes through supportHelpPhone, which puts the ride's owner before both.
  */
 export function primarySupportPhone(phones: readonly string[]): string {
   return phones[0] ?? SUPPORT_WHATSAPP_PHONES[0];

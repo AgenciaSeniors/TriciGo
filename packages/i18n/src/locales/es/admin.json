@@ -1514,7 +1514,7 @@
     "driver_whatsapp_group_url": "Grupo de WhatsApp de conductores",
     "driver_whatsapp_group_url_help": "Enlace de invitación del grupo de WhatsApp de conductores (https://chat.whatsapp.com/...). Si se deja vacío, la app del conductor oculta la opción de unirse.",
     "support_whatsapp_phones": "Números de WhatsApp de soporte",
-    "support_whatsapp_phones_help": "Números de WhatsApp de soporte, en orden y separados por coma (ej. +53 5515 9376, +53 5426 9290). Los botones de un toque («Pedir ayuda», «WhatsApp» en Soporte) abren el primero; las pantallas de ayuda muestran todos. Las apps los leen cada vez que se abre una pantalla de ayuda.",
+    "support_whatsapp_phones_help": "Números de WhatsApp de soporte, en orden y separados por coma (ej. +53 5515 9376, +53 5426 9290). «Pedir ayuda» y las pantallas de ayuda ponen primero el número de quien atiende el viaje o está en turno; estos van después y se abren cuando no hay otro. Las apps los leen cada vez que se abre una pantalla de ayuda.",
     "support_whatsapp_phones_invalid": "Algún número no sirve para WhatsApp. Escríbelos con el código de país (+53 5515 9376) o como móviles cubanos de 8 dígitos, separados por coma.",
     "support_alert_enabled": "Avisos de viajes sin conductor",
     "support_alert_enabled_help": "true/false — avisa al soporte (push y correo) cuando un viaje lleva buscando conductor más del tiempo configurado abajo. El botón «Pedir ayuda» del pasajero avisa siempre.",
