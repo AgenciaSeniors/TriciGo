@@ -9,19 +9,19 @@ import { Button } from '@tricigo/ui/Button';
 import { Input } from '@tricigo/ui/Input';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber } from '@tricigo/theme';
-import { driverService, referralService, walletService } from '@tricigo/api';
+import { driverService, referralService, walletService, useSupportPhones } from '@tricigo/api';
+import { primarySupportPhone, supportWhatsAppUrl } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useLogout } from '@/hooks/useLogout';
 import { NotificationPermissionSheet } from '@/components/NotificationPermissionSheet';
 import { inviteCodeErrorMessage } from '@/utils/inviteCode';
 
-// Central support contact. Update here if ops phone/whatsapp changes.
-const SUPPORT_WHATSAPP = '+5356621636'; // Support contact (WhatsApp / phone)
-
 export default function PendingScreen() {
   const { t } = useTranslation('driver');
   const user = useAuthStore((s) => s.user);
+  // Support WhatsApp / phone: the first of the numbers set in platform_config (00682).
+  const supportPhone = primarySupportPhone(useSupportPhones());
   const setProfile = useDriverStore((s) => s.setProfile);
   const [driverStatus, setDriverStatus] = useState<string>('under_review');
   const [rejectionReason, setRejectionReason] = useState<string | null>(null);
@@ -30,10 +30,10 @@ export default function PendingScreen() {
   // UX: give drivers who are stuck waiting / rejected / suspended a
   // quick way out. Previous screens dead-ended them.
   const openSupport = useCallback(() => {
-    const msg = encodeURIComponent(t('onboarding.support_prefill', { defaultValue: 'Hola, necesito ayuda con mi cuenta de conductor.' }));
-    Linking.openURL(`https://wa.me/${SUPPORT_WHATSAPP.replace(/[^0-9]/g, '')}?text=${msg}`)
-      .catch(() => Linking.openURL(`tel:${SUPPORT_WHATSAPP}`).catch(() => {}));
-  }, [t]);
+    const msg = t('onboarding.support_prefill', { defaultValue: 'Hola, necesito ayuda con mi cuenta de conductor.' });
+    Linking.openURL(supportWhatsAppUrl(supportPhone, msg))
+      .catch(() => Linking.openURL(`tel:${supportPhone}`).catch(() => {}));
+  }, [t, supportPhone]);
 
   // Drivers WhatsApp community group. The admin sets the invite link in
   // platform_config (driver_whatsapp_group_url); while it waits for approval

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
 import { notificationService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
+import { parseSupportPhones, SUPPORT_PHONES_CONFIG_KEY } from '@tricigo/utils';
 import { useToast } from '@/components/ui/AdminToast';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 
@@ -140,6 +141,13 @@ const KNOWN_KEYS: Record<string, KnownKey> = {
   // stays hidden in the driver app. Editable only by super_admin.
   driver_whatsapp_group_url: { type: 'text', helpKey: 'platform_config.driver_whatsapp_group_url_help' },
 
+  // ── Soporte: números de WhatsApp (00682) ──
+  // Ordered list, comma-separated. The one-tap buttons of both apps and the web
+  // open the first; the help screens list them all. handleSave refuses what
+  // parseSupportPhones cannot read and stores "+<digits>, +<digits>"; the apps
+  // fall back to the built-in numbers if the key is ever missing or broken.
+  [SUPPORT_PHONES_CONFIG_KEY]: { type: 'text', helpKey: 'platform_config.support_whatsapp_phones_help' },
+
   // ── Soporte: viajes sin conductor (00628) ──
   support_alert_enabled: { type: 'select', helpKey: 'platform_config.support_alert_enabled_help', options: [{ label: 'true', value: 'true' }, { label: 'false', value: 'false' }] },
   support_alert_after_s: { type: 'number', helpKey: 'platform_config.support_alert_after_s_help' },
@@ -197,8 +205,20 @@ export default function PlatformConfigPage() {
   }, []);
 
   async function handleSave(key: string) {
-    const value = editValues[key];
-    if (value === undefined) return;
+    const raw = editValues[key];
+    if (raw === undefined) return;
+
+    // The support numbers are stored as "+<digits>, +<digits>". A value the apps
+    // could not open is refused here instead of silently falling back on every phone.
+    const value = key === SUPPORT_PHONES_CONFIG_KEY
+      ? parseSupportPhones(raw)?.join(', ') ?? null
+      : raw;
+    if (value === null) {
+      setSavedKey(null);
+      setErrorKey(key);
+      showToast('error', t('platform_config.support_whatsapp_phones_invalid'));
+      return;
+    }
 
     setSavingKey(key);
     setSavedKey(null);
@@ -209,6 +229,7 @@ export default function PlatformConfigPage() {
       setConfigs((prev) =>
         prev.map((c) => c.key === key ? { ...c, value } : c),
       );
+      setEditValues((prev) => ({ ...prev, [key]: value }));
       setSavedKey(key);
       showToast('success', t('platform_config.saved'));
       setTimeout(() => setSavedKey(null), 3000);

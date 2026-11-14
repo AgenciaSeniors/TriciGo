@@ -290,4 +290,48 @@ describe('supportService', () => {
       ).rejects.toEqual(err);
     });
   });
+
+  // ==================== getWhatsAppPhones ====================
+  describe('getWhatsAppPhones', () => {
+    const BUILT_IN = ['+5355159376', '+5354269290'];
+
+    function configRow(result: { data: unknown; error: unknown }) {
+      const maybeSingle = vi.fn().mockResolvedValue(result);
+      const eq = vi.fn(() => ({ maybeSingle }));
+      const select = vi.fn(() => ({ eq }));
+      mockFrom.mockReturnValueOnce({ select });
+      return { select, eq };
+    }
+
+    it('reads support_whatsapp_phones from platform_config, in order', async () => {
+      const { select, eq } = configRow({ data: { value: '+53 5426 9290, +53 5515 9376' }, error: null });
+
+      await expect(supportService.getWhatsAppPhones()).resolves.toEqual(['+5354269290', '+5355159376']);
+      expect(mockFrom).toHaveBeenCalledWith('platform_config');
+      expect(select).toHaveBeenCalledWith('value');
+      expect(eq).toHaveBeenCalledWith('key', 'support_whatsapp_phones');
+    });
+
+    it('falls back to the built-in numbers when the key does not exist yet', async () => {
+      configRow({ data: null, error: null });
+      await expect(supportService.getWhatsAppPhones()).resolves.toEqual(BUILT_IN);
+    });
+
+    it('falls back when the value is not a list of phones', async () => {
+      configRow({ data: { value: 'pendiente' }, error: null });
+      await expect(supportService.getWhatsAppPhones()).resolves.toEqual(BUILT_IN);
+    });
+
+    it('falls back when the read fails, so a help screen never loses its numbers', async () => {
+      configRow({ data: null, error: { message: 'permission denied', code: '42501' } });
+      await expect(supportService.getWhatsAppPhones()).resolves.toEqual(BUILT_IN);
+    });
+
+    it('falls back when the client throws (no network)', async () => {
+      mockFrom.mockImplementationOnce(() => {
+        throw new TypeError('Network request failed');
+      });
+      await expect(supportService.getWhatsAppPhones()).resolves.toEqual(BUILT_IN);
+    });
+  });
 });

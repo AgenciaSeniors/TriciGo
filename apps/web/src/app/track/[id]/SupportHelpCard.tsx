@@ -8,8 +8,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from '@tricigo/i18n';
-import { isProposalGone, rideAssistService, type ServiceProposal } from '@tricigo/api';
-import { formatCUP, rideShortCode, searchHelpAvailable, SUPPORT_WHATSAPP_PHONE, waMeLink } from '@tricigo/utils';
+import { isProposalGone, rideAssistService, useSupportPhones, type ServiceProposal } from '@tricigo/api';
+import { formatCUP, primarySupportPhone, rideShortCode, searchHelpAvailable, waMeLink } from '@tricigo/utils';
 
 interface Props {
   rideId: string;
@@ -44,6 +44,7 @@ export function SupportHelpCard({ rideId, startedAtMs, sharedRide, onChanged }: 
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [helpSent, setHelpSent] = useState(false);
+  const supportPhone = primarySupportPhone(useSupportPhones());
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1_000);
@@ -92,7 +93,7 @@ export function SupportHelpCard({ rideId, startedAtMs, sharedRide, onChanged }: 
   const shown = proposal && proposal.id !== answeredId && left > 0 ? proposal : null;
   const showHelp = searchHelpAvailable(Math.floor((now - startedAtMs) / 1000));
   const helpUrl = waMeLink(
-    SUPPORT_WHATSAPP_PHONE,
+    supportPhone,
     t('track.support_help_whatsapp_text', { code: rideShortCode(rideId) }),
   );
 

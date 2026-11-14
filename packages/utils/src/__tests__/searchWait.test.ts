@@ -6,7 +6,6 @@ import {
   searchWaitView,
   searchHelpAvailable,
   rideShortCode,
-  SUPPORT_WHATSAPP_PHONE,
 } from '../searchWait';
 
 describe('searchWaitStage — what to tell a rider who is still waiting', () => {
@@ -139,11 +138,5 @@ describe('searchHelpAvailable — when the searching screen offers "Pedir ayuda"
 describe('rideShortCode — the code the rider writes to support on WhatsApp', () => {
   it('is the first 8 characters of the id, upper case, as the server makes it (_ride_short_code)', () => {
     expect(rideShortCode('f1a2b3c4-0000-4000-8000-000000000001')).toBe('F1A2B3C4');
-  });
-});
-
-describe('SUPPORT_WHATSAPP_PHONE', () => {
-  it('is the support number the help screens already open', () => {
-    expect(SUPPORT_WHATSAPP_PHONE).toBe('+5356621636');
   });
 });

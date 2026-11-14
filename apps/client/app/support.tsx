@@ -9,6 +9,8 @@ import { Button } from '@tricigo/ui/Button';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
+import { useSupportPhones } from '@tricigo/api';
+import { formatSupportPhone, supportWhatsAppUrl } from '@tricigo/utils';
 
 const FAQ_ITEMS = [
   { qKey: 'support.faq_q1', aKey: 'support.faq_a1', defaultQ: '¿Cómo solicito un viaje?', defaultA: 'Abre la app, selecciona tu destino en el mapa o escríbelo en la barra de búsqueda, elige el tipo de vehículo y confirma tu solicitud.' },
@@ -20,15 +22,17 @@ const FAQ_ITEMS = [
 export default function SupportScreen() {
   const { t } = useTranslation('common');
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+  const supportPhones = useSupportPhones();
 
+  // One WhatsApp row per support number, in the order set in the panel.
   const contactMethods = [
-    {
+    ...supportPhones.map((phone) => ({
       icon: 'logo-whatsapp' as const,
       label: 'WhatsApp',
-      description: t('support.whatsapp_desc', { defaultValue: 'Chatea con nuestro equipo' }),
+      description: `${t('support.whatsapp_desc', { defaultValue: 'Chatea con nuestro equipo' })} · ${formatSupportPhone(phone)}`,
       color: '#25D366',
-      onPress: () => Linking.openURL('https://wa.me/5356621636'),
-    },
+      onPress: () => Linking.openURL(supportWhatsAppUrl(phone)),
+    })),
     {
       icon: 'mail-outline' as const,
       label: t('support.email', { defaultValue: 'Correo electrónico' }),
@@ -53,7 +57,7 @@ export default function SupportScreen() {
           </Text>
           {contactMethods.map((method) => (
             <Pressable
-              key={method.label}
+              key={`${method.label}-${method.description}`}
               onPress={method.onPress}
               className="flex-row items-center py-4 border-b border-neutral-100 dark:border-neutral-800"
             >
