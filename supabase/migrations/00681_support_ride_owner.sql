@@ -22,7 +22,8 @@
 --
 -- Owners and handover:
 --   _support_alert (patched)    an alert gives the ride an owner on shift and pushes only her; with
---                               nobody to give it to, it pushes every ops staff account, as before
+--                               nobody to give it to, or on a ride nobody opened in time (the
+--                               all-missed mark), it pushes every ops staff account, as before
 --   request_ride_help (patched) also returns support_phone, the number the rider writes to
 --   notify_support_waiting_rides (patched)  the cron's wait alerts go out after every row it writes
 --   _support_ride_open          what an open ride is: searching, or active with its assist page opened
@@ -91,9 +92,13 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.support_staff TO service_role;
 
 -- ── C. Who owns a ride ──────────────────────────────────────
 -- owner_id: the staff member who owns the ride. owner_assigned_at: since when. owner_opened_at: when
--- she opened its assist page. owners_tried: who had it, so a handover never returns it to them.
+-- she opened its assist page. owners_tried: who had it, so the 1-minute handover never returns it to
+-- them (going off shift may: it follows the rule for a new ride).
 -- all_missed_alert_at: when every ops staff account was told nobody opened it. Deleting an account
--- lets go of its rides.
+-- moves its rides to the anonymous user (prepare_account_deletion, 00657, runs
+-- anonymize_user_references, which moves every key to users that is not CASCADE), an owner never
+-- on shift: the next alert or pickup gives a ride she never opened to someone on shift. ON DELETE
+-- SET NULL covers only a delete that skips that step.
 ALTER TABLE public.ride_assist
   ADD COLUMN IF NOT EXISTS owner_id uuid REFERENCES public.users(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS owner_assigned_at timestamptz,
@@ -449,10 +454,11 @@ $function$;
 
 -- ── F. Handover, pickup and the tick ────────────────────────
 -- Her open rides (_support_ride_open: searching, or active and opened) pass to someone else on
--- shift by the assignment rule, never back to someone who had them, each with a push; those nobody
--- can take stay hers. An active ride she never opened is not hers to hand over: it stays, uncounted.
--- Returns {handed_over, kept}: kept counts every open ride still hers, a ride skipped as locked
--- included.
+-- shift by the assignment rule, as a new ride would: anyone on shift but her, also someone who had
+-- the ride before (only the 1-minute handover in the tick skips those). Each with a push; those
+-- nobody can take stay hers. An active ride she never opened is not hers to hand over: it stays,
+-- uncounted. Returns {handed_over, kept}: kept counts every open ride still hers, a ride skipped as
+-- locked included.
 CREATE OR REPLACE FUNCTION public._support_handoff_rides_of(p_user uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -485,11 +491,12 @@ BEGIN
   PERFORM pg_advisory_xact_lock(c_support_lock);
   FOREACH v_id IN ARRAY v_ids LOOP
     SELECT * INTO v_ra FROM public.ride_assist WHERE ride_id = v_id;
-    v_new := public._support_pick_owner(v_id, v_ra.owners_tried || p_user);
+    v_new := public._support_pick_owner(v_id, ARRAY[p_user]);
     IF v_new IS NOT NULL THEN
       UPDATE public.ride_assist
          SET owner_id = v_new, owner_assigned_at = now(), owner_opened_at = NULL,
-             all_missed_alert_at = NULL, owners_tried = owners_tried || v_new
+             all_missed_alert_at = NULL,
+             owners_tried = CASE WHEN v_new = ANY (owners_tried) THEN owners_tried ELSE owners_tried || v_new END
        WHERE ride_id = v_id;
       SELECT * INTO v_ride FROM public.rides WHERE id = v_id;
       IF v_ride.status = 'searching' THEN
@@ -585,9 +592,12 @@ $function$;
 -- support_handoff_after_s (floor 30) after it was assigned passes to someone on shift who has not
 -- had it, with a push; with nobody, it stays hers and every ops staff account gets one push for it
 -- (all_missed_alert_at). Either way her miss counter goes up, once per assignment: the ride then has
--- a new assignment or the all-missed mark, and neither comes back here. 2. Whoever reaches
--- support_auto_offshift_misses (floor 1) misses goes off shift, with a push, and her open rides are
--- handed over. Returns how many rides step 1 handled.
+-- a new assignment or the all-missed mark, and neither comes back here. A ride is checked again
+-- once the tick holds the support lock: if it found a driver, was opened or changed owner, or its
+-- owner went off shift while the tick waited, it is left alone. 2. Everyone who reached
+-- support_auto_offshift_misses (floor 1) misses goes off shift first; then each one's open rides are
+-- handed over, so none of them gets another's rides only to be taken off right after; each gets a
+-- push. Returns how many rides step 1 handled.
 CREATE OR REPLACE FUNCTION public.support_handoff_tick()
  RETURNS integer
  LANGUAGE plpgsql
@@ -598,7 +608,10 @@ DECLARE
   c_support_lock CONSTANT bigint := 6790000000001;  -- the support lock (see _support_pick_owner)
   v_after  integer := GREATEST(30, public.get_platform_config_numeric('support_handoff_after_s', 60)::int);
   v_misses integer := GREATEST(1, public.get_platform_config_numeric('support_auto_offshift_misses', 2)::int);
-  v_ids    uuid[];
+  v_due    record;
+  v_ids    uuid[] := '{}';
+  v_owners uuid[] := '{}';
+  v_off    uuid[];
   v_id     uuid;
   v_ra     public.ride_assist%ROWTYPE;
   v_new    uuid;
@@ -608,9 +621,10 @@ DECLARE
   v_res    jsonb;
   v_n      integer := 0;
 BEGIN
-  -- The rides due, locked before any pick; a row another transaction holds waits for the next tick.
-  v_ids := ARRAY(
-    SELECT ra.ride_id
+  -- The rides due and their owners, locked before any pick; a row another transaction holds waits
+  -- for the next tick.
+  FOR v_due IN
+    SELECT ra.ride_id, ra.owner_id
     FROM public.ride_assist ra
     JOIN public.rides r ON r.id = ra.ride_id
     WHERE ra.owner_id IS NOT NULL
@@ -620,11 +634,26 @@ BEGIN
       AND r.status = 'searching'
       AND public._support_staff_on_shift(ra.owner_id)
     ORDER BY ra.owner_assigned_at, ra.ride_id
-    FOR UPDATE OF ra SKIP LOCKED);
+    FOR UPDATE OF ra SKIP LOCKED
+  LOOP
+    v_ids := v_ids || v_due.ride_id;
+    v_owners := v_owners || v_due.owner_id;
+  END LOOP;
 
   PERFORM pg_advisory_xact_lock(c_support_lock);
-  FOREACH v_id IN ARRAY v_ids LOOP
+  FOR i IN 1 .. cardinality(v_ids) LOOP
+    v_id := v_ids[i];
+    -- Checked again under the support lock, on a fresh snapshot: while the tick waited for it a
+    -- driver may have taken the ride, or its owner may have gone off shift (her switch takes the
+    -- lock too). The row is locked, so its owner and opening should not have moved; checked anyway.
     SELECT * INTO v_ra FROM public.ride_assist WHERE ride_id = v_id;
+    IF v_ra.owner_id IS DISTINCT FROM v_owners[i]
+       OR v_ra.owner_opened_at IS NOT NULL
+       OR v_ra.all_missed_alert_at IS NOT NULL
+       OR NOT EXISTS (SELECT 1 FROM public.rides r WHERE r.id = v_id AND r.status = 'searching')
+       OR NOT public._support_staff_on_shift(v_ra.owner_id) THEN
+      CONTINUE;
+    END IF;
     v_text := public._support_alert_text(v_id, CASE WHEN v_ra.help_alert_sent_at IS NOT NULL THEN 'help' ELSE 'wait' END);
     UPDATE public.support_staff SET missed_in_a_row = missed_in_a_row + 1, updated_at = now()
      WHERE user_id = v_ra.owner_id;
@@ -647,14 +676,18 @@ BEGIN
     v_n := v_n + 1;
   END LOOP;
 
+  -- Everyone over the limit goes off first, then the handovers run: a ride never passes to someone
+  -- this same tick takes off shift.
+  v_off := ARRAY(
+    SELECT s.user_id FROM public.support_staff s
+    WHERE s.on_shift AND s.missed_in_a_row >= v_misses
+    ORDER BY s.user_id
+    FOR UPDATE);
+  UPDATE public.support_staff SET on_shift = false, shift_ended_at = now(), updated_at = now()
+   WHERE user_id = ANY (v_off);
   FOR v_staff IN
-    SELECT * FROM public.support_staff
-    WHERE on_shift AND missed_in_a_row >= v_misses
-    ORDER BY user_id
-    FOR UPDATE
+    SELECT * FROM public.support_staff WHERE user_id = ANY (v_off) ORDER BY user_id
   LOOP
-    UPDATE public.support_staff SET on_shift = false, shift_ended_at = now(), updated_at = now()
-     WHERE user_id = v_staff.user_id;
     v_res := public._support_handoff_rides_of(v_staff.user_id);
     -- Nobody acted, and admin_id must be a user: the row names her.
     INSERT INTO public.admin_actions (admin_id, action, target_type, target_id, old_values, new_values)
@@ -701,11 +734,12 @@ END
 $function$;
 
 -- _support_alert: the whole body (the md5 pins it to prod's, 00632's). The ride gets its owner, and
--- only she is pushed; with nobody to give it to, or an owner off shift who opened it (she keeps
--- it), everyone is, as before. The texts are pasted with
+-- only she is pushed; everyone is, as before, with nobody to give it to, with an owner off shift who
+-- opened it (she keeps it), or on a ride nobody opened in time (all_missed_alert_at: the tick
+-- already found no one on shift opening it; its owner keeps it). The texts are pasted with
 -- their line ends stripped of chr(13), so a copy pasted from Windows patches the same.
 SELECT pg_temp.m00681_patch('public._support_alert(uuid,text)', '992c2ce11b664d72e437a683170abb97',
-  '776dd85d50c271d66f86c2a46ca7deb1',
+  '229feacb308cc7f679426a21c1759c7a',
   ARRAY[(SELECT prosrc FROM pg_proc WHERE oid = 'public._support_alert(uuid,text)'::regprocedure)],
   ARRAY[replace($new$
 DECLARE
@@ -721,15 +755,19 @@ BEGIN
   END IF;
   v_text := public._support_alert_text(p_ride_id, p_kind);
 
-  -- 00681: one owner on shift. An owner on shift keeps the ride. An owner off shift who opened it
-  -- keeps it too (she may be on it by WhatsApp), and everyone is told, as when nobody is on shift.
-  -- With no owner, or one off shift who never opened it, the assignment rule picks someone on shift
-  -- who has not had it; with nobody to pick, such an owner stays (the panel shows her) and everyone
-  -- is told. The caller (request_ride_help, the cron) already holds the ride_assist row.
+  -- 00681: one owner on shift. An owner on shift keeps the ride and is told, unless nobody opened
+  -- it in time (all_missed_alert_at): then she keeps it and everyone is told, as when nobody is on
+  -- shift. An owner off shift who opened it keeps it too (she may be on it by WhatsApp), and
+  -- everyone is told. With no owner, or one off shift who never opened it, the assignment rule picks
+  -- someone on shift who has not had it; with nobody to pick, such an owner stays (the panel shows
+  -- her) and everyone is told. The caller (request_ride_help, the cron) already holds the
+  -- ride_assist row.
   SELECT * INTO v_ra FROM public.ride_assist WHERE ride_id = p_ride_id FOR UPDATE;
   IF FOUND THEN
     IF v_ra.owner_id IS NOT NULL AND public._support_staff_on_shift(v_ra.owner_id) THEN
-      v_owner := v_ra.owner_id;
+      IF v_ra.all_missed_alert_at IS NULL THEN
+        v_owner := v_ra.owner_id;
+      END IF;
     ELSIF v_ra.owner_id IS NULL OR v_ra.owner_opened_at IS NULL THEN
       v_owner := public._support_pick_owner(p_ride_id, v_ra.owners_tried);
       IF v_owner IS NOT NULL THEN
@@ -1206,7 +1244,7 @@ BEGIN
     SELECT f.fn, f.want, f.path, md5(p.prosrc) AS got, position(chr(13) IN p.prosrc) > 0 AS has_cr,
            p.prosecdef, p.proconfig
     FROM (VALUES
-      ('public._support_alert(uuid,text)'::regprocedure, '776dd85d50c271d66f86c2a46ca7deb1', 'public, pg_catalog'),
+      ('public._support_alert(uuid,text)'::regprocedure, '229feacb308cc7f679426a21c1759c7a', 'public, pg_catalog'),
       ('public.request_ride_help(uuid)', '6d61d18cdba71a26c1ec4647ff9e372e', 'public, pg_catalog'),
       ('public.notify_support_waiting_rides()', 'f2bc190a812fc03442921018e32fee44', 'public, pg_catalog'),
       ('public.admin_offer_ride_to_driver(uuid,uuid)', '4a878a25798638296046482213f02738', 'public, pg_catalog'),

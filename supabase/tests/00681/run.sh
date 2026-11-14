@@ -107,7 +107,7 @@ HELPERS="SELECT string_agg(p.proname || '=' || md5(p.prosrc), ',' ORDER BY p.pro
 PROD_HELPERS="_html_escape=11824274e20a4bc4e469ca12e4dc7c10,_ops_allow=4762cf93cce4a747dc420cf3cdd7c7e9,_ride_short_code=7dae14319bfae57a2ac8b4317e928513,_ride_type_label=6334b65ed6bc08e91f9d4cfdee97976e,_support_alert=992c2ce11b664d72e437a683170abb97,admin_active_ride_context=62031d5be71f09241122be3e64bb3957,admin_advance_active_ride=bc7187cb8d4dbde6c64886e2ee9e3ff8,admin_assign_ride_to_driver=96a14f1ef39f9d397884457278efd699,admin_cancel_ride=21b4dfa6427e7c8976ef1324ddfa732b,admin_change_ride_service=06b0af6654384570c38a76389681d43a,admin_complete_active_ride=149e13089c12d43458a75ee58dd2a9d3,admin_offer_ride_to_driver=0085408045cc5fbf2dbc3e2eb0da92f5,admin_release_active_ride=8f18bf4984f52e41c93cdb16b062eeff,admin_ride_assist_context=2b7a2a9cb6ca0566c3fde8614220e91a,admin_support_waiting_rides=6220ecbb3b398b62c22dc2534ce55570,current_user_role=cb4a7c12d4e21fe2997135833f141e25,get_platform_config_numeric=13d2587037eca74854cf2394ba42a90c,get_platform_config_text=407a7b835c527164a4aa8b3aa8525ba5,is_admin=22cb75e91980d512498034cd33e1eda2,is_operator=16438eb527af61eaa2d0b3d9a53f08f9,is_ops_staff=d6774e4677be1072e66b247492e9cb9a,log_rpc_attempt=0a902c34a1148dac5686403a7c941bc0,notify_support_waiting_rides=c69e1ca717436dad23eada26af46e0ce,request_ride_help=0568a44a41e6b9ef925ae1b2b2799cb1"
 # md5 of prosrc of the twelve bodies 00681 patches, after the patch (part 3's nine: see the file's
 # Checks block).
-PATCHED_MD5="_support_alert=776dd85d50c271d66f86c2a46ca7deb1,admin_active_ride_context=350f050f3a233b93296ef8b9caa613f6,admin_advance_active_ride=bf81807b07b6238d06c5d2358b5ab693,admin_assign_ride_to_driver=d5f1ae456461ad3e4da3d8d7a2542bf2,admin_cancel_ride=a9de85a9bbb12f207973715bd895af13,admin_change_ride_service=923187b6d30bc1d3b32c7b9974a2c38c,admin_complete_active_ride=2494b271699e03da7a25ac467f0f23b7,admin_offer_ride_to_driver=4a878a25798638296046482213f02738,admin_release_active_ride=9f09fb0de2a3ffbde4046d64785502b6,admin_ride_assist_context=7dc43249a6575222595416f5a4357163,notify_support_waiting_rides=f2bc190a812fc03442921018e32fee44,request_ride_help=6d61d18cdba71a26c1ec4647ff9e372e"
+PATCHED_MD5="_support_alert=229feacb308cc7f679426a21c1759c7a,admin_active_ride_context=350f050f3a233b93296ef8b9caa613f6,admin_advance_active_ride=bf81807b07b6238d06c5d2358b5ab693,admin_assign_ride_to_driver=d5f1ae456461ad3e4da3d8d7a2542bf2,admin_cancel_ride=a9de85a9bbb12f207973715bd895af13,admin_change_ride_service=923187b6d30bc1d3b32c7b9974a2c38c,admin_complete_active_ride=2494b271699e03da7a25ac467f0f23b7,admin_offer_ride_to_driver=4a878a25798638296046482213f02738,admin_release_active_ride=9f09fb0de2a3ffbde4046d64785502b6,admin_ride_assist_context=7dc43249a6575222595416f5a4357163,notify_support_waiting_rides=f2bc190a812fc03442921018e32fee44,request_ride_help=6d61d18cdba71a26c1ec4647ff9e372e"
 # The cron with nobody on shift: R1, R2 and R4 wait (R3 already asked for help), and the digest goes
 # to two addresses. Its return value, every push and e-mail (label and md5 of the body) and the
 # stamps it leaves. B19 compares the result after 00681 with the result before it.
@@ -458,6 +458,20 @@ val "B8 alone on shift: the ride stays hers, everyone gets one push, her miss co
              || ',' || (new_values ->> 'kept')
         FROM public.admin_actions;")" \
     "1;Lete;true;support-all-missed:$ALL3;Lete=1;0;1;Lete=1;1;false,true;Lete;Lete;support-all-missed:$ALL3,support-all-missed:$ALL3,support-auto-offshift:Lete;Nadie abrió el viaje · $TITLE_WAIT,Nadie abrió el viaje · $TITLE_WAIT,Te sacamos de turno;support_all_missed,support_all_missed,support_offshift;No abriste 2 viajes seguidos. Actívalo de nuevo cuando puedas.;support_shift_auto_off,$OP1,support_staff,$OP1,false,2"
+# Final review, Important 1 (founder decision 5: admins are told when a ride passed through every
+# operator on shift unopened). B8's first ride, then its rider taps help: the tick already found
+# nobody opening it, so the help alert keeps its owner (her number goes to the rider) and pushes
+# every active ops staff account, not her alone.
+val "B8b a help request on a ride nobody opened in time keeps its owner and pushes every active ops staff account" \
+    "$(tx "$ON1 $(owned $R1 $OP1 61)
+      SELECT public.support_handoff_tick();
+      $(call $CUS "public.request_ride_help('$R1') ->> 'support_phone'")
+      $(owner $R1)
+      SELECT (all_missed_alert_at = now()) || ',' || (owner_assigned_at = now() - interval '61 seconds')
+             || ',' || array_to_string(owners_tried, ' ')
+        FROM public.ride_assist WHERE ride_id = '$R1';
+      $PUSHES $TITLES $EVENTS")" \
+    "1;+5355123456;Lete;true,true,$OP1;support-all-missed:$ALL3,support-help-alert:$ALL3;Nadie abrió el viaje · $TITLE_WAIT,$TITLE_HELP;support_all_missed,support_help"
 val "B10 the tick leaves a ride that is no longer searching, and one its owner opened" \
     "$(tx "$ON_BOTH $(owned $R1 $OP1 61) $(owned $R2 $OP1 61)
       UPDATE public.rides SET status = 'accepted' WHERE id = '$R1';
@@ -472,6 +486,20 @@ val "B16 the settings have floors: 30 s to open the ride, 1 miss" \
       SELECT public.support_handoff_tick(); $(owner $R1)
       SELECT on_shift::text FROM public.support_staff WHERE user_id = '$OP1'; $PUSHES")" \
     "0;1;Melanye;false;support-handoff:Melanye,support-auto-offshift:Lete"
+# Final review, Minor 4. Both on shift, each over the miss limit, each with an open ride she opened
+# (so step 1 leaves them). Both go off before any handover: neither gets the other's ride (with
+# nobody left on shift, each keeps hers), and each gets only "Te sacamos de turno".
+val "B22 two operators over the miss limit in one tick both go off first: no ride passes to the one taken off next" \
+    "$(tx "$ON_BOTH $(owned $R1 $OP1 10) $(owned $R2 $OP2 10)
+      UPDATE public.ride_assist SET owner_opened_at = now();
+      UPDATE public.support_staff SET missed_in_a_row = 2;
+      SELECT public.support_handoff_tick();
+      $(owner $R1) $(owner $R2)
+      SELECT string_agg(on_shift || '/' || (shift_ended_at = now()), ',' ORDER BY user_id) FROM public.support_staff;
+      SELECT string_agg(action || ':' || (new_values ->> 'handed_over') || '/' || (new_values ->> 'kept'), ','
+                        ORDER BY admin_id) FROM public.admin_actions;
+      $PUSHES")" \
+    "0;Lete;Melanye;false/true,false/true;support_shift_auto_off:0/1,support_shift_auto_off:0/1;support-auto-offshift:Lete,support-auto-offshift:Melanye"
 val "B15 the tick runs every 20 seconds (pg_cron)" \
     "SELECT schedule || '|' || command FROM cron.job WHERE jobname = 'support-handoff-tick'" \
     "20 seconds|SELECT public.support_handoff_tick()"
@@ -508,6 +536,19 @@ val "B11b going off: an active ride she opened passes on (en curso push); one ne
       UPDATE public.ride_assist SET owner_opened_at = now() WHERE ride_id IN ('$R1', '$R3');
       $(toggle $OP2 false) $PUSHES")" \
     "1,0,0;Melanye;Lete;Lete;Lete;support-handoff:Melanye;Te pasamos un viaje en curso · #B6790000;Calle 23 entre L y M, Vedado → Obispo 104, Habana Vieja;0,1,0;none"
+# Final review, Minor 3 (spec: going off shift passes rides "by the same rule as a new ride"). R1
+# came to OP1 from OP2 (owners_tried OP2, OP1). OP1 goes off with OP2 on shift: R1 goes back to OP2,
+# with a push, and owners_tried gains no duplicate. Before, having had it kept OP2 out: R1 stayed
+# with OP1, off shift.
+val "B21 going off: a ride passes back to an operator on shift who had it before (the same rule as a new ride)" \
+    "$(tx "$ON_BOTH $(owned $R1 $OP1 10)
+      UPDATE public.ride_assist SET owners_tried = ARRAY['$OP2', '$OP1']::uuid[] WHERE ride_id = '$R1';
+      $(toggle $OP1 false)
+      $(owner $R1)
+      SELECT (owner_assigned_at = now()) || ',' || (owner_opened_at IS NULL) || ',' || array_to_string(owners_tried, ' ')
+        FROM public.ride_assist WHERE ride_id = '$R1';
+      $PUSHES")" \
+    "1,0,0;Melanye;true,true,$OP2 $OP1;support-handoff:Melanye"
 # OP1 owns R1 accepted and never opened, R3 completed and R4 canceled (both opened): none is open, so
 # OP1 and OP2 tie and OP1 (first id) is picked and given out. Once she opens R1 it weighs: OP2.
 val "B18 open rides weigh in the pick and the contact: searching, or active and opened; never closed ones" \
@@ -912,6 +953,7 @@ if [ "$(run $CDB "SELECT to_regprocedure('public.support_handoff_tick()') IS NOT
   ko "$B14" "no support_handoff_tick"
   ko "B14b a help request and an operator coming on at once: no deadlock" "no support_handoff_tick"
   ko "B14c the cron's wait alerts and a help request on one of those rides at once: no deadlock" "no support_handoff_tick"
+  ko "B23 the tick checks each ride again once it holds the support lock" "no support_handoff_tick"
 else
   : > "$O1"
   run $CDB "SET application_name = 'holder'; BEGIN;
@@ -985,6 +1027,33 @@ else
   r="$r|waited:$wcron$whelp|titles:$(run $CDB "$TITLES")|errors:$(cat "$O1" "$O2" "$O3" | grep -c -e ERROR -e 40P01)"
   want="cron:2|help:+5355123456|waited:00|titles:Te toca · $TITLE_WAIT,Te toca · $TITLE_WAIT,Te toca · $TITLE_HELP|errors:0"
   [ "$r" = "$want" ] && ok "$B14c" || ko "$B14c" "expected [$want], got [$r] $(cat "$O1" "$O2" "$O3" | paste -sd' ' -)"
+
+  # B23 (final review, Minor 5): the tick takes R1 (OP1's) and R2 (OP2's), both unopened for 61 s,
+  # and waits for the support lock, which OP1's switch holds ('off' takes it first, as
+  # ops_set_support_shift does). Meanwhile a driver accepts R2. OP1 then goes off (her handover skips
+  # R1, whose row the tick holds: kept 1) and commits. Once it has the lock the tick must check each
+  # ride again: R1's owner is off shift and R2 found a driver, so neither passes on nor counts a miss.
+  # Before, R1 went to OP2 and R2 was marked all missed, a miss each.
+  B23="B23 the tick checks each ride again once it holds the support lock: an owner gone off, a ride accepted meanwhile, are left alone"
+  conc_db "$ON_BOTH $(owned $R1 $OP1 61) $(owned $R2 $OP2 61)"
+  : > "$O1"; : > "$O2"
+  run $CDB "SET application_name = 'off'; BEGIN;
+    SELECT pg_advisory_xact_lock(6790000000001);
+    $(signal test_picked)
+    DO \$\$ BEGIN FOR i IN 1..600 LOOP EXIT WHEN (SELECT is_called FROM public.test_go); PERFORM pg_sleep(0.05); END LOOP; END \$\$;
+    $(as_user $OP1) SELECT j ->> 'handed_over' || ',' || (j ->> 'kept') FROM (SELECT public.ops_set_support_shift(false) AS j) x;
+    COMMIT;" > "$O1" &
+  await "SELECT is_called FROM public.test_picked"
+  run $CDB "SET application_name = 'tick'; SELECT public.support_handoff_tick();" > "$O2" &
+  await "$(waiting tick)"; wtick=$?
+  run $CDB "UPDATE public.rides SET status = 'accepted', driver_id = '$DP', accepted_at = now() WHERE id = '$R2';" >/dev/null
+  run $CDB "SELECT setval('public.test_go', 1)" >/dev/null
+  wait
+  r="off:$(grep -v -e ERROR -e WARNING "$O1" | paste -sd' ' -)|tick:$(grep -v -e ERROR -e WARNING "$O2" | paste -sd' ' -)|waited:$wtick"
+  r="$r|owners:$(run $CDB "$(owner $R1) $(owner $R2)")|missed:$(run $CDB "$MISSED")|pushes:$(run $CDB "$PUSHES")"
+  r="$r|errors:$(cat "$O1" "$O2" | grep -c ERROR)"
+  want="off:0,1|tick:0|waited:0|owners:Lete;Melanye|missed:Lete=0,Melanye=0|pushes:none|errors:0"
+  [ "$r" = "$want" ] && ok "$B23" || ko "$B23" "expected [$want], got [$r] $(cat "$O1" "$O2" | paste -sd' ' -)"
 fi
 
 # C8 (Ruling 5): opening and taking a ride write support_staff (her missed rides) only under the
