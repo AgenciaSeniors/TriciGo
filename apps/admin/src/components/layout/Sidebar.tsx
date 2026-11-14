@@ -85,6 +85,7 @@ const NAV_GROUPS: NavGroup[] = [
     defaultTitle: 'Operación',
     items: [
       { href: '/rides', labelKey: 'sidebar.rides', defaultLabel: 'Viajes', icon: Map },
+      { href: '/support', labelKey: 'sidebar.support', defaultLabel: 'Soporte', icon: Headphones },
       { href: '/incidents', labelKey: 'sidebar.incidents', defaultLabel: 'Incidentes', icon: AlertTriangle },
       { href: '/cancellations', labelKey: 'sidebar.cancellations', defaultLabel: 'Cancelaciones', icon: ShieldAlert },
       { href: '/disputes', labelKey: 'sidebar.disputes', defaultLabel: 'Disputas', icon: Scale },
@@ -113,7 +114,6 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/wallet/gifts', labelKey: 'sidebar.gifts', defaultLabel: 'Regalos', icon: Gift },
       { href: '/earnings', labelKey: 'sidebar.earnings', defaultLabel: 'Ingresos', icon: DollarSign },
       { href: '/reviews', labelKey: 'sidebar.reviews', defaultLabel: 'Reseñas', icon: Star },
-      { href: '/support', labelKey: 'sidebar.support', defaultLabel: 'Soporte', icon: Headphones },
     ],
   },
   {
