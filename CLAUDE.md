@@ -2567,6 +2567,26 @@ Desde `/missed-rides` ("Sin chofer"), operadores y admins le escriben por WhatsA
 
 **Estado: aplicada en prod el 2026-11-02** por MCP (`20261102171645`), con un `DO` que leyó el archivo del commit `4804555b` desde `net._http_response` y lo ejecutó solo si su md5 era el del repo (`8f201180…`). Antes, ensayo en prod en un bloque revertido con la pasajera demo como persona y la cuenta de prueba `b2c3d4e5…` como operadora. Aplicar la migración tardó 0,6 s. La operadora la vio en la lista (71 personas pendientes ese día) y le dio el cupón, y la app lo mostró y lo validó por 500 CUP. Su siguiente viaje lo obtuvo solo. Escribirle otra vez devolvió `coupon_used`, apagar `grant_only` se rechazó y marketing recibió `forbidden`. Verificado por objeto después: los 11 cuerpos con el md5 del ensayo y sin `\r`, el orden de los triggers, las dos CHECK, las dos tablas-candado y los permisos. Falta: el merge (despliega el panel) y crear el cupón en Promociones.
 
+### Disculpa automática cuando no hay chofer (00681)
+
+Desde la 00681, nadie del equipo tiene que hacer nada para disculparse con quien se quedó sin chofer. Diseño: `docs/superpowers/specs/2026-11-14-missed-ride-auto-apology-design.md`. Ensayo: `supabase/tests/00681/run.sh` (con `none` pasa solo S0; con la migración, todo).
+
+- **La tarea `grant-missed-ride-apologies`** corre cada minuto `grant_missed_ride_apologies()`. Toma los viajes de pasajero cancelados sin conductor después de esperar `support_alert_after_s`, que es la regla de "Sin chofer". Mira solo los de las últimas 2 horas y los posteriores a `missed_ride_auto_apology_since`, que fijó la migración, así que no le escribe a gente de antes. A cada persona del segmento de 00674 con teléfono confirmado:
+  - le da el cupón de disculpa, una vez por teléfono y compartido con el de WhatsApp;
+  - le abre un ticket `waiting_user` con la disculpa, firmado por la cuenta de plataforma;
+  - le manda un push `system` por `cron_http_post`, con la etiqueta `missed-ride-apology`.
+- **El cupón** es `PERDON10` (10 %), creado por la migración. Usa el más nuevo que esté activo, igual que WhatsApp. El texto sale de la promoción: si marketing la cambia, el texto cambia con ella.
+- **Cada viaje queda en `missed_ride_auto_apologies`** con su resultado (`granted`, `already_given`, `no_phone`, `no_coupon`, `not_eligible`), así no se mira dos veces. Un viaje que falla queda en `rpc_attempt_log` (`grant_missed_ride_apologies`, `failed`) y se reintenta al minuto siguiente. Si fallan todos, falla la corrida y avisa `check_cron_sql_failures`.
+- **Se apaga** con `missed_ride_auto_apology_enabled` = `false` en Configuración.
+- **Diagnóstico:**
+  ```sql
+  SELECT outcome, count(*) FROM missed_ride_auto_apologies WHERE created_at > now() - interval '7 days' GROUP BY 1;
+  SELECT c.called_at, r.status_code FROM cron_http_calls c LEFT JOIN net._http_response r ON r.id = c.request_id
+  WHERE c.jobname = 'missed-ride-apology' ORDER BY c.called_at DESC LIMIT 10;
+  ```
+- Cuerpos tras 00681 (md5/largo): `_apology_discount_text` `1710059086e0612c7d8a1bb4cd1af57b/397`, `grant_missed_ride_apologies` `3f4714fd9cee90970bddbff000a7ab0f/6233`.
+- **Estado:** ensayada en local el 2026-11-14 (sin la migración 1 de 33; con ella 40/40, aplicada dos veces, desde una copia CRLF y con pruebas negativas). No aplicada en prod.
+
 ### Canales de Realtime: cuáles son privados y cómo agregar uno (00626, verificado 2026-10-07)
 
 Un canal **público** de Realtime no pasa por ninguna regla: cualquiera con sesión que sepa el nombre puede unirse, leer los broadcasts y la presencia, y mandar mensajes. Las reglas de `realtime.messages` solo se aplican a los canales **privados** (`{ config: { private: true } }`). Un canal privado y uno público con el mismo nombre no se cruzan: lo que se manda en uno nunca llega al otro.
