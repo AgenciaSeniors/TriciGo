@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getSupabaseClient, supportService } from '@tricigo/api';
+import { getSupabaseClient, supportService, useSupportPhones } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import type { SupportTicket, TicketCategory } from '@tricigo/types';
-import { cubaTimeZone } from '@tricigo/utils';
+import { cubaTimeZone, primarySupportPhone, supportWhatsAppUrl } from '@tricigo/utils';
 
 const STATUS_COLORS: Record<string, string> = {
   open: 'var(--info, #3B82F6)',
@@ -35,6 +35,7 @@ export default function SupportPage() {
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<TicketCategory>('ride_issue');
   const [submitting, setSubmitting] = useState(false);
+  const supportPhone = primarySupportPhone(useSupportPhones());
 
   const STATUS_LABELS: Record<string, string> = {
     open: t('support.status_open', { defaultValue: 'Abierto' }),
@@ -163,10 +164,10 @@ export default function SupportPage() {
       {/* Contacto directo — parity con el hub de contacto del /support móvil
           (WhatsApp + correo). El FAQ vive en /help. */}
       <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '2rem' }}>
-        {/* Canonical support WhatsApp (Cuban number). Same target the
-            mobile hubs use (apps/client/app/support.tsx). */}
+        {/* Support WhatsApp: the first number in platform_config
+            (useSupportPhones, 00682), like the one-tap buttons of the apps. */}
         <a
-          href="https://wa.me/5356621636"
+          href={supportWhatsAppUrl(supportPhone)}
           target="_blank"
           rel="noopener noreferrer"
           style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, padding: '0.9rem 1rem', background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: '0.85rem', textDecoration: 'none', color: 'var(--text-primary)' }}

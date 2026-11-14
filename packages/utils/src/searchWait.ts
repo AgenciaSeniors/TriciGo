@@ -150,9 +150,6 @@ export function searchHelpAvailable(elapsedSeconds: number): boolean {
   return stage === 'extended' || stage === 'long';
 }
 
-/** TriciGo support's WhatsApp, the number the help screens of both apps already open. */
-export const SUPPORT_WHATSAPP_PHONE = '+5356621636';
-
 /**
  * The ride code the rider and support talk about: the first 8 characters of the id, upper
  * case. The same as the server's _ride_short_code (00628), so the app can write it on

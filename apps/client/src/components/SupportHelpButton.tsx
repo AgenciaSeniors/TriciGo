@@ -4,8 +4,8 @@ import Toast from 'react-native-toast-message';
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
-import { rideAssistService } from '@tricigo/api';
-import { rideShortCode, searchHelpAvailable, SUPPORT_WHATSAPP_PHONE, waMeLink } from '@tricigo/utils';
+import { rideAssistService, useSupportPhones } from '@tricigo/api';
+import { formatSupportPhone, primarySupportPhone, rideShortCode, searchHelpAvailable, waMeLink } from '@tricigo/utils';
 
 interface SupportHelpButtonProps {
   rideId: string;
@@ -23,6 +23,7 @@ export function SupportHelpButton({ rideId, elapsedSeconds }: SupportHelpButtonP
   const { t } = useTranslation('rider');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const supportPhone = primarySupportPhone(useSupportPhones());
 
   if (!searchHelpAvailable(elapsedSeconds)) return null;
   const code = rideShortCode(rideId);
@@ -35,12 +36,16 @@ export function SupportHelpButton({ rideId, elapsedSeconds }: SupportHelpButtonP
     ]);
     setSending(false);
     setSent(true);
-    const url = waMeLink(SUPPORT_WHATSAPP_PHONE, t('home.support_help_whatsapp_text', { code }));
+    const url = waMeLink(supportPhone, t('home.support_help_whatsapp_text', { code }));
     try {
       if (!url) throw new Error('no WhatsApp link');
       await Linking.openURL(url);
     } catch {
-      Toast.show({ type: 'info', text1: t('home.support_help_no_whatsapp', { code }), visibilityTime: 8000 });
+      Toast.show({
+        type: 'info',
+        text1: t('home.support_help_no_whatsapp', { code, phone: formatSupportPhone(supportPhone) }),
+        visibilityTime: 8000,
+      });
     }
   };
 

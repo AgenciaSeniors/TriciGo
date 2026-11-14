@@ -10,15 +10,14 @@ import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
-import { supportService } from '@tricigo/api';
+import { supportService, useSupportPhones } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import type { SupportTicket, TicketCategory } from '@tricigo/types';
-import { cubaTimeZone } from '@tricigo/utils';
+import { cubaTimeZone, formatSupportPhone, supportWhatsAppUrl } from '@tricigo/utils';
 
-// Same contact details the onboarding screen already links to
-// (apps/driver/app/onboarding/pending.tsx:18).
+// The WhatsApp numbers come from platform_config (useSupportPhones, 00682);
+// the onboarding screen opens the first one.
 const SUPPORT_EMAIL = 'soporte@tricigo.com';
-const SUPPORT_PHONE = '+5356621636';
 
 const FAQ_KEYS = ['faq_q1', 'faq_q2', 'faq_q3'] as const;
 
@@ -45,6 +44,7 @@ export default function DriverHelpScreen() {
   const isDark = colorScheme === 'dark';
   const palette = isDark ? cubanDark : cubanLight;
   const userId = useAuthStore((s) => s.user?.id);
+  const supportPhones = useSupportPhones();
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
   // Tickets state
@@ -191,16 +191,19 @@ export default function DriverHelpScreen() {
                   <Ionicons name="mail-outline" size={18} color={midnightEmber.screen.text.tertiary} />
                   <Text variant="bodySmall" color="primary" className="ml-2 opacity-60">{SUPPORT_EMAIL}</Text>
                 </Pressable>
-                <Pressable
-                  className="flex-row items-center"
-                  onPress={() => Linking.openURL(`https://wa.me/${SUPPORT_PHONE.replace(/\D/g, '')}`)}
-                  accessibilityRole="link"
-                  accessibilityLabel={SUPPORT_PHONE}
-                  style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, minHeight: 44 })}
-                >
-                  <Ionicons name="logo-whatsapp" size={18} color={midnightEmber.screen.text.tertiary} />
-                  <Text variant="bodySmall" color="primary" className="ml-2 opacity-60">{SUPPORT_PHONE}</Text>
-                </Pressable>
+                {supportPhones.map((phone) => (
+                  <Pressable
+                    key={phone}
+                    className="flex-row items-center"
+                    onPress={() => Linking.openURL(supportWhatsAppUrl(phone))}
+                    accessibilityRole="link"
+                    accessibilityLabel={formatSupportPhone(phone)}
+                    style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, minHeight: 44 })}
+                  >
+                    <Ionicons name="logo-whatsapp" size={18} color={midnightEmber.screen.text.tertiary} />
+                    <Text variant="bodySmall" color="primary" className="ml-2 opacity-60">{formatSupportPhone(phone)}</Text>
+                  </Pressable>
+                ))}
               </Card>
 
               {/* Create ticket button */}

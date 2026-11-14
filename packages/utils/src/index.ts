@@ -188,12 +188,21 @@ export {
   searchWaitView,
   searchHelpAvailable,
   rideShortCode,
-  SUPPORT_WHATSAPP_PHONE,
 } from './searchWait';
 export { equalSplitSharePct, splitAmountTrc, requesterShareTrc } from './fareSplit';
 export type { SearchWaitStage, SearchWaitInput, SearchWaitView } from './searchWait';
 export { REQUIRED_DRIVER_DOCS, driverDocLabel, whatsAppDigits, waMeLink, incompleteSignupMessage } from './driverOutreach';
 export type { IncompleteSignupMessageInput } from './driverOutreach';
+export {
+  SUPPORT_PHONES_CONFIG_KEY,
+  SUPPORT_WHATSAPP_PHONES,
+  parseSupportPhone,
+  parseSupportPhones,
+  resolveSupportPhones,
+  primarySupportPhone,
+  formatSupportPhone,
+  supportWhatsAppUrl,
+} from './supportContact';
 export { apologyDiscountText, cubaDayMonth, missedRideApologyMessage } from './missedRideOutreach';
 export type { ApologyCoupon, MissedRideMessageInput } from './missedRideOutreach';
 export { EMAIL_NOTICE_SNOOZE_MS, emailNoticeVisible, emailNoticeErrorKey, profileEmailSavePlan } from './emailNotice';

@@ -1,6 +1,6 @@
 // ============================================================
 // TriciGo — Support Service
-// Support ticket CRUD and messaging.
+// Support ticket CRUD, messaging and the support WhatsApp numbers.
 // ============================================================
 
 import type {
@@ -10,6 +10,7 @@ import type {
   TicketPriority,
   TicketStatus,
 } from '@tricigo/types';
+import { resolveSupportPhones, SUPPORT_PHONES_CONFIG_KEY, SUPPORT_WHATSAPP_PHONES } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
 import { validate, createTicketSchema } from '../schemas';
 
@@ -138,5 +139,27 @@ export const supportService = {
       .single();
     if (error) throw error;
     return data as TicketMessage;
+  },
+
+  // ==================== CONTACT ====================
+
+  /**
+   * The support WhatsApp numbers, in order, from platform_config
+   * (support_whatsapp_phones, 00682). Never throws and never empty: a missing
+   * key, an invalid value or a failed read gives the built-in numbers, so a
+   * help screen always has one to open.
+   */
+  async getWhatsAppPhones(): Promise<string[]> {
+    try {
+      const { data, error } = await getSupabaseClient()
+        .from('platform_config')
+        .select('value')
+        .eq('key', SUPPORT_PHONES_CONFIG_KEY)
+        .maybeSingle();
+      if (error) return [...SUPPORT_WHATSAPP_PHONES];
+      return resolveSupportPhones(data?.value);
+    } catch {
+      return [...SUPPORT_WHATSAPP_PHONES];
+    }
   },
 };
