@@ -1,4 +1,4 @@
--- Scaffold for the 00679 rehearsal (one owner per assisted ride). Loaded as the superuser before
+-- Scaffold for the 00681 rehearsal (one owner per assisted ride). Loaded as the superuser before
 -- tables.sql and live-bodies.sql.
 -- Every object belongs to a NON-superuser role named postgres, as in prod, and postgres is a member
 -- of anon, authenticated and service_role. Tables get the grants Supabase gave until 2026-10-30, so

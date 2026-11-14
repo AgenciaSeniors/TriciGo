@@ -76,7 +76,7 @@ Date: 2026-11-07 · Status: draft, answers from the founder in chat · Target: a
 
 ## Server design (one migration)
 
-Next free number on 2026-11-07: **00679** (00676 and 00677 are in PR 1192, 00678 in PR 1194). Re-check master and every open PR right before writing it.
+Number: **00681**. On 2026-11-07 the next free number was 00679 (00676 and 00677 were in PR 1192, 00678 in PR 1194). 00679 and 00680 went to Moto Deportiva (#1196), which reached master first, so this migration was renumbered to 00681 on 2026-11-14. Re-check master and every open PR right before applying it.
 
 **Order with 00677.** 00677 (PR 1192) patches `admin_assign_ride_to_driver` and `admin_ride_assist_candidates` behind md5 guards, and so does the ownership guard here. 00676-00678 were applied in prod on 2026-11-07 (`schema_migrations`), and the live bodies carry 00677's md5. This migration is written against those live bodies; re-running 00677 stays a no-op, because its guard returns early on its own new md5.
 

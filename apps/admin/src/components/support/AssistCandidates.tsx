@@ -36,7 +36,7 @@ interface Props {
   onChanged: () => void;
   /** Shows the offer and assign buttons (rides.act). */
   allowed?: boolean;
-  /** Someone else owns the ride (00679): the offer and assign buttons stay disabled. */
+  /** Someone else owns the ride (00681): the offer and assign buttons stay disabled. */
   disabled?: boolean;
 }
 

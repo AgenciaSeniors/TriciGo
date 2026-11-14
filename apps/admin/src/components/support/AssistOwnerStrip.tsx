@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * The strip on top of the assist page: who owns the ride (00679). Mine, someone else's (with a
+ * The strip on top of the assist page: who owns the ride (00681). Mine, someone else's (with a
  * "Tomar este viaje" button, after a confirmation) or nobody's, in which case the first action
  * support takes on the ride makes her the owner. The page passes `disabled` to every action while
  * someone else owns it; the server refuses those actions too (ride_owned_by_other).

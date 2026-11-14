@@ -28,7 +28,7 @@ export interface SupportWaitingRide {
   dropoff_address: string;
   pending_offers: number;
   is_test: boolean;
-  /** The operator who owns the ride (00679). All null when nobody does, or on a server that predates it. */
+  /** The operator who owns the ride (00681). All null when nobody does, or on a server that predates it. */
   owner_id: string | null;
   owner_name: string | null;
   /** Null with no owner, not false. */
@@ -37,7 +37,7 @@ export interface SupportWaitingRide {
   owner_opened_at: string | null;
 }
 
-/** The operator who owns an assisted ride (the `owner` key of the two contexts, 00679). */
+/** The operator who owns an assisted ride (the `owner` key of the two contexts, 00681). */
 export interface AssistOwner {
   id: string;
   name: string;
@@ -118,7 +118,7 @@ export interface RideAssistContext {
   help_requested_at: string | null;
   offers: RideAssistOffer[];
   proposal: RideAssistProposal | null;
-  /** Null with no owner. Absent on a server that predates 00679. */
+  /** Null with no owner. Absent on a server that predates 00681. */
   owner?: AssistOwner | null;
 }
 
@@ -202,7 +202,7 @@ export interface ActiveRideContext {
   start_pickup_source: 'recorded' | 'gps' | 'arrival' | 'now' | null;
   /** What the server would accept now. Empty for an accepted/en-route ride scheduled for later. */
   allowed_actions: ActiveRideAction[];
-  /** Null with no owner. Absent on a server that predates 00679. */
+  /** Null with no owner. Absent on a server that predates 00681. */
   owner?: AssistOwner | null;
 }
 
@@ -269,7 +269,7 @@ export function isProposalGone(err: unknown): boolean {
 export const rideAssistService = {
   /**
    * The rider's "Pedir ayuda": marks the ride and alerts support, once. Returns the ride code
-   * for the WhatsApp message and the number to write to (null on a server that predates 00679,
+   * for the WhatsApp message and the number to write to (null on a server that predates 00681,
    * or with nobody to offer), or null if the server could not take the request. Never throws:
    * the caller opens WhatsApp either way.
    */
@@ -313,7 +313,7 @@ export const rideAssistService = {
   },
 
   /**
-   * The admin banner's rides, with their owner (v2, 00679). Without v2 it reads v1 and the owner
+   * The admin banner's rides, with their owner (v2, 00681). Without v2 it reads v1 and the owner
    * fields are null. None when neither exists; other errors throw.
    */
   async getWaitingRides(): Promise<SupportWaitingRide[]> {
@@ -340,7 +340,7 @@ export const rideAssistService = {
 
   /**
    * Tells the server the operator opened the ride's page, so the handover leaves it with her
-   * (00679). Errors are swallowed: opening must never break the page.
+   * (00681). Errors are swallowed: opening must never break the page.
    */
   async openAssist(rideId: string): Promise<void> {
     try {

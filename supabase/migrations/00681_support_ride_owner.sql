@@ -1,9 +1,11 @@
 -- ============================================================
--- 00679 — One owner per assisted ride, and the support number from the operator on shift
+-- 00681 — One owner per assisted ride, and the support number from the operator on shift
 -- ============================================================
 --
 -- Design: docs/superpowers/specs/2026-11-07-support-ride-owner-design.md.
 -- Plan: docs/superpowers/plans/2026-11-07-support-ride-owner.md.
+-- Written as 00679 and renumbered to 00681 on 2026-11-14: Moto Deportiva (#1196) took 00679 and
+-- 00680 first. The advisory lock key 6790000000001 (section D) keeps its value.
 -- Support is two operators (00667/00668). Today every alert pushes every ops staff account, anyone
 -- can act on any ride, and the apps send riders to a hardcoded number. From here each ride that
 -- needs support gets one owner among the staff on shift, and the apps ask the server for the number.
@@ -358,7 +360,7 @@ $function$;
 -- owner (now off shift) until a pickup or its next alert gives it to someone on shift. The tick
 -- takes its rows the same way, before any pick.
 
--- The title and body of a ride's support push, as _support_alert wrote them before 00679: the other
+-- The title and body of a ride's support push, as _support_alert wrote them before 00681: the other
 -- pushes prefix the title ("Te toca · ", "Te pasamos un viaje · ", "Nadie abrió el viaje · ").
 CREATE OR REPLACE FUNCTION public._support_alert_text(p_ride_id uuid, p_kind text)
  RETURNS jsonb
@@ -376,7 +378,7 @@ AS $function$
   WHERE r.id = p_ride_id;
 $function$;
 
--- A support push through send-push: the call _support_alert made before 00679, with the same
+-- A support push through send-push: the call _support_alert made before 00681, with the same
 -- handling. With no service role key, or when the call fails, it warns and logs alert_failed, and
 -- its caller goes on: an assignment or a handover stays even if its push does not go out. A push
 -- with no ride (the automatic off-shift) carries no ride_id or link.
@@ -670,7 +672,7 @@ $function$;
 -- ── G. Patches of live bodies ───────────────────────────────
 -- Each body is replaced only from its md5 in prod on 2026-11-07, each replaced text must appear
 -- exactly once, and re-applying changes nothing (00673's helper).
-CREATE OR REPLACE FUNCTION pg_temp.m00679_patch(p_fn regprocedure, p_old_md5 text, p_new_md5 text,
+CREATE OR REPLACE FUNCTION pg_temp.m00681_patch(p_fn regprocedure, p_old_md5 text, p_new_md5 text,
                                                p_olds text[], p_news text[])
  RETURNS void
  LANGUAGE plpgsql
@@ -685,12 +687,12 @@ BEGIN
     RETURN;
   END IF;
   IF v_md5 IS DISTINCT FROM p_old_md5 THEN
-    RAISE EXCEPTION '00679: % has an unknown body (md5 %)', p_fn, v_md5;
+    RAISE EXCEPTION '00681: % has an unknown body (md5 %)', p_fn, v_md5;
   END IF;
   SELECT pg_get_functiondef(p_fn) INTO v_def;
   FOR i IN 1 .. array_length(p_olds, 1) LOOP
     IF (length(v_def) - length(replace(v_def, p_olds[i], ''))) / length(p_olds[i]) <> 1 THEN
-      RAISE EXCEPTION '00679: % does not have text % exactly once', p_fn, i;
+      RAISE EXCEPTION '00681: % does not have text % exactly once', p_fn, i;
     END IF;
     v_def := replace(v_def, p_olds[i], p_news[i]);
   END LOOP;
@@ -702,8 +704,8 @@ $function$;
 -- only she is pushed; with nobody to give it to, or an owner off shift who opened it (she keeps
 -- it), everyone is, as before. The texts are pasted with
 -- their line ends stripped of chr(13), so a copy pasted from Windows patches the same.
-SELECT pg_temp.m00679_patch('public._support_alert(uuid,text)', '992c2ce11b664d72e437a683170abb97',
-  '66476de2158a616eb7897904af78c92b',
+SELECT pg_temp.m00681_patch('public._support_alert(uuid,text)', '992c2ce11b664d72e437a683170abb97',
+  '776dd85d50c271d66f86c2a46ca7deb1',
   ARRAY[(SELECT prosrc FROM pg_proc WHERE oid = 'public._support_alert(uuid,text)'::regprocedure)],
   ARRAY[replace($new$
 DECLARE
@@ -719,7 +721,7 @@ BEGIN
   END IF;
   v_text := public._support_alert_text(p_ride_id, p_kind);
 
-  -- 00679: one owner on shift. An owner on shift keeps the ride. An owner off shift who opened it
+  -- 00681: one owner on shift. An owner on shift keeps the ride. An owner off shift who opened it
   -- keeps it too (she may be on it by WhatsApp), and everyone is told, as when nobody is on shift.
   -- With no owner, or one off shift who never opened it, the assignment rule picks someone on shift
   -- who has not had it; with nobody to pick, such an owner stays (the panel shows her) and everyone
@@ -758,10 +760,10 @@ END;
 $new$, chr(13), '')]);
 
 -- request_ride_help: the answer gains support_phone, also when the help alert is capped.
-SELECT pg_temp.m00679_patch('public.request_ride_help(uuid)', '0568a44a41e6b9ef925ae1b2b2799cb1',
-  '2b9faf1390909d63ae02696105d78090',
+SELECT pg_temp.m00681_patch('public.request_ride_help(uuid)', '0568a44a41e6b9ef925ae1b2b2799cb1',
+  '6d61d18cdba71a26c1ec4647ff9e372e',
   ARRAY[E'  RETURN jsonb_build_object(''success'', true, ''code'', public._ride_short_code(p_ride_id));'],
-  ARRAY[E'  -- 00679: the number the rider writes to (the owner on shift, else the support contact).\n'
+  ARRAY[E'  -- 00681: the number the rider writes to (the owner on shift, else the support contact).\n'
         || E'  RETURN jsonb_build_object(''success'', true, ''code'', public._ride_short_code(p_ride_id),\n'
         || E'                            ''support_phone'', public._support_phone_for_ride(p_ride_id));']);
 
@@ -771,8 +773,8 @@ SELECT pg_temp.m00679_patch('public.request_ride_help(uuid)', '0568a44a41e6b9ef9
 -- its first alert, and the alerts go last. Before, the run took the lock alerting one ride and then
 -- waited for the next ride's row, which a rider's help request could hold while it waited for the
 -- lock: a deadlock that lost the help alert.
-SELECT pg_temp.m00679_patch('public.notify_support_waiting_rides()', 'c69e1ca717436dad23eada26af46e0ce',
-  'da6c10207da346fdc6f27114f6f125d6',
+SELECT pg_temp.m00681_patch('public.notify_support_waiting_rides()', 'c69e1ca717436dad23eada26af46e0ce',
+  'f2bc190a812fc03442921018e32fee44',
   ARRAY[E'  v_wait_ids uuid[] := ''{}'';\n',
         E'      IF FOUND THEN\n'
         || E'        PERFORM public._support_alert(v_id, ''wait'');\n'
@@ -781,15 +783,15 @@ SELECT pg_temp.m00679_patch('public.notify_support_waiting_rides()', 'c69e1ca717
         E'  -- The digest, in a block of its own: a failure in it must not take back the pushes above.\n',
         E'\n  RETURN v_n;\nEND;'],
   ARRAY[E'  v_wait_ids uuid[] := ''{}'';\n'
-        || E'  v_alert_ids uuid[] := ''{}'';  -- 00679: the rides to alert, once every row is written\n',
+        || E'  v_alert_ids uuid[] := ''{}'';  -- 00681: the rides to alert, once every row is written\n',
         E'      IF FOUND THEN\n'
-        || E'        v_alert_ids := v_alert_ids || v_id;  -- 00679: alerted at the end (see below)\n'
+        || E'        v_alert_ids := v_alert_ids || v_id;  -- 00681: alerted at the end (see below)\n'
         || E'        v_n := v_n + 1;\n'
         || E'      END IF;',
         E'  -- The digest, in a block of its own: a failure in it must not take back the wait stamps\n'
         || E'  -- above nor stop the pushes below.\n',
         E'\n'
-        || E'  -- 00679: the pushes last. _support_alert takes the support lock and this run holds it until\n'
+        || E'  -- 00681: the pushes last. _support_alert takes the support lock and this run holds it until\n'
         || E'  -- it commits: every ride_assist row the run writes is written by now, so it never waits for\n'
         || E'  -- a row while it holds the lock (a help request holds its row, then waits for the lock).\n'
         || E'  FOREACH v_id IN ARRAY v_alert_ids LOOP\n'
@@ -1024,43 +1026,43 @@ END
 $function$;
 
 -- ── J. The guard in the assist actions, the owner in the contexts ──
--- Patched like section G (m00679_patch, md5 of the bodies in prod on 2026-11-07). The seven
+-- Patched like section G (m00681_patch, md5 of the bodies in prod on 2026-11-07). The seven
 -- actions take the same two edits: a variable, and the guard right after the self-ride check, which
 -- comes after the action's own lock of the ride (in admin_cancel_ride and the assign, right before
 -- PERFORM public._ops_allow(ARRAY[p_ride_id]); in release, advance and complete, before their
 -- _ops_allow). Every text is an E'' string, so a copy pasted from Windows patches the same.
-SELECT pg_temp.m00679_patch(f.fn::regprocedure, f.old_md5, f.new_md5,
+SELECT pg_temp.m00681_patch(f.fn::regprocedure, f.old_md5, f.new_md5,
   ARRAY[E'\nDECLARE\n',
         E'    RETURN jsonb_build_object(''error'', ''self_ride'');\n  END IF;\n'],
   ARRAY[E'\nDECLARE\n'
-        || E'  v_own text;  -- 00679: the ownership guard\n',
+        || E'  v_own text;  -- 00681: the ownership guard\n',
         E'    RETURN jsonb_build_object(''error'', ''self_ride'');\n  END IF;\n'
-        || E'  -- 00679: one owner per ride. With no owner the caller becomes it; another owner refuses.\n'
+        || E'  -- 00681: one owner per ride. With no owner the caller becomes it; another owner refuses.\n'
         || E'  v_own := public._assist_claim_or_refuse(p_ride_id);\n'
         || E'  IF v_own IS NOT NULL THEN\n'
         || E'    RETURN jsonb_build_object(''error'', v_own);\n'
         || E'  END IF;\n'])
 FROM (VALUES
-  ('public.admin_offer_ride_to_driver(uuid,uuid)', '0085408045cc5fbf2dbc3e2eb0da92f5', '87530b01f336c315a804d940333b7c04'),
-  ('public.admin_assign_ride_to_driver(uuid,uuid,text)', '96a14f1ef39f9d397884457278efd699', '668b0ae079d5e00c12013537bdaa3384'),
-  ('public.admin_change_ride_service(uuid,text,integer,text,text)', '06b0af6654384570c38a76389681d43a', '9aea004c5bc6f7a83c3098c18bf97812'),
-  ('public.admin_release_active_ride(uuid,text,uuid,text)', '8f18bf4984f52e41c93cdb16b062eeff', '961b6169aa4152b935f122dce4a46b5e'),
-  ('public.admin_advance_active_ride(uuid,text,uuid,text)', 'bc7187cb8d4dbde6c64886e2ee9e3ff8', '271197d1cc0c41ea18dbd6a4975e85bb'),
-  ('public.admin_complete_active_ride(uuid,text,uuid,integer,text)', '149e13089c12d43458a75ee58dd2a9d3', '6df9d20cee20b03c8f7f28c3b1022a5f'),
-  ('public.admin_cancel_ride(uuid,text)', '21b4dfa6427e7c8976ef1324ddfa732b', '460ebfbaeb70f9734bff2d6d9cd5c51d')
+  ('public.admin_offer_ride_to_driver(uuid,uuid)', '0085408045cc5fbf2dbc3e2eb0da92f5', '4a878a25798638296046482213f02738'),
+  ('public.admin_assign_ride_to_driver(uuid,uuid,text)', '96a14f1ef39f9d397884457278efd699', 'd5f1ae456461ad3e4da3d8d7a2542bf2'),
+  ('public.admin_change_ride_service(uuid,text,integer,text,text)', '06b0af6654384570c38a76389681d43a', '923187b6d30bc1d3b32c7b9974a2c38c'),
+  ('public.admin_release_active_ride(uuid,text,uuid,text)', '8f18bf4984f52e41c93cdb16b062eeff', '9f09fb0de2a3ffbde4046d64785502b6'),
+  ('public.admin_advance_active_ride(uuid,text,uuid,text)', 'bc7187cb8d4dbde6c64886e2ee9e3ff8', 'bf81807b07b6238d06c5d2358b5ab693'),
+  ('public.admin_complete_active_ride(uuid,text,uuid,integer,text)', '149e13089c12d43458a75ee58dd2a9d3', '2494b271699e03da7a25ac467f0f23b7'),
+  ('public.admin_cancel_ride(uuid,text)', '21b4dfa6427e7c8976ef1324ddfa732b', 'a9de85a9bbb12f207973715bd895af13')
 ) AS f(fn, old_md5, new_md5);
 
 -- The two contexts of the assist page gain owner (_support_ride_owner; JSON null with no owner).
-SELECT pg_temp.m00679_patch('public.admin_ride_assist_context(uuid)', '2b7a2a9cb6ca0566c3fde8614220e91a',
-  'd5e63768daed1321fd8fbddb09ff2ba6',
+SELECT pg_temp.m00681_patch('public.admin_ride_assist_context(uuid)', '2b7a2a9cb6ca0566c3fde8614220e91a',
+  '7dc43249a6575222595416f5a4357163',
   ARRAY[E'    ''help_requested_at'', ra.help_requested_at,\n'],
   ARRAY[E'    ''help_requested_at'', ra.help_requested_at,\n'
-        || E'    ''owner'', public._support_ride_owner(v_ride.id),  -- 00679: who owns the ride\n']);
-SELECT pg_temp.m00679_patch('public.admin_active_ride_context(uuid)', '62031d5be71f09241122be3e64bb3957',
-  '5ec61f7f9f02e2537da12c49f53a521f',
+        || E'    ''owner'', public._support_ride_owner(v_ride.id),  -- 00681: who owns the ride\n']);
+SELECT pg_temp.m00681_patch('public.admin_active_ride_context(uuid)', '62031d5be71f09241122be3e64bb3957',
+  '350f050f3a233b93296ef8b9caa613f6',
   ARRAY[E'    ''allowed_actions'', to_jsonb(v_actions));\n'],
   ARRAY[E'    ''allowed_actions'', to_jsonb(v_actions),\n'
-        || E'    ''owner'', public._support_ride_owner(v_ride.id));  -- 00679: who owns the ride\n']);
+        || E'    ''owner'', public._support_ride_owner(v_ride.id));  -- 00681: who owns the ride\n']);
 
 -- ── Permissions ─────────────────────────────────────────────
 -- The helpers and the tick (pg_cron runs it as the owner) to nobody.
@@ -1148,27 +1150,27 @@ BEGIN
   -- overload); each SECURITY DEFINER with its search_path.
   FOREACH v_fn IN ARRAY v_new LOOP
     IF to_regprocedure(v_fn) IS NULL THEN
-      RAISE EXCEPTION '00679 check: % is missing', v_fn;
+      RAISE EXCEPTION '00681 check: % is missing', v_fn;
     END IF;
   END LOOP;
   IF (SELECT count(*) FROM pg_proc p
       WHERE p.pronamespace = 'public'::regnamespace
         AND p.proname IN (SELECT q.proname FROM pg_proc q WHERE q.oid = ANY (SELECT to_regprocedure(f) FROM unnest(v_new) f)))
      <> cardinality(v_new) THEN
-    RAISE EXCEPTION '00679 check: the new functions are not exactly the % of this file', cardinality(v_new);
+    RAISE EXCEPTION '00681 check: the new functions are not exactly the % of this file', cardinality(v_new);
   END IF;
   FOR v_row IN
     SELECT p.oid::regprocedure AS fn, p.prosecdef, p.proconfig FROM pg_proc p
     WHERE p.oid = ANY (SELECT to_regprocedure(f) FROM unnest(v_new) f)
   LOOP
     IF NOT v_row.prosecdef OR v_row.proconfig IS DISTINCT FROM ARRAY['search_path=public, pg_catalog'] THEN
-      RAISE EXCEPTION '00679 check: % is not SECURITY DEFINER with its search_path', v_row.fn;
+      RAISE EXCEPTION '00681 check: % is not SECURITY DEFINER with its search_path', v_row.fn;
     END IF;
   END LOOP;
 
   -- support_staff: RLS on, one read policy, written only by the functions (and service_role).
   IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.support_staff'::regclass) THEN
-    RAISE EXCEPTION '00679 check: RLS is off on support_staff';
+    RAISE EXCEPTION '00681 check: RLS is off on support_staff';
   END IF;
   IF (SELECT count(*) FROM pg_policies WHERE schemaname = 'public' AND tablename = 'support_staff') <> 1
      OR has_table_privilege('anon', 'public.support_staff', 'SELECT')
@@ -1177,7 +1179,7 @@ BEGIN
      OR has_table_privilege('authenticated', 'public.support_staff', 'UPDATE')
      OR has_table_privilege('authenticated', 'public.support_staff', 'DELETE')
      OR NOT has_table_privilege('service_role', 'public.support_staff', 'UPDATE') THEN
-    RAISE EXCEPTION '00679 check: support_staff is not locked down';
+    RAISE EXCEPTION '00681 check: support_staff is not locked down';
   END IF;
 
   -- The helpers and the tick stay the owner's.
@@ -1194,58 +1196,58 @@ BEGIN
     IF has_function_privilege('anon', v_row.fn, 'EXECUTE')
        OR has_function_privilege('authenticated', v_row.fn, 'EXECUTE')
        OR has_function_privilege('service_role', v_row.fn, 'EXECUTE') THEN
-      RAISE EXCEPTION '00679 check: the helpers are open to clients (%)', v_row.fn;
+      RAISE EXCEPTION '00681 check: the helpers are open to clients (%)', v_row.fn;
     END IF;
   END LOOP;
 
-  -- The twelve patched bodies: the 00679 ones (md5 of prosrc, no carriage return), still SECURITY
+  -- The twelve patched bodies: the 00681 ones (md5 of prosrc, no carriage return), still SECURITY
   -- DEFINER with prod's search_path.
   FOR v_row IN
     SELECT f.fn, f.want, f.path, md5(p.prosrc) AS got, position(chr(13) IN p.prosrc) > 0 AS has_cr,
            p.prosecdef, p.proconfig
     FROM (VALUES
-      ('public._support_alert(uuid,text)'::regprocedure, '66476de2158a616eb7897904af78c92b', 'public, pg_catalog'),
-      ('public.request_ride_help(uuid)', '2b9faf1390909d63ae02696105d78090', 'public, pg_catalog'),
-      ('public.notify_support_waiting_rides()', 'da6c10207da346fdc6f27114f6f125d6', 'public, pg_catalog'),
-      ('public.admin_offer_ride_to_driver(uuid,uuid)', '87530b01f336c315a804d940333b7c04', 'public, pg_catalog'),
-      ('public.admin_assign_ride_to_driver(uuid,uuid,text)', '668b0ae079d5e00c12013537bdaa3384', 'public, pg_catalog'),
-      ('public.admin_change_ride_service(uuid,text,integer,text,text)', '9aea004c5bc6f7a83c3098c18bf97812',
+      ('public._support_alert(uuid,text)'::regprocedure, '776dd85d50c271d66f86c2a46ca7deb1', 'public, pg_catalog'),
+      ('public.request_ride_help(uuid)', '6d61d18cdba71a26c1ec4647ff9e372e', 'public, pg_catalog'),
+      ('public.notify_support_waiting_rides()', 'f2bc190a812fc03442921018e32fee44', 'public, pg_catalog'),
+      ('public.admin_offer_ride_to_driver(uuid,uuid)', '4a878a25798638296046482213f02738', 'public, pg_catalog'),
+      ('public.admin_assign_ride_to_driver(uuid,uuid,text)', 'd5f1ae456461ad3e4da3d8d7a2542bf2', 'public, pg_catalog'),
+      ('public.admin_change_ride_service(uuid,text,integer,text,text)', '923187b6d30bc1d3b32c7b9974a2c38c',
        'public, extensions, pg_catalog'),
-      ('public.admin_release_active_ride(uuid,text,uuid,text)', '961b6169aa4152b935f122dce4a46b5e', 'public, pg_catalog'),
-      ('public.admin_advance_active_ride(uuid,text,uuid,text)', '271197d1cc0c41ea18dbd6a4975e85bb',
+      ('public.admin_release_active_ride(uuid,text,uuid,text)', '9f09fb0de2a3ffbde4046d64785502b6', 'public, pg_catalog'),
+      ('public.admin_advance_active_ride(uuid,text,uuid,text)', 'bf81807b07b6238d06c5d2358b5ab693',
        'public, extensions, pg_catalog'),
-      ('public.admin_complete_active_ride(uuid,text,uuid,integer,text)', '6df9d20cee20b03c8f7f28c3b1022a5f',
+      ('public.admin_complete_active_ride(uuid,text,uuid,integer,text)', '2494b271699e03da7a25ac467f0f23b7',
        'public, extensions, pg_catalog'),
-      ('public.admin_cancel_ride(uuid,text)', '460ebfbaeb70f9734bff2d6d9cd5c51d', 'public, pg_catalog'),
-      ('public.admin_ride_assist_context(uuid)', 'd5e63768daed1321fd8fbddb09ff2ba6', 'public, pg_catalog'),
-      ('public.admin_active_ride_context(uuid)', '5ec61f7f9f02e2537da12c49f53a521f', 'public, extensions, pg_catalog')
+      ('public.admin_cancel_ride(uuid,text)', 'a9de85a9bbb12f207973715bd895af13', 'public, pg_catalog'),
+      ('public.admin_ride_assist_context(uuid)', '7dc43249a6575222595416f5a4357163', 'public, pg_catalog'),
+      ('public.admin_active_ride_context(uuid)', '350f050f3a233b93296ef8b9caa613f6', 'public, extensions, pg_catalog')
     ) AS f(fn, want, path)
     JOIN pg_proc p ON p.oid = f.fn
   LOOP
     IF v_row.got IS DISTINCT FROM v_row.want OR v_row.has_cr THEN
-      RAISE EXCEPTION '00679 check: % has md5 %, expected %', v_row.fn, v_row.got, v_row.want;
+      RAISE EXCEPTION '00681 check: % has md5 %, expected %', v_row.fn, v_row.got, v_row.want;
     END IF;
     IF NOT v_row.prosecdef OR v_row.proconfig IS DISTINCT FROM ARRAY['search_path=' || v_row.path] THEN
-      RAISE EXCEPTION '00679 check: % is not SECURITY DEFINER with its search_path', v_row.fn;
+      RAISE EXCEPTION '00681 check: % is not SECURITY DEFINER with its search_path', v_row.fn;
     END IF;
   END LOOP;
   -- With prod's grants: the alert and the cron closed to clients; the help button, the assist
   -- actions and the contexts open to signed-in users (each checks is_ops_staff or the rider).
   IF has_function_privilege('authenticated', 'public._support_alert(uuid,text)', 'EXECUTE')
      OR has_function_privilege('authenticated', 'public.notify_support_waiting_rides()', 'EXECUTE') THEN
-    RAISE EXCEPTION '00679 check: the patched functions have the wrong grants';
+    RAISE EXCEPTION '00681 check: the patched functions have the wrong grants';
   END IF;
   FOREACH v_fn IN ARRAY v_patched[2:] LOOP
     IF v_fn <> 'public.notify_support_waiting_rides()'
        AND NOT has_function_privilege('authenticated', v_fn::regprocedure, 'EXECUTE') THEN
-      RAISE EXCEPTION '00679 check: the patched functions have the wrong grants (%)', v_fn;
+      RAISE EXCEPTION '00681 check: the patched functions have the wrong grants (%)', v_fn;
     END IF;
   END LOOP;
 
   -- The handover tick is scheduled.
   IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'support-handoff-tick' AND schedule = '20 seconds'
                    AND command = 'SELECT public.support_handoff_tick()') THEN
-    RAISE EXCEPTION '00679 check: the support-handoff-tick job is missing';
+    RAISE EXCEPTION '00681 check: the support-handoff-tick job is missing';
   END IF;
 
   -- The panel's RPCs: authenticated, never anon. The contact: anon and authenticated.
@@ -1258,7 +1260,7 @@ BEGIN
      OR NOT has_function_privilege('authenticated', 'public.admin_support_waiting_rides_v2()', 'EXECUTE')
      OR NOT has_function_privilege('anon', 'public.get_support_contact()', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_support_contact()', 'EXECUTE') THEN
-    RAISE EXCEPTION '00679 check: the RPCs have the wrong grants';
+    RAISE EXCEPTION '00681 check: the RPCs have the wrong grants';
   END IF;
 
   -- anon: of every function this migration creates or patches, only get_support_contact.
@@ -1268,7 +1270,7 @@ BEGIN
       AND has_function_privilege('anon', p.oid, 'EXECUTE') <> (p.oid = 'public.get_support_contact()'::regprocedure)
     ORDER BY p.oid::regprocedure::text
   LOOP
-    RAISE EXCEPTION '00679 check: anon % %',
+    RAISE EXCEPTION '00681 check: anon % %',
       CASE WHEN v_row.fn = 'public.get_support_contact()'::regprocedure THEN 'cannot execute' ELSE 'can execute' END,
       v_row.fn;
   END LOOP;

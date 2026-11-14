@@ -29,7 +29,7 @@ interface Props {
   /** The latest proposal's state, already worded by the page, or null. */
   proposalLine: string | null;
   onChanged: () => void;
-  /** Someone else owns the ride (00679): quoting, proposing and applying stay disabled. */
+  /** Someone else owns the ride (00681): quoting, proposing and applying stay disabled. */
   disabled?: boolean;
 }
 

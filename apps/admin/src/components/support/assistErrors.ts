@@ -40,7 +40,7 @@ const CODES = new Set([
   'delivery_proof_missing',
   'forbidden',
   'ride_not_found',
-  // One owner per assisted ride, and the support shift (00679).
+  // One owner per assisted ride, and the support shift (00681).
   'ride_owned_by_other',
   'whatsapp_required',
   'invalid_whatsapp',
