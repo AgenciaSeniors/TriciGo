@@ -150,6 +150,8 @@ const KNOWN_KEYS: Record<string, KnownKey> = {
 
   // ── Soporte: viajes sin conductor (00628) ──
   support_alert_enabled: { type: 'select', helpKey: 'platform_config.support_alert_enabled_help', options: [{ label: 'true', value: 'true' }, { label: 'false', value: 'false' }] },
+  missed_ride_auto_apology_enabled: { type: 'select', helpKey: 'platform_config.missed_ride_auto_apology_enabled_help', options: [{ label: 'true', value: 'true' }, { label: 'false', value: 'false' }] },
+  missed_ride_auto_apology_since: { type: 'text', helpKey: 'platform_config.missed_ride_auto_apology_since_help' },
   support_alert_after_s: { type: 'number', helpKey: 'platform_config.support_alert_after_s_help' },
   support_offer_ttl_s: { type: 'number', helpKey: 'platform_config.support_offer_ttl_s_help' },
   support_proposal_ttl_s: { type: 'number', helpKey: 'platform_config.support_proposal_ttl_s_help' },
