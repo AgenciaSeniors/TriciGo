@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# Rehearsal runner for migration 00681 (one owner per assisted ride, and the support number from the
-# operator on shift). Builds prod's tables (tables.sql) and the bodies 00681 calls or patches, byte
+# Rehearsal runner for migration 00683 (one owner per assisted ride, and the support number from the
+# operator on shift). Builds prod's tables (tables.sql) and the bodies 00683 calls or patches, byte
 # for byte (live-bodies.sql), on the roles and stubs of scaffold.sql (pushes land in test_pushes).
 # A cases: part 1 (staff, shifts, the contact). B cases: part 2 (owners, the help number, handover,
 # the tick and the automatic off-shift). C cases: part 3 (the ownership guard in the seven assist
 # actions, opening and taking a ride, the owner in the panel's reads, the self-check).
-#   supabase/tests/00681/run.sh none
+#   supabase/tests/00683/run.sh none
 #       -> prod as captured + tests (RED: support_staff and the shift functions do not exist)
-#   supabase/tests/00681/run.sh supabase/migrations/00681_support_ride_owner.sql
-#       -> the same + 00681 applied twice, each in one transaction (GREEN), a snapshot showing it
+#   supabase/tests/00683/run.sh supabase/migrations/00683_support_ride_owner.sql
+#       -> the same + 00683 applied twice, each in one transaction (GREEN), a snapshot showing it
 #          changed no other function, a CRLF copy applied to a fresh database, and negative proofs
 #          of the file's own checks
 # The migration path is relative to the repository root, or absolute.
 # Cluster: any Postgres 16 with a superuser. Default: psql on 127.0.0.1:${PGPORT:-5433} as pgtest.
-#   PSQL="<bin>/psql.exe -h 127.0.0.1 -p <port> -U pgtest" supabase/tests/00681/run.sh ...
+#   PSQL="<bin>/psql.exe -h 127.0.0.1 -p <port> -U pgtest" supabase/tests/00683/run.sh ...
 set -u
 export PGCLIENTENCODING=UTF8 LC_MESSAGES=C
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -21,7 +21,7 @@ ROOT="$(cd "$DIR/../../.." && pwd)"
 MIG="${1:-none}"
 case "$MIG" in none|/*|[A-Za-z]:*) FILE="$MIG" ;; *) FILE="$ROOT/$MIG" ;; esac
 PSQL="${PSQL:-psql -h 127.0.0.1 -p ${PGPORT:-5433} -U pgtest}"
-DB=pr681
+DB=pr683
 AS_OWNER="SET SESSION AUTHORIZATION postgres; SET search_path = '';"
 PASS=0; FAIL=0
 ok(){ echo "PASS  $1"; PASS=$((PASS+1)); }
@@ -103,14 +103,15 @@ HELPERS="SELECT string_agg(p.proname || '=' || md5(p.prosrc), ',' ORDER BY p.pro
   '_html_escape', 'get_platform_config_text', '_support_alert', 'request_ride_help', 'notify_support_waiting_rides',
   '_ops_allow', $PATCHED3_LIST, 'admin_support_waiting_rides')"
 # md5 of prosrc in prod on 2026-11-07 (part 3's re-captured on 2026-11-09), re-confirmed on 2026-11-14
-# after Moto Deportiva (00679/00680) landed: all 24 unchanged.
+# after Moto Deportiva (00679/00680) landed, and again after master's 00681 (the automatic apology)
+# and 00682 (the support number list): all 24 unchanged.
 PROD_HELPERS="_html_escape=11824274e20a4bc4e469ca12e4dc7c10,_ops_allow=4762cf93cce4a747dc420cf3cdd7c7e9,_ride_short_code=7dae14319bfae57a2ac8b4317e928513,_ride_type_label=6334b65ed6bc08e91f9d4cfdee97976e,_support_alert=992c2ce11b664d72e437a683170abb97,admin_active_ride_context=62031d5be71f09241122be3e64bb3957,admin_advance_active_ride=bc7187cb8d4dbde6c64886e2ee9e3ff8,admin_assign_ride_to_driver=96a14f1ef39f9d397884457278efd699,admin_cancel_ride=21b4dfa6427e7c8976ef1324ddfa732b,admin_change_ride_service=06b0af6654384570c38a76389681d43a,admin_complete_active_ride=149e13089c12d43458a75ee58dd2a9d3,admin_offer_ride_to_driver=0085408045cc5fbf2dbc3e2eb0da92f5,admin_release_active_ride=8f18bf4984f52e41c93cdb16b062eeff,admin_ride_assist_context=2b7a2a9cb6ca0566c3fde8614220e91a,admin_support_waiting_rides=6220ecbb3b398b62c22dc2534ce55570,current_user_role=cb4a7c12d4e21fe2997135833f141e25,get_platform_config_numeric=13d2587037eca74854cf2394ba42a90c,get_platform_config_text=407a7b835c527164a4aa8b3aa8525ba5,is_admin=22cb75e91980d512498034cd33e1eda2,is_operator=16438eb527af61eaa2d0b3d9a53f08f9,is_ops_staff=d6774e4677be1072e66b247492e9cb9a,log_rpc_attempt=0a902c34a1148dac5686403a7c941bc0,notify_support_waiting_rides=c69e1ca717436dad23eada26af46e0ce,request_ride_help=0568a44a41e6b9ef925ae1b2b2799cb1"
-# md5 of prosrc of the twelve bodies 00681 patches, after the patch (part 3's nine: see the file's
+# md5 of prosrc of the twelve bodies 00683 patches, after the patch (part 3's nine: see the file's
 # Checks block).
-PATCHED_MD5="_support_alert=229feacb308cc7f679426a21c1759c7a,admin_active_ride_context=350f050f3a233b93296ef8b9caa613f6,admin_advance_active_ride=bf81807b07b6238d06c5d2358b5ab693,admin_assign_ride_to_driver=d5f1ae456461ad3e4da3d8d7a2542bf2,admin_cancel_ride=a9de85a9bbb12f207973715bd895af13,admin_change_ride_service=923187b6d30bc1d3b32c7b9974a2c38c,admin_complete_active_ride=2494b271699e03da7a25ac467f0f23b7,admin_offer_ride_to_driver=4a878a25798638296046482213f02738,admin_release_active_ride=9f09fb0de2a3ffbde4046d64785502b6,admin_ride_assist_context=7dc43249a6575222595416f5a4357163,notify_support_waiting_rides=f2bc190a812fc03442921018e32fee44,request_ride_help=6d61d18cdba71a26c1ec4647ff9e372e"
+PATCHED_MD5="_support_alert=ecc45ded92c04f912250aabe74790149,admin_active_ride_context=200497cb339a889966af5794ddda2fad,admin_advance_active_ride=1bd366aeeb295f65c3be1a34d6dc510f,admin_assign_ride_to_driver=b74ff9ea6ab17c6aa64148297e64bcf3,admin_cancel_ride=31ec7299e61d01e3dd9a0923684bcfc1,admin_change_ride_service=5c44eef487500edc1364e6a3b3040a49,admin_complete_active_ride=7e0de051996932f8bf9775f83069ac56,admin_offer_ride_to_driver=acb8692ca5d6ea8cfe0211646996a9a7,admin_release_active_ride=4c382b50bfb617f966b5117a72dc7d23,admin_ride_assist_context=59ad143a337182294365ab138a2790d5,notify_support_waiting_rides=141a09e7e6a5e09dd03caee251ecb874,request_ride_help=64b18c0490670a3a0163ada4acefd79d"
 # The cron with nobody on shift: R1, R2 and R4 wait (R3 already asked for help), and the digest goes
 # to two addresses. Its return value, every push and e-mail (label and md5 of the body) and the
-# stamps it leaves. B19 compares the result after 00681 with the result before it.
+# stamps it leaves. B19 compares the result after 00683 with the result before it.
 CRON_CASE="$(tx "INSERT INTO public.platform_config (key, value)
     VALUES ('support_alert_email', '\"ops@tricigo.com, soporte@tricigo.com\"'::jsonb);
   UPDATE public.rides SET created_at = now() - CASE id WHEN '$R1' THEN interval '4 minutes'
@@ -125,9 +126,10 @@ CRON_CASE="$(tx "INSERT INTO public.platform_config (key, value)
 
 mkdb $DB
 run $DB "$SEED" >/dev/null
-val "F0 the scaffold has prod's bodies (the helpers, the twelve 00681 patches, the banner's v1, the wait-alert cron)" "$HELPERS" "$PROD_HELPERS"
-# The stubs (what the live bodies call and 00681 does not touch: end of tables.sql, and the two of
-# scaffold.sql) keep prod's argument and result types, captured on 2026-11-14. Moto Deportiva (00679)
+val "F0 the scaffold has prod's bodies (the helpers, the twelve 00683 patches, the banner's v1, the wait-alert cron)" "$HELPERS" "$PROD_HELPERS"
+# The stubs (what the live bodies call and 00683 does not touch: end of tables.sql, and the two of
+# scaffold.sql) keep prod's argument and result types, captured on 2026-11-14 (unchanged after
+# master's 00681 and 00682). Moto Deportiva (00679)
 # changed the bodies of _driver_can_serve_ride (770b020e…) and _ride_service_change_error
 # (f782b918…), not their signatures: the check it adds (_md_driver_allowed) concerns only its
 # pilots and the moto_deportiva service, which no case here uses. ST_Distance stays out: prod's is
@@ -144,14 +146,14 @@ OTHERS_BEFORE=$(run $DB "$OTHERS")
 CRON_BEFORE=$(run $DB "$CRON_CASE")
 
 if [ "$MIG" != none ]; then
-  r=$(apply $DB "$FILE"); [ "$r" = applied ] && ok "M1 00681 applies (1st)" || ko "M1 00681 applies (1st)" "$r"
+  r=$(apply $DB "$FILE"); [ "$r" = applied ] && ok "M1 00683 applies (1st)" || ko "M1 00683 applies (1st)" "$r"
   run $DB "UPDATE public.platform_config SET value = '90'::jsonb WHERE key = 'support_handoff_after_s';" >/dev/null
-  r=$(apply $DB "$FILE"); [ "$r" = applied ] && ok "M2 00681 applies again" || ko "M2 00681 applies again" "$r"
+  r=$(apply $DB "$FILE"); [ "$r" = applied ] && ok "M2 00683 applies again" || ko "M2 00683 applies again" "$r"
   val "M3 a setting changed in between survives the second apply" \
       "SELECT value FROM public.platform_config WHERE key = 'support_handoff_after_s';
        UPDATE public.platform_config SET value = '60'::jsonb WHERE key = 'support_handoff_after_s';" "90"
   val "M4 no other function changed" "$OTHERS" "$OTHERS_BEFORE"
-  val "M5 the twelve patched bodies carry their 00681 md5" \
+  val "M5 the twelve patched bodies carry their 00683 md5" \
       "SELECT string_agg(p.proname || '=' || md5(p.prosrc), ',' ORDER BY p.proname) FROM pg_proc p
         WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ($PATCHED_LIST, $PATCHED3_LIST)" "$PATCHED_MD5"
 fi
@@ -356,10 +358,10 @@ val "B0 part 2's functions: SECURITY DEFINER with search_path; helpers and tick 
       ORDER BY p.proname" \
     "_support_alert:001:true:search_path=public, pg_catalog;_support_alert_text:000:true:search_path=public, pg_catalog;_support_handoff_rides_of:000:true:search_path=public, pg_catalog;_support_phone_for_ride:000:true:search_path=public, pg_catalog;_support_pickup_for:000:true:search_path=public, pg_catalog;_support_ride_open:000:true:search_path=public, pg_catalog;_support_send:000:true:search_path=public, pg_catalog;notify_support_waiting_rides:001:true:search_path=public, pg_catalog;request_ride_help:011:true:search_path=public, pg_catalog;support_handoff_tick:000:true:search_path=public, pg_catalog"
 case "$CRON_BEFORE" in
-  "3;support-alert-email:"*) val "B19 the cron's pushes, digest e-mails and stamps are the same as before 00681 (nobody on shift)" \
+  "3;support-alert-email:"*) val "B19 the cron's pushes, digest e-mails and stamps are the same as before 00683 (nobody on shift)" \
                                  "$CRON_CASE" "$CRON_BEFORE" ;;
-  *) ko "B19 the cron's pushes, digest e-mails and stamps are the same as before 00681 (nobody on shift)" \
-        "the run before 00681 gave [$CRON_BEFORE]" ;;
+  *) ko "B19 the cron's pushes, digest e-mails and stamps are the same as before 00683 (nobody on shift)" \
+        "the run before 00683 gave [$CRON_BEFORE]" ;;
 esac
 
 # ── Who an alert goes to ──────────────────────────────────────

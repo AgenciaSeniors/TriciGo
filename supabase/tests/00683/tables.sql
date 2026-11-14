@@ -1,8 +1,8 @@
 -- Tables and enums as in prod on 2026-11-07 (information_schema): users, driver_profiles and rides
--- as in supabase/tests/00671/tables.sql (same columns today), with the NOT NULL and defaults 00681
+-- as in supabase/tests/00671/tables.sql (same columns today), with the NOT NULL and defaults 00683
 -- reads; admin_actions, ride_assist, platform_config and rpc_attempt_log as in prod;
 -- service_type_configs reduced to what _ride_type_label reads. PostGIS types become text. No
--- triggers and no RLS on these: the cases exercise the 00681 functions and support_staff's policy.
+-- triggers and no RLS on these: the cases exercise the 00683 functions and support_staff's policy.
 CREATE TYPE public.driver_gps_status AS ENUM ('healthy', 'unavailable', 'rider_consented');
 
 CREATE TYPE public.driver_status AS ENUM ('pending_verification', 'under_review', 'approved', 'rejected', 'suspended');
@@ -324,7 +324,7 @@ CREATE TABLE public.fleet_members (
   status text NOT NULL DEFAULT 'pending_review'::text
 );
 
--- Stubs of what those bodies call and 00681 does not touch, with prod's signatures (as the 00671
+-- Stubs of what those bodies call and 00683 does not touch, with prod's signatures (as the 00671
 -- and 00677 rehearsals): no PostGIS, no dispatch, no wallets. The service change writes the new
 -- type and fare, and complete_ride_and_pay only closes the ride, so the owner's path (C1b) can be
 -- followed to the end. run.sh F0b compares their signatures with prod's (re-captured on 2026-11-14,

@@ -134,7 +134,7 @@ export default function RideAssistPage() {
   const ownership = assistOwnership(owner?.id, userId || null);
   const ownerOpenedAt = owner?.opened_at ?? null;
 
-  // Opening the page counts as the owner opening the ride: the 1-minute handover stops (00681).
+  // Opening the page counts as the owner opening the ride: the 1-minute handover stops (00683).
   useEffect(() => {
     if (id) void rideAssistService.openAssist(id);
   }, [id]);

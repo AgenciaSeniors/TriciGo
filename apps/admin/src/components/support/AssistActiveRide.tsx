@@ -64,7 +64,7 @@ export function AssistActiveRide({
   onChanged: () => Promise<void>;
   /** Shows the advance, complete and release buttons (rides.act). */
   allowed?: boolean;
-  /** Someone else owns the ride (00681): every action stays disabled until support takes it. */
+  /** Someone else owns the ride (00683): every action stays disabled until support takes it. */
   disabled?: boolean;
 }) {
   const { t } = useTranslation('admin');

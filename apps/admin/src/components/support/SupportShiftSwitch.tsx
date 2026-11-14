@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * The "En turno" switch in the header, for ops staff (00681). Whoever is on shift owns the rides
+ * The "En turno" switch in the header, for ops staff (00683). Whoever is on shift owns the rides
  * that ask for support, and riders and drivers write to her WhatsApp. It starts off; turning it on
  * the first time asks for the number (prefilled from her account phone). The chevron next to it
  * opens who else is on shift and lets her change the number. The status is polled every 30 s so an
@@ -61,7 +61,7 @@ export function SupportShiftSwitch() {
       lastOnRef.current = on;
       setStatus(next);
     } catch (err) {
-      // Keep what is shown; the next poll retries. A server without 00681 has no switch at all.
+      // Keep what is shown; the next poll retries. A server without 00683 has no switch at all.
       if (mountedRef.current && err instanceof AppError && err.code === RIDE_ASSIST_UNAVAILABLE) setUnavailable(true);
     }
   }, [showToast, t]);

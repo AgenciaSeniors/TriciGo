@@ -76,7 +76,7 @@ export function Header() {
   const { role } = usePanelRole();
   const panelRole = menuRole(role);
   const isMarketing = panelRole === 'marketing';
-  // The support shift (00681) is for ops staff; a role that could not be read gets nothing.
+  // The support shift (00683) is for ops staff; a role that could not be read gets nothing.
   const isOpsStaff = role === 'operator' || role === 'admin' || role === 'super_admin';
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);

@@ -116,7 +116,7 @@ const KNOWN_KEYS: Record<string, KnownKey> = {
   low_rating_rider_dispatch_limit: { type: 'number', helpKey: 'platform_config.low_rating_rider_dispatch_limit_help' },
   low_rating_rider_radius_m: { type: 'number', helpKey: 'platform_config.low_rating_rider_radius_m_help' },
 
-  // ── Support shift: handover of rides nobody opens (00681) ──
+  // ── Support shift: handover of rides nobody opens (00683) ──
   support_handoff_after_s: { type: 'number', helpKey: 'platform_config.support_handoff_after_s_help' },
   support_auto_offshift_misses: { type: 'number', helpKey: 'platform_config.support_auto_offshift_misses_help' },
 

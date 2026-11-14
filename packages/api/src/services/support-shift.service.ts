@@ -1,5 +1,5 @@
 // ============================================================
-// TriciGo — the operator's support shift (migration 00681)
+// TriciGo — the operator's support shift (migration 00683)
 // The panel's "En turno" switch. The server answers an expected refusal as `{ error: code }`
 // (forbidden, whatsapp_required, invalid_whatsapp, invalid_request); it comes back here as an
 // AppError whose `code` is that string.

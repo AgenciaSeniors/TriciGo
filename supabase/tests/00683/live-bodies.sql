@@ -1,9 +1,9 @@
 -- Function bodies as in prod on 2026-11-07 (pg_get_functiondef, byte for byte), with prod's EXECUTE
 -- grants (proacl). run.sh checks their md5(prosrc) against prod's before anything else (F0).
--- The helpers 00681 calls; the bodies part 2 patches (_support_alert, request_ride_help) and the
+-- The helpers 00683 calls; the bodies part 2 patches (_support_alert, request_ride_help) and the
 -- cron function that calls _support_alert (notify_support_waiting_rides, with the two helpers it
 -- needs). Part 3: the seven assist actions it guards, the two contexts it extends, the banner's v1
--- and _ops_allow (what they call and 00681 does not touch is stubbed at the end of tables.sql).
+-- and _ops_allow (what they call and 00683 does not touch is stubbed at the end of tables.sql).
 
 CREATE OR REPLACE FUNCTION public.current_user_role()
  RETURNS user_role
