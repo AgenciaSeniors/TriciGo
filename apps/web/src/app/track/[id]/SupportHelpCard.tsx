@@ -98,23 +98,32 @@ export function SupportHelpCard({ rideId, startedAtMs, sharedRide, onChanged }: 
   const helpUrl = phone ? waMeLink(phone, helpText) : null;
 
   // Opens the tab inside the click (a window.open after an await is blocked as a popup), then
-  // points it at the ride owner's number once the server answers, else the fallback number.
+  // points it at the ride owner's number once the server answers (at most 4 s, like the app),
+  // else the fallback number. Never navigates the tracking tab away: when nothing can be
+  // loaded into the new tab, the notice tells the rider how to reach support.
   const onHelpClick = (e: MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
     const tab = window.open('about:blank', '_blank');
     if (tab) tab.opener = null;
     setHelpSent(true);
     void (async () => {
-      const res = await rideAssistService.requestHelp(rideId);
+      const code = rideShortCode(rideId);
+      const res = await Promise.race([
+        rideAssistService.requestHelp(rideId),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 4_000)),
+      ]);
       const target = res?.supportPhone ?? phone;
       const url = target ? waMeLink(target, helpText) : null;
-      if (url) {
-        if (tab) tab.location.href = url;
-        else window.location.assign(url);
-      } else {
-        tab?.close();
-        setNotice(t('track.support_help_no_contact', { code: rideShortCode(rideId) }));
+      if (url && tab && !tab.closed) {
+        tab.location.href = url;
+        return;
       }
+      if (tab && !tab.closed) tab.close();
+      setNotice(
+        target
+          ? t('track.support_help_no_whatsapp', { code, phone: target })
+          : t('track.support_help_no_contact', { code }),
+      );
     })();
   };
 

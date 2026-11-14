@@ -455,6 +455,8 @@
   },
 
   "onboarding": {
+    "contact_support_email": "Escribir a soporte por correo",
+    "support_email_subject": "Ayuda con mi cuenta de conductor",
     "title": "Registro de conductor",
     "step_personal": "Datos personales",
     "step_vehicle": "Vehículo",

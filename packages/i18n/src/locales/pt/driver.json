@@ -455,6 +455,8 @@
   },
 
   "onboarding": {
+    "contact_support_email": "Escrever ao suporte por e-mail",
+    "support_email_subject": "Ajuda com minha conta de motorista",
     "title": "Cadastro de motorista",
     "step_personal": "Dados pessoais",
     "step_vehicle": "Veículo",

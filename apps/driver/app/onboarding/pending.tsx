@@ -19,8 +19,12 @@ import { inviteCodeErrorMessage } from '@/utils/inviteCode';
 
 export default function PendingScreen() {
   const { t } = useTranslation('driver');
-  // Support number from the server (operator on shift); the support button hides without one.
+  // Support number from the server (operator on shift). Without one the support button
+  // writes an e-mail instead of opening WhatsApp, so nobody is left without a way out.
   const { phone: supportPhone } = useSupportPhone();
+  const supportTitle = supportPhone
+    ? t('onboarding.contact_support', { defaultValue: 'Contactar soporte' })
+    : t('onboarding.contact_support_email');
   const user = useAuthStore((s) => s.user);
   const setProfile = useDriverStore((s) => s.setProfile);
   const [driverStatus, setDriverStatus] = useState<string>('under_review');
@@ -31,7 +35,12 @@ export default function PendingScreen() {
   // quick way out. Previous screens dead-ended them.
   const openSupport = useCallback(() => {
     const msg = encodeURIComponent(t('onboarding.support_prefill', { defaultValue: 'Hola, necesito ayuda con mi cuenta de conductor.' }));
-    if (!supportPhone) return;
+    if (!supportPhone) {
+      // No number known (offline on first launch, nobody on shift): e-mail is the way out.
+      const subject = encodeURIComponent(t('onboarding.support_email_subject'));
+      Linking.openURL(`mailto:soporte@tricigo.com?subject=${subject}`).catch(() => {});
+      return;
+    }
     Linking.openURL(`https://wa.me/${supportPhone.replace(/[^0-9]/g, '')}?text=${msg}`)
       .catch(() => Linking.openURL(`tel:${supportPhone}`).catch(() => {}));
   }, [t, supportPhone]);
@@ -206,16 +215,14 @@ export default function PendingScreen() {
               fullWidth
               onPress={() => router.replace('/onboarding/documents')}
             />
-            {supportPhone ? (
-              <Button
-                title={t('onboarding.contact_support', { defaultValue: 'Contactar soporte' })}
-                variant="outline"
-                size="lg"
-                fullWidth
-                forceDark
-                onPress={openSupport}
-              />
-            ) : null}
+            <Button
+              title={supportTitle}
+              variant="outline"
+              size="lg"
+              fullWidth
+              forceDark
+              onPress={openSupport}
+            />
           </View>
         </View>
       </Screen>
@@ -254,14 +261,12 @@ export default function PendingScreen() {
             </View>
           )}
           <View className="w-full mt-8">
-            {supportPhone ? (
-              <Button
-                title={t('onboarding.contact_support', { defaultValue: 'Contactar soporte' })}
-                size="lg"
-                fullWidth
-                onPress={openSupport}
-              />
-            ) : null}
+            <Button
+              title={supportTitle}
+              size="lg"
+              fullWidth
+              onPress={openSupport}
+            />
           </View>
         </View>
       </Screen>
@@ -349,16 +354,14 @@ export default function PendingScreen() {
               onPress={openWhatsappGroup}
             />
           )}
-          {supportPhone ? (
-            <Button
-              title={t('onboarding.contact_support', { defaultValue: 'Contactar soporte' })}
-              variant="outline"
-              size="lg"
-              fullWidth
-              forceDark
-              onPress={openSupport}
-            />
-          ) : null}
+          <Button
+            title={supportTitle}
+            variant="outline"
+            size="lg"
+            fullWidth
+            forceDark
+            onPress={openSupport}
+          />
           <Pressable onPress={doLogout} hitSlop={10} className="py-2">
             <Text variant="caption" style={{ color: midnightEmber.map.text.tertiary, textAlign: 'center' }}>
               {t('onboarding.switch_account', { defaultValue: 'Cambiar de cuenta' })}
