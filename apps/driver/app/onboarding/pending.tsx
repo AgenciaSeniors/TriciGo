@@ -10,18 +10,22 @@ import { Input } from '@tricigo/ui/Input';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber } from '@tricigo/theme';
 import { driverService, referralService, walletService, useSupportPhones } from '@tricigo/api';
-import { primarySupportPhone, supportWhatsAppUrl } from '@tricigo/utils';
+import { orderSupportPhones, primarySupportPhone, supportWhatsAppUrl } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useLogout } from '@/hooks/useLogout';
+import { useSupportPhone } from '@/hooks/useSupportPhone';
 import { NotificationPermissionSheet } from '@/components/NotificationPermissionSheet';
 import { inviteCodeErrorMessage } from '@/utils/inviteCode';
 
 export default function PendingScreen() {
   const { t } = useTranslation('driver');
   const user = useAuthStore((s) => s.user);
-  // Support WhatsApp / phone: the first of the numbers set in platform_config (00682).
-  const supportPhone = primarySupportPhone(useSupportPhones());
+  // Support WhatsApp / phone: the operator on shift when the server names one (00683),
+  // else the first of the numbers set in platform_config (00682). Never empty.
+  const { phone: contactPhone } = useSupportPhone();
+  const configPhones = useSupportPhones();
+  const supportPhone = primarySupportPhone(orderSupportPhones(contactPhone, configPhones));
   const setProfile = useDriverStore((s) => s.setProfile);
   const [driverStatus, setDriverStatus] = useState<string>('under_review');
   const [rejectionReason, setRejectionReason] = useState<string | null>(null);

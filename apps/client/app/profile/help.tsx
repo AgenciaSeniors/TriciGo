@@ -15,14 +15,15 @@ import { useTokens } from '@/hooks/useTokens';
 import { useThemeStore } from '@/stores/theme.store';
 import { useTranslation } from '@tricigo/i18n';
 import { supportService, useSupportPhones } from '@tricigo/api';
-import { getErrorMessage, logger, triggerHaptic, formatTimestamp, formatSupportPhone, primarySupportPhone, supportWhatsAppUrl } from '@tricigo/utils';
+import { getErrorMessage, logger, triggerHaptic, formatTimestamp, formatSupportPhone, orderSupportPhones, primarySupportPhone, supportWhatsAppUrl } from '@tricigo/utils';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { useAuthStore } from '@/stores/auth.store';
+import { useSupportPhone } from '@/hooks/useSupportPhone';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { SupportTicket, TicketCategory } from '@tricigo/types';
 
-// Same e-mail support.tsx links to. The WhatsApp numbers come from
-// platform_config (useSupportPhones, 00682).
+// Same e-mail support.tsx links to. The WhatsApp numbers: the operator on shift
+// (useSupportPhone, 00683) first, then platform_config's list (useSupportPhones, 00682).
 const SUPPORT_EMAIL = 'soporte@tricigo.com';
 
 const FAQ_KEYS = [
@@ -59,7 +60,9 @@ export default function HelpScreen() {
     elevation: 2,
   };
   const userId = useAuthStore((s) => s.user?.id);
-  const supportPhones = useSupportPhones();
+  const { phone: contactPhone } = useSupportPhone();
+  const configPhones = useSupportPhones();
+  const supportPhones = orderSupportPhones(contactPhone, configPhones);
   const primaryPhoneLabel = formatSupportPhone(primarySupportPhone(supportPhones));
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const [faqSearch, setFaqSearch] = useState('');

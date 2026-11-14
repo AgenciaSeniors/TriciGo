@@ -10,15 +10,50 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ArrowRight, LifeBuoy, VolumeX } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
-import { formatCUP } from '@tricigo/utils';
+import type { SupportWaitingRide } from '@tricigo/api';
+import { assistOwnership, formatCUP } from '@tricigo/utils';
 import { useSupportWaitingRides } from '@/hooks/useSupportWaitingRides';
 import { chimeReady, unlockChime } from '@/lib/chime';
 import { rideTypeLabel } from '@/lib/rideType';
 import { waitLabel } from './supportFormat';
 
+/**
+ * Who has the ride, from the viewer's side: "Tuyo", "Lo atiende {{name}}" ("{{name}} (fuera de
+ * turno)" when the owner switched off) or "Sin asignar". The banner is always red or amber, so the
+ * chips are tuned for white text on it in both themes.
+ */
+function OwnerChip({ ride, viewerId }: { ride: SupportWaitingRide; viewerId: string | null }) {
+  const { t } = useTranslation('admin');
+  const who = assistOwnership(ride.owner_id, viewerId);
+  const base = 'whitespace-nowrap rounded-full px-2 py-0.5 text-[10.5px] font-semibold';
+  if (who === 'mine') {
+    return (
+      // eslint-disable-next-line tricigo/require-dark-variant -- white chip on a banner that is always red or amber, in both themes
+      <span className={`${base} bg-white uppercase text-neutral-900`}>
+        {t('ride_assist.chip_owner_mine', { defaultValue: 'Tuyo' })}
+      </span>
+    );
+  }
+  if (who === 'other') {
+    const name = ride.owner_name?.trim() || '—';
+    return (
+      <span className={`${base} bg-black/25`}>
+        {ride.owner_on_shift === false
+          ? t('ride_assist.chip_owner_off_shift', { name, defaultValue: '{{name}} (fuera de turno)' })
+          : t('ride_assist.chip_owner_other', { name, defaultValue: 'Lo atiende {{name}}' })}
+      </span>
+    );
+  }
+  return (
+    <span className={`${base} border border-white/70`}>
+      {t('ride_assist.chip_owner_none', { defaultValue: 'Sin asignar' })}
+    </span>
+  );
+}
+
 export function SupportWaitingBanner() {
   const { t } = useTranslation('admin');
-  const { rides, loadFailed } = useSupportWaitingRides();
+  const { rides, loadFailed, viewerId } = useSupportWaitingRides();
   const [soundOn, setSoundOn] = useState(false);
 
   // Any click on the panel unlocks the audio the browser keeps locked until then.
@@ -90,6 +125,7 @@ export function SupportWaitingBanner() {
                       {t('ride_assist.chip_help', { defaultValue: 'Pidió ayuda' })}
                     </span>
                   )}
+                  <OwnerChip ride={r} viewerId={viewerId} />
                   {r.is_test && (
                     <span className="rounded-full bg-black/20 px-2 py-0.5 text-[10.5px] font-semibold uppercase">
                       {t('ride_assist.chip_test', { defaultValue: 'Prueba' })}

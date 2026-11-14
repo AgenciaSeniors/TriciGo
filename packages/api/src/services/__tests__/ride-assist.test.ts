@@ -17,8 +17,15 @@ describe('rideAssistService', () => {
   describe('requestHelp (the rider never waits on it: WhatsApp opens either way)', () => {
     it('returns the ride code', async () => {
       mockRpc.mockResolvedValueOnce({ data: { success: true, code: 'F1000000' }, error: null });
-      await expect(rideAssistService.requestHelp('r-1')).resolves.toEqual({ code: 'F1000000' });
+      await expect(rideAssistService.requestHelp('r-1')).resolves.toEqual({ code: 'F1000000', supportPhone: null });
       expect(mockRpc).toHaveBeenCalledWith('request_ride_help', { p_ride_id: 'r-1' });
+    });
+
+    it('maps support_phone to supportPhone, and gives null when the server sends none', async () => {
+      mockRpc.mockResolvedValueOnce({ data: { success: true, code: 'F1000000', support_phone: '+5355123456' }, error: null });
+      await expect(rideAssistService.requestHelp('r-1')).resolves.toEqual({ code: 'F1000000', supportPhone: '+5355123456' });
+      mockRpc.mockResolvedValueOnce({ data: { success: true, code: 'F1000000', support_phone: null }, error: null });
+      await expect(rideAssistService.requestHelp('r-1')).resolves.toEqual({ code: 'F1000000', supportPhone: null });
     });
 
     it('returns null when the migration is missing, the server refuses, or the network fails', async () => {
@@ -117,12 +124,71 @@ describe('rideAssistService', () => {
       mockRpc.mockResolvedValueOnce({ data: rows, error: null });
       await expect(rideAssistService.getWaitingRides()).resolves.toEqual(rows);
       mockRpc.mockResolvedValueOnce({ data: null, error: MISSING });
+      mockRpc.mockResolvedValueOnce({ data: null, error: MISSING });
       await expect(rideAssistService.getWaitingRides()).resolves.toEqual([]);
     });
 
     it('throws when the caller is not an admin', async () => {
       mockRpc.mockResolvedValueOnce({ data: null, error: { code: '42501', message: 'forbidden' } });
       await expect(rideAssistService.getWaitingRides()).rejects.toMatchObject({ message: 'forbidden' });
+    });
+
+    it('calls v2 (with the owner) first', async () => {
+      const row = { ride_id: 'r-1', owner_id: 'u-1', owner_name: 'Lete', owner_on_shift: true, owner_assigned_at: 't1', owner_opened_at: null };
+      mockRpc.mockResolvedValueOnce({ data: [row], error: null });
+      await expect(rideAssistService.getWaitingRides()).resolves.toEqual([row]);
+      expect(mockRpc).toHaveBeenCalledTimes(1);
+      expect(mockRpc).toHaveBeenCalledWith('admin_support_waiting_rides_v2');
+    });
+
+    it('falls back to v1 with the owner fields null when v2 is missing', async () => {
+      const v1 = { ride_id: 'r-1', code: 'A1', wait_s: 5 };
+      mockRpc.mockResolvedValueOnce({ data: null, error: MISSING });
+      mockRpc.mockResolvedValueOnce({ data: [v1], error: null });
+      await expect(rideAssistService.getWaitingRides()).resolves.toEqual([
+        { ...v1, owner_id: null, owner_name: null, owner_on_shift: null, owner_assigned_at: null, owner_opened_at: null },
+      ]);
+      expect(mockRpc).toHaveBeenNthCalledWith(2, 'admin_support_waiting_rides');
+    });
+  });
+
+  describe('takeRide', () => {
+    it('sends the owner the panel saw', async () => {
+      mockRpc.mockResolvedValueOnce({ data: { success: true }, error: null });
+      await expect(rideAssistService.takeRide('r-1', 'u-1')).resolves.toBeUndefined();
+      expect(mockRpc).toHaveBeenCalledWith('ops_take_ride_assist', { p_ride_id: 'r-1', p_expected_owner_id: 'u-1' });
+    });
+
+    it.each(['ride_owned_by_other', 'ride_changed', 'self_ride', 'ride_not_found', 'forbidden'])(
+      'throws an AppError with the server code %s',
+      async (code) => {
+        mockRpc.mockResolvedValueOnce({ data: { error: code }, error: null });
+        await expect(rideAssistService.takeRide('r-1', 'u-1')).rejects.toMatchObject({ code });
+      },
+    );
+
+    it('throws RIDE_ASSIST_UNAVAILABLE when the migration is missing', async () => {
+      mockRpc.mockResolvedValueOnce({ data: null, error: MISSING });
+      await expect(rideAssistService.takeRide('r-1', 'u-1')).rejects.toMatchObject({ code: RIDE_ASSIST_UNAVAILABLE });
+    });
+  });
+
+  describe('openAssist (opening must never break the page)', () => {
+    it('calls the RPC', async () => {
+      mockRpc.mockResolvedValueOnce({ data: { success: true, is_owner: true }, error: null });
+      await expect(rideAssistService.openAssist('r-1')).resolves.toBeUndefined();
+      expect(mockRpc).toHaveBeenCalledWith('ops_open_ride_assist', { p_ride_id: 'r-1' });
+    });
+
+    it('resolves when the RPC errors, refuses, is missing or the network fails', async () => {
+      mockRpc.mockResolvedValueOnce({ data: null, error: { code: '57014', message: 'timeout' } });
+      await expect(rideAssistService.openAssist('r-1')).resolves.toBeUndefined();
+      mockRpc.mockResolvedValueOnce({ data: { error: 'forbidden' }, error: null });
+      await expect(rideAssistService.openAssist('r-1')).resolves.toBeUndefined();
+      mockRpc.mockResolvedValueOnce({ data: null, error: MISSING });
+      await expect(rideAssistService.openAssist('r-1')).resolves.toBeUndefined();
+      mockRpc.mockRejectedValueOnce(new TypeError('Network request failed'));
+      await expect(rideAssistService.openAssist('r-1')).resolves.toBeUndefined();
     });
   });
 

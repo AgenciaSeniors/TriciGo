@@ -10,7 +10,8 @@ import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { useSupportPhones } from '@tricigo/api';
-import { formatSupportPhone, supportWhatsAppUrl } from '@tricigo/utils';
+import { formatSupportPhone, orderSupportPhones, supportWhatsAppUrl } from '@tricigo/utils';
+import { useSupportPhone } from '@/hooks/useSupportPhone';
 
 const FAQ_ITEMS = [
   { qKey: 'support.faq_q1', aKey: 'support.faq_a1', defaultQ: '¿Cómo solicito un viaje?', defaultA: 'Abre la app, selecciona tu destino en el mapa o escríbelo en la barra de búsqueda, elige el tipo de vehículo y confirma tu solicitud.' },
@@ -22,9 +23,12 @@ const FAQ_ITEMS = [
 export default function SupportScreen() {
   const { t } = useTranslation('common');
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
-  const supportPhones = useSupportPhones();
+  const { phone: contactPhone } = useSupportPhone();
+  const configPhones = useSupportPhones();
+  const supportPhones = orderSupportPhones(contactPhone, configPhones);
 
-  // One WhatsApp row per support number, in the order set in the panel.
+  // One WhatsApp row per support number: the operator on shift (00683) first, then the
+  // numbers in the order set in the panel (00682).
   const contactMethods = [
     ...supportPhones.map((phone) => ({
       icon: 'logo-whatsapp' as const,

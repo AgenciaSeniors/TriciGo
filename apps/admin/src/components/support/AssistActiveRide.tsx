@@ -56,6 +56,7 @@ export function AssistActiveRide({
   now,
   onChanged,
   allowed = true,
+  disabled = false,
 }: {
   ctx: ActiveRideContext;
   now: number;
@@ -63,6 +64,8 @@ export function AssistActiveRide({
   onChanged: () => Promise<void>;
   /** Shows the advance, complete and release buttons (rides.act). */
   allowed?: boolean;
+  /** Someone else owns the ride (00683): every action stays disabled until support takes it. */
+  disabled?: boolean;
 }) {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
@@ -371,17 +374,17 @@ export function AssistActiveRide({
           {allowed && hasActions && (
             <div className="flex flex-wrap gap-3">
               {showAdvance && (
-                <button type="button" disabled={busy} className={ACTION_BTN} onClick={() => open('advance')}>
+                <button type="button" disabled={busy || disabled} className={ACTION_BTN} onClick={() => open('advance')}>
                   {t(ADVANCE_LABEL[ride.status]!)}
                 </button>
               )}
               {showComplete && (
-                <button type="button" disabled={busy} className={ACTION_BTN} onClick={() => open('complete')}>
+                <button type="button" disabled={busy || disabled} className={ACTION_BTN} onClick={() => open('complete')}>
                   {t('ride_assist.action_complete')}
                 </button>
               )}
               {showRelease && (
-                <button type="button" disabled={busy} className={DANGER_BTN} onClick={() => open('release')}>
+                <button type="button" disabled={busy || disabled} className={DANGER_BTN} onClick={() => open('release')}>
                   {t('ride_assist.action_release')}
                 </button>
               )}

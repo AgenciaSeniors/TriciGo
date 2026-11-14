@@ -6,10 +6,11 @@
 // Without 00628 both stay quiet: getPendingProposal answers null and requestHelp never throws,
 // so the WhatsApp link still works.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type MouseEvent } from 'react';
 import { useTranslation } from '@tricigo/i18n';
 import { isProposalGone, rideAssistService, useSupportPhones, type ServiceProposal } from '@tricigo/api';
-import { formatCUP, primarySupportPhone, rideShortCode, searchHelpAvailable, waMeLink } from '@tricigo/utils';
+import { formatCUP, formatSupportPhone, rideShortCode, searchHelpAvailable, supportHelpPhone, waMeLink } from '@tricigo/utils';
+import { useSupportPhone } from '@/lib/useSupportPhone';
 
 interface Props {
   rideId: string;
@@ -38,13 +39,14 @@ function secondsLeft(proposal: ServiceProposal, nowMs: number): number {
 
 export function SupportHelpCard({ rideId, startedAtMs, sharedRide, onChanged }: Props) {
   const { t } = useTranslation('web');
+  const { phone: contactPhone } = useSupportPhone();
+  const configPhones = useSupportPhones();
   const [now, setNow] = useState(() => Date.now());
   const [proposal, setProposal] = useState<ServiceProposal | null>(null);
   const [answeredId, setAnsweredId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [helpSent, setHelpSent] = useState(false);
-  const supportPhone = primarySupportPhone(useSupportPhones());
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1_000);
@@ -92,10 +94,36 @@ export function SupportHelpCard({ rideId, startedAtMs, sharedRide, onChanged }: 
   const left = proposal ? secondsLeft(proposal, now) : 0;
   const shown = proposal && proposal.id !== answeredId && left > 0 ? proposal : null;
   const showHelp = searchHelpAvailable(Math.floor((now - startedAtMs) / 1000));
-  const helpUrl = waMeLink(
-    supportPhone,
-    t('track.support_help_whatsapp_text', { code: rideShortCode(rideId) }),
-  );
+  const helpText = t('track.support_help_whatsapp_text', { code: rideShortCode(rideId) });
+  // The link's own target (the operator on shift, else the first number set in platform_config,
+  // 00682); on click the ride owner's number replaces it when the server names one.
+  const helpUrl = waMeLink(supportHelpPhone(null, contactPhone, configPhones), helpText);
+
+  // Opens the tab inside the click (a window.open after an await is blocked as a popup), then
+  // points it at the ride owner's number once the server answers (at most 4 s, like the app),
+  // else the operator on shift, else the first configured number. Never navigates the tracking
+  // tab away: when the tab was blocked or closed, the notice gives the number and the ride code.
+  const onHelpClick = (e: MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    const tab = window.open('about:blank', '_blank');
+    if (tab) tab.opener = null;
+    setHelpSent(true);
+    void (async () => {
+      const code = rideShortCode(rideId);
+      const res = await Promise.race([
+        rideAssistService.requestHelp(rideId),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 4_000)),
+      ]);
+      const target = supportHelpPhone(res?.supportPhone, contactPhone, configPhones);
+      const url = waMeLink(target, helpText);
+      if (url && tab && !tab.closed) {
+        tab.location.href = url;
+        return;
+      }
+      if (tab && !tab.closed) tab.close();
+      setNotice(t('track.support_help_no_whatsapp', { code, phone: formatSupportPhone(target) }));
+    })();
+  };
 
   if (!shown && !showHelp && !notice) return null;
 
@@ -179,18 +207,13 @@ export function SupportHelpCard({ rideId, startedAtMs, sharedRide, onChanged }: 
         </div>
       )}
 
-      {showHelp && helpUrl && (
+      {showHelp && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-          {/* A plain link, so the browser opens WhatsApp inside the click (a window.open after
-              an await is blocked as a popup). The alert goes out without waiting: the page stays. */}
           <a
-            href={helpUrl}
+            href={helpUrl ?? '#'}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={() => {
-              void rideAssistService.requestHelp(rideId);
-              setHelpSent(true);
-            }}
+            onClick={onHelpClick}
             style={{
               display: 'block',
               textAlign: 'center',

@@ -5,7 +5,8 @@ import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { rideAssistService, useSupportPhones } from '@tricigo/api';
-import { formatSupportPhone, primarySupportPhone, rideShortCode, searchHelpAvailable, waMeLink } from '@tricigo/utils';
+import { formatSupportPhone, rideShortCode, searchHelpAvailable, supportHelpPhone, waMeLink } from '@tricigo/utils';
+import { useSupportPhone } from '@/hooks/useSupportPhone';
 
 interface SupportHelpButtonProps {
   rideId: string;
@@ -17,25 +18,29 @@ interface SupportHelpButtonProps {
  * "¿No aparece conductor? Pide ayuda" (00628), from 45 s of searching. Alerts support once
  * (request_ride_help) and opens WhatsApp with the ride code; the search keeps running.
  * The alert is awaited for at most 4 s so it leaves before WhatsApp takes the screen (the app
- * can be suspended then); WhatsApp opens either way, also when 00628 is not applied.
+ * can be suspended then); WhatsApp opens either way, also when 00628 is not applied. It opens to
+ * the number the server answered with (the ride's owner on shift, 00683), else the operator
+ * useSupportPhone knows, else the first number set in platform_config (00682): never none.
  */
 export function SupportHelpButton({ rideId, elapsedSeconds }: SupportHelpButtonProps) {
   const { t } = useTranslation('rider');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
-  const supportPhone = primarySupportPhone(useSupportPhones());
+  const { phone: contactPhone } = useSupportPhone();
+  const configPhones = useSupportPhones();
 
   if (!searchHelpAvailable(elapsedSeconds)) return null;
   const code = rideShortCode(rideId);
 
   const onPress = async () => {
     setSending(true);
-    await Promise.race([
+    const res = await Promise.race([
       rideAssistService.requestHelp(rideId),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 4_000)),
     ]);
     setSending(false);
     setSent(true);
+    const supportPhone = supportHelpPhone(res?.supportPhone, contactPhone, configPhones);
     const url = waMeLink(supportPhone, t('home.support_help_whatsapp_text', { code }));
     try {
       if (!url) throw new Error('no WhatsApp link');

@@ -12,11 +12,12 @@ import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { supportService, useSupportPhones } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
+import { useSupportPhone } from '@/hooks/useSupportPhone';
 import type { SupportTicket, TicketCategory } from '@tricigo/types';
-import { cubaTimeZone, formatSupportPhone, supportWhatsAppUrl } from '@tricigo/utils';
+import { cubaTimeZone, formatSupportPhone, orderSupportPhones, supportWhatsAppUrl } from '@tricigo/utils';
 
-// The WhatsApp numbers come from platform_config (useSupportPhones, 00682);
-// the onboarding screen opens the first one.
+// The WhatsApp numbers: the operator on shift (useSupportPhone, 00683) first, then the ones
+// set in platform_config (useSupportPhones, 00682). The onboarding screen opens the first one.
 const SUPPORT_EMAIL = 'soporte@tricigo.com';
 
 const FAQ_KEYS = ['faq_q1', 'faq_q2', 'faq_q3'] as const;
@@ -44,7 +45,9 @@ export default function DriverHelpScreen() {
   const isDark = colorScheme === 'dark';
   const palette = isDark ? cubanDark : cubanLight;
   const userId = useAuthStore((s) => s.user?.id);
-  const supportPhones = useSupportPhones();
+  const { phone: contactPhone } = useSupportPhone();
+  const configPhones = useSupportPhones();
+  const supportPhones = orderSupportPhones(contactPhone, configPhones);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
   // Tickets state

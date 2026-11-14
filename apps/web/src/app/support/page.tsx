@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { getSupabaseClient, supportService, useSupportPhones } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import type { SupportTicket, TicketCategory } from '@tricigo/types';
-import { cubaTimeZone, primarySupportPhone, supportWhatsAppUrl } from '@tricigo/utils';
+import { cubaTimeZone, orderSupportPhones, primarySupportPhone, supportWhatsAppUrl } from '@tricigo/utils';
+import { useSupportPhone } from '@/lib/useSupportPhone';
 
 const STATUS_COLORS: Record<string, string> = {
   open: 'var(--info, #3B82F6)',
@@ -26,6 +27,7 @@ const CATEGORY_VALUES: TicketCategory[] = [
 
 export default function SupportPage() {
   const { t } = useTranslation('web');
+  const { phone: contactPhone } = useSupportPhone();
   const [userId, setUserId] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
@@ -35,7 +37,8 @@ export default function SupportPage() {
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<TicketCategory>('ride_issue');
   const [submitting, setSubmitting] = useState(false);
-  const supportPhone = primarySupportPhone(useSupportPhones());
+  const configPhones = useSupportPhones();
+  const supportPhone = primarySupportPhone(orderSupportPhones(contactPhone, configPhones));
 
   const STATUS_LABELS: Record<string, string> = {
     open: t('support.status_open', { defaultValue: 'Abierto' }),
@@ -164,8 +167,9 @@ export default function SupportPage() {
       {/* Contacto directo — parity con el hub de contacto del /support móvil
           (WhatsApp + correo). El FAQ vive en /help. */}
       <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '2rem' }}>
-        {/* Support WhatsApp: the first number in platform_config
-            (useSupportPhones, 00682), like the one-tap buttons of the apps. */}
+        {/* Support WhatsApp: the operator on shift when the server names one (00683), else the
+            first number in platform_config (useSupportPhones, 00682), like the one-tap buttons
+            of the apps. */}
         <a
           href={supportWhatsAppUrl(supportPhone)}
           target="_blank"

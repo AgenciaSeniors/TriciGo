@@ -28,6 +28,22 @@ export interface SupportWaitingRide {
   dropoff_address: string;
   pending_offers: number;
   is_test: boolean;
+  /** The operator who owns the ride (00683). All null when nobody does, or on a server that predates it. */
+  owner_id: string | null;
+  owner_name: string | null;
+  /** Null with no owner, not false. */
+  owner_on_shift: boolean | null;
+  owner_assigned_at: string | null;
+  owner_opened_at: string | null;
+}
+
+/** The operator who owns an assisted ride (the `owner` key of the two contexts, 00683). */
+export interface AssistOwner {
+  id: string;
+  name: string;
+  on_shift: boolean;
+  assigned_at: string | null;
+  opened_at: string | null;
 }
 
 /** The pending proposal a rider sees (get_my_ride_service_proposal). */
@@ -102,6 +118,8 @@ export interface RideAssistContext {
   help_requested_at: string | null;
   offers: RideAssistOffer[];
   proposal: RideAssistProposal | null;
+  /** Null with no owner. Absent on a server that predates 00683. */
+  owner?: AssistOwner | null;
 }
 
 /** A driver support can call or send the ride to (admin_ride_assist_candidates). */
@@ -184,6 +202,8 @@ export interface ActiveRideContext {
   start_pickup_source: 'recorded' | 'gps' | 'arrival' | 'now' | null;
   /** What the server would accept now. Empty for an accepted/en-route ride scheduled for later. */
   allowed_actions: ActiveRideAction[];
+  /** Null with no owner. Absent on a server that predates 00683. */
+  owner?: AssistOwner | null;
 }
 
 /** What "Avanzar" recorded (admin_advance_active_ride). */
@@ -213,12 +233,13 @@ interface RpcError {
   message?: string;
 }
 
-function isMissingRpc(error: RpcError | null | undefined): boolean {
+/** Shared with the support shift and contact services; not part of the package's public API. */
+export function isMissingRpc(error: RpcError | null | undefined): boolean {
   return !!error && (error.code === 'PGRST202'
     || /could not find the function|not found in the schema cache/i.test(error.message ?? ''));
 }
 
-function unavailable(rpc: string): AppError {
+export function unavailable(rpc: string): AppError {
   return new AppError(`${rpc} is not deployed yet`, RIDE_ASSIST_UNAVAILABLE, 503);
 }
 
@@ -228,7 +249,7 @@ function numberOrNull(value: unknown): number | null {
 }
 
 /** `{ error: code }` from an RPC becomes an AppError carrying the code. */
-function throwIfRefused(rpc: string, data: unknown): void {
+export function throwIfRefused(rpc: string, data: unknown): void {
   const code = (data as { error?: unknown } | null)?.error;
   if (typeof code === 'string' && code) {
     throw new AppError(`${rpc} refused: ${code}`, code, 409, data as Record<string, unknown>);
@@ -248,16 +269,18 @@ export function isProposalGone(err: unknown): boolean {
 export const rideAssistService = {
   /**
    * The rider's "Pedir ayuda": marks the ride and alerts support, once. Returns the ride code
-   * for the WhatsApp message, or null if the server could not take the request. Never throws:
+   * for the WhatsApp message and the number to write to (null on a server that predates 00683,
+   * or with nobody to offer), or null if the server could not take the request. Never throws:
    * the caller opens WhatsApp either way.
    */
-  async requestHelp(rideId: string): Promise<{ code: string } | null> {
+  async requestHelp(rideId: string): Promise<{ code: string; supportPhone: string | null } | null> {
     try {
       const supabase = getSupabaseClient();
       const { data, error } = await supabase.rpc('request_ride_help', { p_ride_id: rideId });
       if (error) return null;
-      const r = data as { success?: boolean; code?: string } | null;
-      return r?.success && r.code ? { code: r.code } : null;
+      const r = data as { success?: boolean; code?: string; support_phone?: unknown } | null;
+      if (!r?.success || !r.code) return null;
+      return { code: r.code, supportPhone: typeof r.support_phone === 'string' && r.support_phone ? r.support_phone : null };
     } catch {
       return null;
     }
@@ -289,15 +312,60 @@ export const rideAssistService = {
     throwIfRefused('respond_ride_service_proposal', data);
   },
 
-  /** The admin banner's rides. None when the migration is missing; other errors throw. */
+  /**
+   * The admin banner's rides, with their owner (v2, 00683). Without v2 it reads v1 and the owner
+   * fields are null. None when neither exists; other errors throw.
+   */
   async getWaitingRides(): Promise<SupportWaitingRide[]> {
     const supabase = getSupabaseClient();
-    const { data, error } = await supabase.rpc('admin_support_waiting_rides');
+    const v2 = await supabase.rpc('admin_support_waiting_rides_v2');
+    if (!v2.error) return (v2.data ?? []) as SupportWaitingRide[];
+    if (!isMissingRpc(v2.error)) throw v2.error;
+
+    const v1 = await supabase.rpc('admin_support_waiting_rides');
+    if (v1.error) {
+      if (isMissingRpc(v1.error)) return [];
+      throw v1.error;
+    }
+    const rows = (v1.data ?? []) as Omit<SupportWaitingRide, 'owner_id' | 'owner_name' | 'owner_on_shift' | 'owner_assigned_at' | 'owner_opened_at'>[];
+    return rows.map((row) => ({
+      ...row,
+      owner_id: null,
+      owner_name: null,
+      owner_on_shift: null,
+      owner_assigned_at: null,
+      owner_opened_at: null,
+    }));
+  },
+
+  /**
+   * Tells the server the operator opened the ride's page, so the handover leaves it with her
+   * (00683). Errors are swallowed: opening must never break the page.
+   */
+  async openAssist(rideId: string): Promise<void> {
+    try {
+      const supabase = getSupabaseClient();
+      await supabase.rpc('ops_open_ride_assist', { p_ride_id: rideId });
+    } catch {
+      // Best effort.
+    }
+  },
+
+  /**
+   * Takes the ride from its owner. `expectedOwnerId` is the owner the panel showed (null for
+   * "Sin asignar"); refusals throw with the server's code (ride_changed, self_ride, ...).
+   */
+  async takeRide(rideId: string, expectedOwnerId: string | null): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('ops_take_ride_assist', {
+      p_ride_id: rideId,
+      p_expected_owner_id: expectedOwnerId,
+    });
     if (error) {
-      if (isMissingRpc(error)) return [];
+      if (isMissingRpc(error)) throw unavailable('ops_take_ride_assist');
       throw error;
     }
-    return (data ?? []) as SupportWaitingRide[];
+    throwIfRefused('ops_take_ride_assist', data);
   },
 
   async getAssistContext(rideId: string): Promise<RideAssistContext> {

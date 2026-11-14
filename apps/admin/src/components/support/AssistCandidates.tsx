@@ -36,6 +36,8 @@ interface Props {
   onChanged: () => void;
   /** Shows the offer and assign buttons (rides.act). */
   allowed?: boolean;
+  /** Someone else owns the ride (00683): the offer and assign buttons stay disabled. */
+  disabled?: boolean;
 }
 
 const CHIP = 'rounded-full px-2 py-0.5 text-xs font-semibold';
@@ -47,7 +49,7 @@ const FILTER_BTN =
 const FILTER_ON = 'border-line-strong bg-surface text-ink shadow-elev-1';
 const FILTER_OFF = 'border-transparent text-ink-muted hover:bg-surface-sunken';
 
-export function AssistCandidates({ rideId, rideServiceType, pickupAddress, typeOptions, onChanged, allowed = true }: Props) {
+export function AssistCandidates({ rideId, rideServiceType, pickupAddress, typeOptions, onChanged, allowed = true, disabled = false }: Props) {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
   const [serviceType, setServiceType] = useState(rideServiceType);
@@ -215,7 +217,7 @@ export function AssistCandidates({ rideId, rideServiceType, pickupAddress, typeO
             const offerLapsed =
               c.offer_status === 'pending' && c.offer_expires_at !== null && new Date(c.offer_expires_at).getTime() <= now;
             const offerShown: RideOfferStatus | null = offerLapsed ? 'expired' : c.offer_status;
-            const canAct = !otherType && busyId === null;
+            const canAct = !otherType && busyId === null && !disabled;
             return (
               <li key={c.driver_profile_id} className="flex flex-col gap-2 py-3 md:flex-row md:items-center">
                 <div className="min-w-0 flex-1">

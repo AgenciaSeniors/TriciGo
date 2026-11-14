@@ -40,6 +40,11 @@ const CODES = new Set([
   'delivery_proof_missing',
   'forbidden',
   'ride_not_found',
+  // One owner per assisted ride, and the support shift (00683).
+  'ride_owned_by_other',
+  'whatsapp_required',
+  'invalid_whatsapp',
+  'invalid_request',
 ]);
 
 export function assistErrorKey(err: unknown): string {

@@ -19,19 +19,22 @@ import {
   rideAssistService,
   RIDE_ASSIST_UNAVAILABLE,
   type ActiveRideContext,
+  type AssistOwner,
   type RideAssistContext,
   type RideOfferStatus,
 } from '@tricigo/api';
 import type { ServiceTypeConfig } from '@tricigo/types';
-import { formatCUP, waMeLink } from '@tricigo/utils';
+import { assistOwnership, formatCUP, waMeLink } from '@tricigo/utils';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { AssistActiveRide } from '@/components/support/AssistActiveRide';
 import { AssistCandidates } from '@/components/support/AssistCandidates';
 import { assistErrorKey } from '@/components/support/assistErrors';
+import { AssistOwnerStrip } from '@/components/support/AssistOwnerStrip';
 import { AssistServiceChange } from '@/components/support/AssistServiceChange';
 import { telLink, waitLabel } from '@/components/support/supportFormat';
 import { formatAdminDate } from '@/lib/formatDate';
 import { usePanelCan } from '@/lib/usePanelCan';
+import { useAdminUser } from '@/lib/useAdminUser';
 
 const CARD = 'rounded-xl border border-line bg-surface-elevated p-6 shadow-sm';
 // The statuses with a driver on the ride: the page shows the active view (00660) for them.
@@ -55,10 +58,13 @@ export default function RideAssistPage() {
   const { can } = usePanelCan();
   const canAssist = can('rides.act');
   const { id } = useParams<{ id: string }>();
+  const { userId } = useAdminUser();
   const [ctx, setCtx] = useState<RideAssistContext | null>(null);
   const [active, setActive] = useState<ActiveRideContext | null>(null);
   // The admin.json key of the server's refusal to show the active view (e.g. self_ride).
   const [activeError, setActiveError] = useState<string | null>(null);
+  // The owner from the latest load (see load): never an older read than the context just loaded.
+  const [loadedOwner, setLoadedOwner] = useState<AssistOwner | null>(null);
   const [fetchedAt, setFetchedAt] = useState(0);
   const [state, setState] = useState<LoadState>('loading');
   const [configs, setConfigs] = useState<ServiceTypeConfig[]>([]);
@@ -95,6 +101,10 @@ export default function RideAssistPage() {
         if (seq !== latestLoad.current) return;
       }
       setCtx(next);
+      // The active context is read after the searching one, so its owner is the later read; when
+      // that read failed (keepActive), the page still shows the older active view, and the owner
+      // comes from the context just loaded instead.
+      setLoadedOwner((nextActive?.owner !== undefined ? nextActive.owner : next.owner) ?? null);
       setFetchedAt(Date.now());
       setState('ready');
       if (!keepActive) {
@@ -118,6 +128,26 @@ export default function RideAssistPage() {
       clearInterval(tick);
     };
   }, [load]);
+
+  // The owner as the page last read it (both views carry it; see load for which one wins).
+  const owner = loadedOwner;
+  const ownership = assistOwnership(owner?.id, userId || null);
+  const ownerOpenedAt = owner?.opened_at ?? null;
+
+  // Opening the page counts as the owner opening the ride: the 1-minute handover stops (00683).
+  useEffect(() => {
+    if (id) void rideAssistService.openAssist(id);
+  }, [id]);
+
+  // The ride can be assigned to her while the page is already open (a handover, her shift
+  // coming on): the polled context then shows her as the owner and not yet opened.
+  // openAssist swallows its errors, so a failed call (flaky mobile data) is retried on
+  // every poll (`fetchedAt` changes with each one) until the context shows it opened. No reload is
+  // chained after it: the next poll shows opened_at, and chaining one would loop.
+  useEffect(() => {
+    if (!id || ownership !== 'mine' || ownerOpenedAt) return;
+    void rideAssistService.openAssist(id);
+  }, [id, ownership, ownerOpenedAt, fetchedAt]);
 
   useEffect(() => {
     adminService
@@ -199,6 +229,18 @@ export default function RideAssistPage() {
         <p className="text-3xl font-bold text-primary-600 dark:text-primary-400">{formatCUP(ride.estimated_fare_cup)}</p>
       </div>
 
+      {(searching || active) && (
+        <AssistOwnerStrip
+          rideId={ride.id}
+          code={ride.code}
+          owner={owner}
+          ownership={ownership}
+          now={now}
+          canTake={canAssist}
+          onChanged={load}
+        />
+      )}
+
       {!searching && !active && (
         <div className="mb-6 rounded-xl bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-400">
           {activeError ? t(activeError) : t('ride_assist.not_searching', { status: ride.status })}{' '}
@@ -208,7 +250,9 @@ export default function RideAssistPage() {
         </div>
       )}
 
-      {active && <AssistActiveRide ctx={active} now={now} onChanged={load} allowed={canAssist} />}
+      {active && (
+        <AssistActiveRide ctx={active} now={now} onChanged={load} allowed={canAssist} disabled={ownership === 'other'} />
+      )}
 
       {!active && (
         <>
@@ -298,8 +342,17 @@ export default function RideAssistPage() {
                 typeOptions={typeOptions}
                 onChanged={load}
                 allowed={canAssist}
+                disabled={ownership === 'other'}
               />
-              {canAssist && <AssistServiceChange ride={ride} configs={configs} proposalLine={proposalLine} onChanged={load} />}
+              {canAssist && (
+                <AssistServiceChange
+                  ride={ride}
+                  configs={configs}
+                  proposalLine={proposalLine}
+                  onChanged={load}
+                  disabled={ownership === 'other'}
+                />
+              )}
               {!canAssist && proposalLine && (
                 <p className="mb-6 rounded-lg bg-surface-sunken px-3 py-2 text-sm text-ink">{proposalLine}</p>
               )}
