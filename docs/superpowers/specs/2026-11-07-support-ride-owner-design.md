@@ -27,6 +27,10 @@ Date: 2026-11-07 · Status: draft, answers from the founder in chat · Target: a
    - an operator who goes off shift with open rides hands them to the other operator on shift, if there is one; if not, they stay hers;
    - admins get the alert only when nobody is on shift, or when a ride passed through every operator on shift without being opened;
    - the founder's number disappears from the apps and the web.
+6. **Combined with the configured support numbers (2026-11-14, Ruling 21).** While this was in review, master gained `support_whatsapp_phones` (#1197): support numbers set from the panel's platform config, with a built-in list, so the apps never lack a number. The founder chose "Combinar las dos":
+   - the operator the server names comes first (the ride's owner, else the one on shift or the last one), and the configured list follows;
+   - since that list is never empty, WhatsApp is always offered;
+   - phone numbers have one normalizer, #1197's `parseSupportPhone`: at least 10 digits, which is what wa.me needs, and an 8-digit Cuban mobile gets +53.
 
 ## User-facing behavior
 
@@ -47,11 +51,16 @@ Date: 2026-11-07 · Status: draft, answers from the founder in chat · Target: a
 
 ### Rider and driver (apps by OTA, and web)
 
-- **"Pide ayuda"** opens WhatsApp to the ride owner's number, with the same message and ride code as today. With nobody on shift, it opens to the last operator who was on shift.
-- **The help screens** (rider Ayuda and Soporte, driver Ayuda, driver waiting for approval, web `/support`) show the number of an operator on shift, or the last one. With no number known, they hide WhatsApp and keep e-mail and tickets.
-- **Offline.** The apps keep the last number they received and use it when the server cannot be reached. The help screens show it at once, while they ask the server, and the server's answer replaces it (also when the server has no number). The founder's number is never a fallback.
-- **The "could not open WhatsApp" toast** says the number it tried, or, with none, to write to soporte@tricigo.com with the ride code.
-- `faq_a7` loses the phone number and points to the WhatsApp button on that screen and to the e-mail.
+- **"Pide ayuda"** opens WhatsApp with the same message and ride code as today. The number is the first one available (decision 6):
+  - the ride's owner on shift, or the server's contact when the ride has none (`request_ride_help` returns it);
+  - the contact the screen already knows (`get_support_contact`: an operator on shift, else the last one; or its cached copy);
+  - the first number of the configured list.
+
+  The list is never empty, so there is no e-mail-only path.
+- **The help screens** (rider Ayuda and Soporte, driver Ayuda, driver waiting for approval, web `/support`) list the support numbers: the operator from `get_support_contact` first when known, then the rest of the configured list without repeats. Their one-tap buttons open the first of that list. E-mail and tickets stay where those screens offered them.
+- **Offline.** The apps keep the last contact number they received and use it when the server cannot be reached. The help screens show it at once, while they ask the server, and the server's answer replaces it (also when the server has no contact). The configured list keeps its last read and falls back to its built-in numbers. The founder's number is never a fallback.
+- **The "could not open WhatsApp" toast** says the number it tried; there is always one.
+- **Copy.** `faq_a7` and `home.support_help_no_whatsapp` keep #1197's wording, and both name the number with `{{phone}}`.
 
 ## Rules
 
@@ -77,7 +86,7 @@ Date: 2026-11-07 · Status: draft, answers from the founder in chat · Target: a
 
 ## Server design (one migration)
 
-Number: **00681**. On 2026-11-07 the next free number was 00679 (00676 and 00677 were in PR 1192, 00678 in PR 1194). 00679 and 00680 went to Moto Deportiva (#1196), which reached master first, so this migration was renumbered to 00681 on 2026-11-14. Re-check master and every open PR right before applying it.
+Number: **00683**. On 2026-11-07 the next free number was 00679 (00676 and 00677 were in PR 1192, 00678 in PR 1194). Master took the next ones first: 00679 and 00680 went to Moto Deportiva (#1196), 00681 to the automatic apology for rides with no driver (#1198) and 00682 to the support number list `support_whatsapp_phones` (#1197). This migration was renumbered on 2026-11-14 to 00681 and then to 00683. Re-check master and every open PR right before applying it.
 
 **Order with 00677.** 00677 (PR 1192) patches `admin_assign_ride_to_driver` and `admin_ride_assist_candidates` behind md5 guards, and so does the ownership guard here. 00676-00678 were applied in prod on 2026-11-07 (`schema_migrations`), and the live bodies carry 00677's md5. This migration is written against those live bodies; re-running 00677 stays a no-op, because its guard returns early on its own new md5.
 
@@ -99,7 +108,7 @@ Every function follows the operator-role rules (00668, 00671-00673): SECURITY DE
 | `ops_support_shift_status()` | ops staff | The caller's row, plus the names of the others on shift, for the header switch. |
 | `get_support_contact()` | `anon`, `authenticated` | The WhatsApp number of an operator on shift (by the assignment rule), else the one whose `shift_ended_at` is latest, else NULL. Only the number, no name. |
 | `_support_pick_owner(ride_id, exclude uuid[])` | internal | The assignment rule. NULL when nobody qualifies. |
-| `_support_alert(ride_id, kind)` (patched) | internal | Assigns the owner when the ride has none, then pushes only her. With no owner, pushes every ops staff account, as today. Handover and off-shift pushes use the same path with their own titles. |
+| `_support_alert(ride_id, kind)` (patched) | internal | Assigns an owner when the ride has none, or when its owner is off shift and never opened it, then pushes only her. An owner on shift keeps the ride and only she is pushed, except when nobody opened it in time (`all_missed_alert_at`): she keeps it and every ops staff account is pushed. An owner off shift who opened it keeps it, and every ops staff account is pushed. With nobody to give it to, every ops staff account is pushed, as today. Handover and off-shift pushes go through `_support_send` with their own titles. |
 | `request_ride_help(ride_id)` (patched) | rider | Same as today, and returns `support_phone`: the owner's number, or `get_support_contact()` when there is no owner (also when the help alert is capped). Old app versions ignore the new key. |
 | `ops_open_ride_assist(ride_id)` | ops staff | Called when the assist page loads. When the caller is the owner, stamps `owner_opened_at` and resets her miss counter. Otherwise it changes nothing. |
 | `ops_take_ride_assist(ride_id, expected_owner_id)` | ops staff | Makes the caller the owner, bound to the owner she saw (`ride_changed` otherwise). Stamps opened, pushes the previous owner, logs `support_take_ride`. |
@@ -109,11 +118,20 @@ Every function follows the operator-role rules (00668, 00671-00673): SECURITY DE
 
 ## App, web and panel changes
 
-- **`packages/api`:** `rideAssistService.requestHelp` returns `{ code, supportPhone }`. A new `supportContactService.get()` calls `get_support_contact` and caches the answer (AsyncStorage in the apps, memory on the web).
-- **`packages/utils`:** `SUPPORT_WHATSAPP_PHONE` is removed. Nothing hardcodes a support number afterwards; a test or lint check keeps `56621636` out of `apps/` and `packages/` (store metadata and docs excepted).
+- **`packages/api`:** `rideAssistService.requestHelp` returns `{ code, supportPhone }`. A new `supportContactService` calls `get_support_contact`, and the apps cache the answer (AsyncStorage in the apps, `localStorage` on the web). #1197's `useSupportPhones()` and `supportService.getWhatsAppPhones()` read the configured list.
+- **`packages/utils`:** `SUPPORT_WHATSAPP_PHONE` is removed. `supportContact.ts` holds both halves:
+  - #1197's list helpers: `SUPPORT_WHATSAPP_PHONES` (built-in), `parseSupportPhone`, `resolveSupportPhones`, `primarySupportPhone`;
+  - ours: `resolveSupportPhone`, `readCachedSupportPhone` and the cache key;
+  - the two that combine them: `orderSupportPhones` (the help screens' order) and `supportHelpPhone` (what "Pide ayuda" opens).
+
+  A test keeps the founder's number (`56621636`) out of `apps/` and `packages/` (store metadata and docs excepted).
 - **Client and driver:** the screens listed in "Why" read the number from the service. Ships by OTA to 1.8.0 through `eas-update.yml`, client and driver separately, starting at 10%.
 - **Web:** the tracking card and `/support` read it too. Deploys with master.
-- **Panel:** the switch in `Header.tsx`, the banner chip, the assist page strip and disabled actions, `ownership` error copy in `assistErrors.ts`, es/en/pt in `admin.json`.
+- **Panel:**
+  - the switch in `Header.tsx`, whose WhatsApp dialog validates with `parseSupportPhone` (the server CHECK `^\+[1-9][0-9]{7,14}$` is unchanged);
+  - the banner chip, the assist page strip and the disabled actions;
+  - the `ownership` error copy in `assistErrors.ts`, es/en/pt in `admin.json`;
+  - the platform config page keeps #1197's `support_whatsapp_phones` next to `support_handoff_after_s` and `support_auto_offshift_misses`.
 
 ## Rollout
 
@@ -134,7 +152,7 @@ The founder should check these:
 6. The assignment picks the operator with the fewest open rides, then the one assigned least recently.
 7. `get_support_contact` returns only a number, never the operator's name.
 8. The handover check runs every 20 s, so a ride passes 60 to 80 s after it was assigned.
-9. Nothing hardcodes a support number afterwards. With no number known, the screens offer e-mail and tickets.
+9. Nothing hardcodes the founder's number afterwards. Since decision 6, the configured list (#1197) is never empty, so every screen always offers WhatsApp.
 
 ## Out of scope
 
