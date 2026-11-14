@@ -8,8 +8,8 @@
 
 import { useCallback, useEffect, useState, type MouseEvent } from 'react';
 import { useTranslation } from '@tricigo/i18n';
-import { isProposalGone, rideAssistService, type ServiceProposal } from '@tricigo/api';
-import { formatCUP, rideShortCode, searchHelpAvailable, waMeLink } from '@tricigo/utils';
+import { isProposalGone, rideAssistService, useSupportPhones, type ServiceProposal } from '@tricigo/api';
+import { formatCUP, formatSupportPhone, rideShortCode, searchHelpAvailable, supportHelpPhone, waMeLink } from '@tricigo/utils';
 import { useSupportPhone } from '@/lib/useSupportPhone';
 
 interface Props {
@@ -39,7 +39,8 @@ function secondsLeft(proposal: ServiceProposal, nowMs: number): number {
 
 export function SupportHelpCard({ rideId, startedAtMs, sharedRide, onChanged }: Props) {
   const { t } = useTranslation('web');
-  const { phone } = useSupportPhone();
+  const { phone: contactPhone } = useSupportPhone();
+  const configPhones = useSupportPhones();
   const [now, setNow] = useState(() => Date.now());
   const [proposal, setProposal] = useState<ServiceProposal | null>(null);
   const [answeredId, setAnsweredId] = useState<string | null>(null);
@@ -94,13 +95,14 @@ export function SupportHelpCard({ rideId, startedAtMs, sharedRide, onChanged }: 
   const shown = proposal && proposal.id !== answeredId && left > 0 ? proposal : null;
   const showHelp = searchHelpAvailable(Math.floor((now - startedAtMs) / 1000));
   const helpText = t('track.support_help_whatsapp_text', { code: rideShortCode(rideId) });
-  // Fallback link (the operator on shift); the ride owner's number replaces it on click.
-  const helpUrl = phone ? waMeLink(phone, helpText) : null;
+  // The link's own target (the operator on shift, else the first number set in platform_config,
+  // 00682); on click the ride owner's number replaces it when the server names one.
+  const helpUrl = waMeLink(supportHelpPhone(null, contactPhone, configPhones), helpText);
 
   // Opens the tab inside the click (a window.open after an await is blocked as a popup), then
   // points it at the ride owner's number once the server answers (at most 4 s, like the app),
-  // else the fallback number. Never navigates the tracking tab away: when nothing can be
-  // loaded into the new tab, the notice tells the rider how to reach support.
+  // else the operator on shift, else the first configured number. Never navigates the tracking
+  // tab away: when the tab was blocked or closed, the notice gives the number and the ride code.
   const onHelpClick = (e: MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
     const tab = window.open('about:blank', '_blank');
@@ -112,18 +114,14 @@ export function SupportHelpCard({ rideId, startedAtMs, sharedRide, onChanged }: 
         rideAssistService.requestHelp(rideId),
         new Promise<null>((resolve) => setTimeout(() => resolve(null), 4_000)),
       ]);
-      const target = res?.supportPhone ?? phone;
-      const url = target ? waMeLink(target, helpText) : null;
+      const target = supportHelpPhone(res?.supportPhone, contactPhone, configPhones);
+      const url = waMeLink(target, helpText);
       if (url && tab && !tab.closed) {
         tab.location.href = url;
         return;
       }
       if (tab && !tab.closed) tab.close();
-      setNotice(
-        target
-          ? t('track.support_help_no_whatsapp', { code, phone: target })
-          : t('track.support_help_no_contact', { code }),
-      );
+      setNotice(t('track.support_help_no_whatsapp', { code, phone: formatSupportPhone(target) }));
     })();
   };
 

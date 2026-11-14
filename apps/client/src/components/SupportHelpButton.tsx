@@ -4,8 +4,8 @@ import Toast from 'react-native-toast-message';
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
-import { rideAssistService } from '@tricigo/api';
-import { rideShortCode, searchHelpAvailable, waMeLink } from '@tricigo/utils';
+import { rideAssistService, useSupportPhones } from '@tricigo/api';
+import { formatSupportPhone, rideShortCode, searchHelpAvailable, supportHelpPhone, waMeLink } from '@tricigo/utils';
 import { useSupportPhone } from '@/hooks/useSupportPhone';
 
 interface SupportHelpButtonProps {
@@ -18,15 +18,16 @@ interface SupportHelpButtonProps {
  * "¿No aparece conductor? Pide ayuda" (00628), from 45 s of searching. Alerts support once
  * (request_ride_help) and opens WhatsApp with the ride code; the search keeps running.
  * The alert is awaited for at most 4 s so it leaves before WhatsApp takes the screen (the app
- * can be suspended then). WhatsApp opens to the number the server answered with, else to the one
- * useSupportPhone knows (also when 00628 is not applied); with no number, a toast gives the ride
- * code and the support e-mail instead.
+ * can be suspended then); WhatsApp opens either way, also when 00628 is not applied. It opens to
+ * the number the server answered with (the ride's owner on shift, 00683), else the operator
+ * useSupportPhone knows, else the first number set in platform_config (00682): never none.
  */
 export function SupportHelpButton({ rideId, elapsedSeconds }: SupportHelpButtonProps) {
   const { t } = useTranslation('rider');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
-  const { phone } = useSupportPhone();
+  const { phone: contactPhone } = useSupportPhone();
+  const configPhones = useSupportPhones();
 
   if (!searchHelpAvailable(elapsedSeconds)) return null;
   const code = rideShortCode(rideId);
@@ -39,22 +40,15 @@ export function SupportHelpButton({ rideId, elapsedSeconds }: SupportHelpButtonP
     ]);
     setSending(false);
     setSent(true);
-    // The ride owner's number when the server gave one, else the operator on shift (or the last
-    // one received). Never a hardcoded number.
-    const targetPhone = res?.supportPhone ?? phone;
-    const url = targetPhone
-      ? waMeLink(targetPhone, t('home.support_help_whatsapp_text', { code }))
-      : null;
-    if (!targetPhone || !url) {
-      Toast.show({ type: 'info', text1: t('home.support_help_no_contact', { code }), visibilityTime: 8000 });
-      return;
-    }
+    const supportPhone = supportHelpPhone(res?.supportPhone, contactPhone, configPhones);
+    const url = waMeLink(supportPhone, t('home.support_help_whatsapp_text', { code }));
     try {
+      if (!url) throw new Error('no WhatsApp link');
       await Linking.openURL(url);
     } catch {
       Toast.show({
         type: 'info',
-        text1: t('home.support_help_no_whatsapp', { code, phone: targetPhone }),
+        text1: t('home.support_help_no_whatsapp', { code, phone: formatSupportPhone(supportPhone) }),
         visibilityTime: 8000,
       });
     }

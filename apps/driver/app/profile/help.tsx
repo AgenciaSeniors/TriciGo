@@ -10,14 +10,14 @@ import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
-import { supportService } from '@tricigo/api';
+import { supportService, useSupportPhones } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useSupportPhone } from '@/hooks/useSupportPhone';
 import type { SupportTicket, TicketCategory } from '@tricigo/types';
-import { cubaTimeZone } from '@tricigo/utils';
+import { cubaTimeZone, formatSupportPhone, orderSupportPhones, supportWhatsAppUrl } from '@tricigo/utils';
 
-// The same e-mail the onboarding screen (apps/driver/app/onboarding/pending.tsx) writes to when
-// no support number is known.
+// The WhatsApp numbers: the operator on shift (useSupportPhone, 00683) first, then the ones
+// set in platform_config (useSupportPhones, 00682). The onboarding screen opens the first one.
 const SUPPORT_EMAIL = 'soporte@tricigo.com';
 
 const FAQ_KEYS = ['faq_q1', 'faq_q2', 'faq_q3'] as const;
@@ -45,7 +45,9 @@ export default function DriverHelpScreen() {
   const isDark = colorScheme === 'dark';
   const palette = isDark ? cubanDark : cubanLight;
   const userId = useAuthStore((s) => s.user?.id);
-  const { phone: supportPhone } = useSupportPhone();
+  const { phone: contactPhone } = useSupportPhone();
+  const configPhones = useSupportPhones();
+  const supportPhones = orderSupportPhones(contactPhone, configPhones);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
   // Tickets state
@@ -192,18 +194,19 @@ export default function DriverHelpScreen() {
                   <Ionicons name="mail-outline" size={18} color={midnightEmber.screen.text.tertiary} />
                   <Text variant="bodySmall" color="primary" className="ml-2 opacity-60">{SUPPORT_EMAIL}</Text>
                 </Pressable>
-                {supportPhone ? (
+                {supportPhones.map((phone) => (
                   <Pressable
+                    key={phone}
                     className="flex-row items-center"
-                    onPress={() => Linking.openURL(`https://wa.me/${supportPhone.replace(/\D/g, '')}`)}
+                    onPress={() => Linking.openURL(supportWhatsAppUrl(phone))}
                     accessibilityRole="link"
-                    accessibilityLabel={supportPhone}
+                    accessibilityLabel={formatSupportPhone(phone)}
                     style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, minHeight: 44 })}
                   >
                     <Ionicons name="logo-whatsapp" size={18} color={midnightEmber.screen.text.tertiary} />
-                    <Text variant="bodySmall" color="primary" className="ml-2 opacity-60">{supportPhone}</Text>
+                    <Text variant="bodySmall" color="primary" className="ml-2 opacity-60">{formatSupportPhone(phone)}</Text>
                   </Pressable>
-                ) : null}
+                ))}
               </Card>
 
               {/* Create ticket button */}

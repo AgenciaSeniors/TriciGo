@@ -70,7 +70,6 @@
     "support_help_again": "Open WhatsApp with support again",
     "support_help_whatsapp_text": "Hi, I need help getting a driver. Ride: {{code}}",
     "support_help_no_whatsapp": "We could not open WhatsApp. Write to us at {{phone}} with the code {{code}}.",
-    "support_help_no_contact": "Write to us at soporte@tricigo.com with the code {{code}}.",
     "support_proposal_title": "Support suggests another vehicle",
     "support_proposal_body": "{{type}} for {{price}}",
     "support_proposal_before": "Now: {{type}}, {{price}}",

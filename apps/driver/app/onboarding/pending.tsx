@@ -9,7 +9,8 @@ import { Button } from '@tricigo/ui/Button';
 import { Input } from '@tricigo/ui/Input';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber } from '@tricigo/theme';
-import { driverService, referralService, walletService } from '@tricigo/api';
+import { driverService, referralService, walletService, useSupportPhones } from '@tricigo/api';
+import { orderSupportPhones, primarySupportPhone, supportWhatsAppUrl } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useLogout } from '@/hooks/useLogout';
@@ -19,13 +20,12 @@ import { inviteCodeErrorMessage } from '@/utils/inviteCode';
 
 export default function PendingScreen() {
   const { t } = useTranslation('driver');
-  // Support number from the server (operator on shift). Without one the support button
-  // writes an e-mail instead of opening WhatsApp, so nobody is left without a way out.
-  const { phone: supportPhone } = useSupportPhone();
-  const supportTitle = supportPhone
-    ? t('onboarding.contact_support', { defaultValue: 'Contactar soporte' })
-    : t('onboarding.contact_support_email');
   const user = useAuthStore((s) => s.user);
+  // Support WhatsApp / phone: the operator on shift when the server names one (00683),
+  // else the first of the numbers set in platform_config (00682). Never empty.
+  const { phone: contactPhone } = useSupportPhone();
+  const configPhones = useSupportPhones();
+  const supportPhone = primarySupportPhone(orderSupportPhones(contactPhone, configPhones));
   const setProfile = useDriverStore((s) => s.setProfile);
   const [driverStatus, setDriverStatus] = useState<string>('under_review');
   const [rejectionReason, setRejectionReason] = useState<string | null>(null);
@@ -34,14 +34,8 @@ export default function PendingScreen() {
   // UX: give drivers who are stuck waiting / rejected / suspended a
   // quick way out. Previous screens dead-ended them.
   const openSupport = useCallback(() => {
-    const msg = encodeURIComponent(t('onboarding.support_prefill', { defaultValue: 'Hola, necesito ayuda con mi cuenta de conductor.' }));
-    if (!supportPhone) {
-      // No number known (offline on first launch, nobody on shift): e-mail is the way out.
-      const subject = encodeURIComponent(t('onboarding.support_email_subject'));
-      Linking.openURL(`mailto:soporte@tricigo.com?subject=${subject}`).catch(() => {});
-      return;
-    }
-    Linking.openURL(`https://wa.me/${supportPhone.replace(/[^0-9]/g, '')}?text=${msg}`)
+    const msg = t('onboarding.support_prefill', { defaultValue: 'Hola, necesito ayuda con mi cuenta de conductor.' });
+    Linking.openURL(supportWhatsAppUrl(supportPhone, msg))
       .catch(() => Linking.openURL(`tel:${supportPhone}`).catch(() => {}));
   }, [t, supportPhone]);
 
@@ -216,7 +210,7 @@ export default function PendingScreen() {
               onPress={() => router.replace('/onboarding/documents')}
             />
             <Button
-              title={supportTitle}
+              title={t('onboarding.contact_support', { defaultValue: 'Contactar soporte' })}
               variant="outline"
               size="lg"
               fullWidth
@@ -262,7 +256,7 @@ export default function PendingScreen() {
           )}
           <View className="w-full mt-8">
             <Button
-              title={supportTitle}
+              title={t('onboarding.contact_support', { defaultValue: 'Contactar soporte' })}
               size="lg"
               fullWidth
               onPress={openSupport}
@@ -355,7 +349,7 @@ export default function PendingScreen() {
             />
           )}
           <Button
-            title={supportTitle}
+            title={t('onboarding.contact_support', { defaultValue: 'Contactar soporte' })}
             variant="outline"
             size="lg"
             fullWidth

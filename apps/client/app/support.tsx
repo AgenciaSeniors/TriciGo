@@ -9,6 +9,8 @@ import { Button } from '@tricigo/ui/Button';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
+import { useSupportPhones } from '@tricigo/api';
+import { formatSupportPhone, orderSupportPhones, supportWhatsAppUrl } from '@tricigo/utils';
 import { useSupportPhone } from '@/hooks/useSupportPhone';
 
 const FAQ_ITEMS = [
@@ -21,21 +23,20 @@ const FAQ_ITEMS = [
 export default function SupportScreen() {
   const { t } = useTranslation('common');
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+  const { phone: contactPhone } = useSupportPhone();
+  const configPhones = useSupportPhones();
+  const supportPhones = orderSupportPhones(contactPhone, configPhones);
 
-  const { phone: supportPhone } = useSupportPhone();
-
+  // One WhatsApp row per support number: the operator on shift (00683) first, then the
+  // numbers in the order set in the panel (00682).
   const contactMethods = [
-    ...(supportPhone
-      ? [
-          {
-            icon: 'logo-whatsapp' as const,
-            label: 'WhatsApp',
-            description: t('support.whatsapp_desc', { defaultValue: 'Chatea con nuestro equipo' }),
-            color: '#25D366',
-            onPress: () => Linking.openURL(`https://wa.me/${supportPhone.replace(/\D/g, '')}`),
-          },
-        ]
-      : []),
+    ...supportPhones.map((phone) => ({
+      icon: 'logo-whatsapp' as const,
+      label: 'WhatsApp',
+      description: `${t('support.whatsapp_desc', { defaultValue: 'Chatea con nuestro equipo' })} · ${formatSupportPhone(phone)}`,
+      color: '#25D366',
+      onPress: () => Linking.openURL(supportWhatsAppUrl(phone)),
+    })),
     {
       icon: 'mail-outline' as const,
       label: t('support.email', { defaultValue: 'Correo electrónico' }),
@@ -60,7 +61,7 @@ export default function SupportScreen() {
           </Text>
           {contactMethods.map((method) => (
             <Pressable
-              key={method.label}
+              key={`${method.label}-${method.description}`}
               onPress={method.onPress}
               className="flex-row items-center py-4 border-b border-neutral-100 dark:border-neutral-800"
             >

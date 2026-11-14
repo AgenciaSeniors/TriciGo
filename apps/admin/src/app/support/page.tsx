@@ -233,7 +233,7 @@ export default function SupportPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-            {t('support.page_eyebrow', { defaultValue: 'Gente · soporte' })}
+            {t('support.page_eyebrow', { defaultValue: 'Operación · soporte' })}
           </p>
           <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
             {t('support.title', { defaultValue: 'Soporte' })}
