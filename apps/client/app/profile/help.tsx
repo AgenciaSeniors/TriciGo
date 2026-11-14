@@ -18,12 +18,11 @@ import { supportService } from '@tricigo/api';
 import { getErrorMessage, logger, triggerHaptic, formatTimestamp } from '@tricigo/utils';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { useAuthStore } from '@/stores/auth.store';
+import { useSupportPhone } from '@/hooks/useSupportPhone';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { SupportTicket, TicketCategory } from '@tricigo/types';
 
-// Same contact details support.tsx already links to (support.tsx:30,37).
 const SUPPORT_EMAIL = 'soporte@tricigo.com';
-const SUPPORT_PHONE = '+5356621636';
 
 const FAQ_KEYS = [
   'faq_q1', 'faq_q2', 'faq_q3', 'faq_q4', 'faq_q5',
@@ -59,6 +58,7 @@ export default function HelpScreen() {
     elevation: 2,
   };
   const userId = useAuthStore((s) => s.user?.id);
+  const { phone: supportPhone } = useSupportPhone();
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const [faqSearch, setFaqSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -271,16 +271,18 @@ export default function HelpScreen() {
                   <Ionicons name="mail-outline" size={18} color={tokens.ink.secondary} />
                   <Text variant="bodySmall" style={{ color: tokens.ink.secondary, marginLeft: 8 }}>{SUPPORT_EMAIL}</Text>
                 </Pressable>
-                <Pressable
-                  className="flex-row items-center"
-                  onPress={() => Linking.openURL(`https://wa.me/${SUPPORT_PHONE.replace(/\D/g, '')}`)}
-                  accessibilityRole="link"
-                  accessibilityLabel={SUPPORT_PHONE}
-                  style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, minHeight: 44 })}
-                >
-                  <Ionicons name="logo-whatsapp" size={18} color={tokens.ink.secondary} />
-                  <Text variant="bodySmall" style={{ color: tokens.ink.secondary, marginLeft: 8 }}>{SUPPORT_PHONE}</Text>
-                </Pressable>
+                {supportPhone ? (
+                  <Pressable
+                    className="flex-row items-center"
+                    onPress={() => Linking.openURL(`https://wa.me/${supportPhone.replace(/\D/g, '')}`)}
+                    accessibilityRole="link"
+                    accessibilityLabel={supportPhone}
+                    style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, minHeight: 44 })}
+                  >
+                    <Ionicons name="logo-whatsapp" size={18} color={tokens.ink.secondary} />
+                    <Text variant="bodySmall" style={{ color: tokens.ink.secondary, marginLeft: 8 }}>{supportPhone}</Text>
+                  </Pressable>
+                ) : null}
               </View>
 
               {/* Create ticket button */}

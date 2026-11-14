@@ -6,6 +6,7 @@ import { getSupabaseClient, supportService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import type { SupportTicket, TicketCategory } from '@tricigo/types';
 import { cubaTimeZone } from '@tricigo/utils';
+import { useSupportPhone } from '@/lib/useSupportPhone';
 
 const STATUS_COLORS: Record<string, string> = {
   open: 'var(--info, #3B82F6)',
@@ -26,6 +27,7 @@ const CATEGORY_VALUES: TicketCategory[] = [
 
 export default function SupportPage() {
   const { t } = useTranslation('web');
+  const { phone: supportPhone } = useSupportPhone();
   const [userId, setUserId] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
@@ -163,17 +165,18 @@ export default function SupportPage() {
       {/* Contacto directo — parity con el hub de contacto del /support móvil
           (WhatsApp + correo). El FAQ vive en /help. */}
       <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '2rem' }}>
-        {/* Canonical support WhatsApp (Cuban number). Same target the
-            mobile hubs use (apps/client/app/support.tsx). */}
-        <a
-          href="https://wa.me/5356621636"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, padding: '0.9rem 1rem', background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: '0.85rem', textDecoration: 'none', color: 'var(--text-primary)' }}
-        >
-          <span style={{ fontSize: '0.95rem', fontWeight: 700 }}>WhatsApp</span>
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{t('support.contact_whatsapp_desc', { defaultValue: 'Chatea con nuestro equipo' })}</span>
-        </a>
+        {/* Support WhatsApp: the operator on shift, from the server. Hidden when none is known. */}
+        {supportPhone && (
+          <a
+            href={`https://wa.me/${supportPhone.replace(/\D/g, '')}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, padding: '0.9rem 1rem', background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: '0.85rem', textDecoration: 'none', color: 'var(--text-primary)' }}
+          >
+            <span style={{ fontSize: '0.95rem', fontWeight: 700 }}>WhatsApp</span>
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{t('support.contact_whatsapp_desc', { defaultValue: 'Chatea con nuestro equipo' })}</span>
+          </a>
+        )}
         <a
           href="mailto:soporte@tricigo.com?subject=Soporte%20TriciGo"
           style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, padding: '0.9rem 1rem', background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: '0.85rem', textDecoration: 'none', color: 'var(--text-primary)' }}

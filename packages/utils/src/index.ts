@@ -188,7 +188,6 @@ export {
   searchWaitView,
   searchHelpAvailable,
   rideShortCode,
-  SUPPORT_WHATSAPP_PHONE,
 } from './searchWait';
 export { equalSplitSharePct, splitAmountTrc, requesterShareTrc } from './fareSplit';
 export type { SearchWaitStage, SearchWaitInput, SearchWaitView } from './searchWait';

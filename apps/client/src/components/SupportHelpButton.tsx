@@ -5,7 +5,8 @@ import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { rideAssistService } from '@tricigo/api';
-import { rideShortCode, searchHelpAvailable, SUPPORT_WHATSAPP_PHONE, waMeLink } from '@tricigo/utils';
+import { rideShortCode, searchHelpAvailable, waMeLink } from '@tricigo/utils';
+import { useSupportPhone } from '@/hooks/useSupportPhone';
 
 interface SupportHelpButtonProps {
   rideId: string;
@@ -23,24 +24,37 @@ export function SupportHelpButton({ rideId, elapsedSeconds }: SupportHelpButtonP
   const { t } = useTranslation('rider');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const { phone } = useSupportPhone();
 
   if (!searchHelpAvailable(elapsedSeconds)) return null;
   const code = rideShortCode(rideId);
 
   const onPress = async () => {
     setSending(true);
-    await Promise.race([
+    const res = await Promise.race([
       rideAssistService.requestHelp(rideId),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 4_000)),
     ]);
     setSending(false);
     setSent(true);
-    const url = waMeLink(SUPPORT_WHATSAPP_PHONE, t('home.support_help_whatsapp_text', { code }));
+    // The ride owner's number when the server gave one, else the operator on shift (or the last
+    // one received). Never a hardcoded number.
+    const targetPhone = res?.supportPhone ?? phone;
+    const url = targetPhone
+      ? waMeLink(targetPhone, t('home.support_help_whatsapp_text', { code }))
+      : null;
+    if (!targetPhone || !url) {
+      Toast.show({ type: 'info', text1: t('home.support_help_no_contact', { code }), visibilityTime: 8000 });
+      return;
+    }
     try {
-      if (!url) throw new Error('no WhatsApp link');
       await Linking.openURL(url);
     } catch {
-      Toast.show({ type: 'info', text1: t('home.support_help_no_whatsapp', { code }), visibilityTime: 8000 });
+      Toast.show({
+        type: 'info',
+        text1: t('home.support_help_no_whatsapp', { code, phone: targetPhone }),
+        visibilityTime: 8000,
+      });
     }
   };
 

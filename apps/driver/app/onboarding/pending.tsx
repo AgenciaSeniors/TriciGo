@@ -13,14 +13,14 @@ import { driverService, referralService, walletService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useLogout } from '@/hooks/useLogout';
+import { useSupportPhone } from '@/hooks/useSupportPhone';
 import { NotificationPermissionSheet } from '@/components/NotificationPermissionSheet';
 import { inviteCodeErrorMessage } from '@/utils/inviteCode';
 
-// Central support contact. Update here if ops phone/whatsapp changes.
-const SUPPORT_WHATSAPP = '+5356621636'; // Support contact (WhatsApp / phone)
-
 export default function PendingScreen() {
   const { t } = useTranslation('driver');
+  // Support number from the server (operator on shift); the support button hides without one.
+  const { phone: supportPhone } = useSupportPhone();
   const user = useAuthStore((s) => s.user);
   const setProfile = useDriverStore((s) => s.setProfile);
   const [driverStatus, setDriverStatus] = useState<string>('under_review');
@@ -31,9 +31,10 @@ export default function PendingScreen() {
   // quick way out. Previous screens dead-ended them.
   const openSupport = useCallback(() => {
     const msg = encodeURIComponent(t('onboarding.support_prefill', { defaultValue: 'Hola, necesito ayuda con mi cuenta de conductor.' }));
-    Linking.openURL(`https://wa.me/${SUPPORT_WHATSAPP.replace(/[^0-9]/g, '')}?text=${msg}`)
-      .catch(() => Linking.openURL(`tel:${SUPPORT_WHATSAPP}`).catch(() => {}));
-  }, [t]);
+    if (!supportPhone) return;
+    Linking.openURL(`https://wa.me/${supportPhone.replace(/[^0-9]/g, '')}?text=${msg}`)
+      .catch(() => Linking.openURL(`tel:${supportPhone}`).catch(() => {}));
+  }, [t, supportPhone]);
 
   // Drivers WhatsApp community group. The admin sets the invite link in
   // platform_config (driver_whatsapp_group_url); while it waits for approval
@@ -205,14 +206,16 @@ export default function PendingScreen() {
               fullWidth
               onPress={() => router.replace('/onboarding/documents')}
             />
-            <Button
-              title={t('onboarding.contact_support', { defaultValue: 'Contactar soporte' })}
-              variant="outline"
-              size="lg"
-              fullWidth
-              forceDark
-              onPress={openSupport}
-            />
+            {supportPhone ? (
+              <Button
+                title={t('onboarding.contact_support', { defaultValue: 'Contactar soporte' })}
+                variant="outline"
+                size="lg"
+                fullWidth
+                forceDark
+                onPress={openSupport}
+              />
+            ) : null}
           </View>
         </View>
       </Screen>
@@ -251,12 +254,14 @@ export default function PendingScreen() {
             </View>
           )}
           <View className="w-full mt-8">
-            <Button
-              title={t('onboarding.contact_support', { defaultValue: 'Contactar soporte' })}
-              size="lg"
-              fullWidth
-              onPress={openSupport}
-            />
+            {supportPhone ? (
+              <Button
+                title={t('onboarding.contact_support', { defaultValue: 'Contactar soporte' })}
+                size="lg"
+                fullWidth
+                onPress={openSupport}
+              />
+            ) : null}
           </View>
         </View>
       </Screen>
@@ -344,14 +349,16 @@ export default function PendingScreen() {
               onPress={openWhatsappGroup}
             />
           )}
-          <Button
-            title={t('onboarding.contact_support', { defaultValue: 'Contactar soporte' })}
-            variant="outline"
-            size="lg"
-            fullWidth
-            forceDark
-            onPress={openSupport}
-          />
+          {supportPhone ? (
+            <Button
+              title={t('onboarding.contact_support', { defaultValue: 'Contactar soporte' })}
+              variant="outline"
+              size="lg"
+              fullWidth
+              forceDark
+              onPress={openSupport}
+            />
+          ) : null}
           <Pressable onPress={doLogout} hitSlop={10} className="py-2">
             <Text variant="caption" style={{ color: midnightEmber.map.text.tertiary, textAlign: 'center' }}>
               {t('onboarding.switch_account', { defaultValue: 'Cambiar de cuenta' })}

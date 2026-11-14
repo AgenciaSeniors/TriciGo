@@ -6,10 +6,11 @@
 // Without 00628 both stay quiet: getPendingProposal answers null and requestHelp never throws,
 // so the WhatsApp link still works.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type MouseEvent } from 'react';
 import { useTranslation } from '@tricigo/i18n';
 import { isProposalGone, rideAssistService, type ServiceProposal } from '@tricigo/api';
-import { formatCUP, rideShortCode, searchHelpAvailable, SUPPORT_WHATSAPP_PHONE, waMeLink } from '@tricigo/utils';
+import { formatCUP, rideShortCode, searchHelpAvailable, waMeLink } from '@tricigo/utils';
+import { useSupportPhone } from '@/lib/useSupportPhone';
 
 interface Props {
   rideId: string;
@@ -38,6 +39,7 @@ function secondsLeft(proposal: ServiceProposal, nowMs: number): number {
 
 export function SupportHelpCard({ rideId, startedAtMs, sharedRide, onChanged }: Props) {
   const { t } = useTranslation('web');
+  const { phone } = useSupportPhone();
   const [now, setNow] = useState(() => Date.now());
   const [proposal, setProposal] = useState<ServiceProposal | null>(null);
   const [answeredId, setAnsweredId] = useState<string | null>(null);
@@ -91,10 +93,30 @@ export function SupportHelpCard({ rideId, startedAtMs, sharedRide, onChanged }: 
   const left = proposal ? secondsLeft(proposal, now) : 0;
   const shown = proposal && proposal.id !== answeredId && left > 0 ? proposal : null;
   const showHelp = searchHelpAvailable(Math.floor((now - startedAtMs) / 1000));
-  const helpUrl = waMeLink(
-    SUPPORT_WHATSAPP_PHONE,
-    t('track.support_help_whatsapp_text', { code: rideShortCode(rideId) }),
-  );
+  const helpText = t('track.support_help_whatsapp_text', { code: rideShortCode(rideId) });
+  // Fallback link (the operator on shift); the ride owner's number replaces it on click.
+  const helpUrl = phone ? waMeLink(phone, helpText) : null;
+
+  // Opens the tab inside the click (a window.open after an await is blocked as a popup), then
+  // points it at the ride owner's number once the server answers, else the fallback number.
+  const onHelpClick = (e: MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    const tab = window.open('about:blank', '_blank');
+    if (tab) tab.opener = null;
+    setHelpSent(true);
+    void (async () => {
+      const res = await rideAssistService.requestHelp(rideId);
+      const target = res?.supportPhone ?? phone;
+      const url = target ? waMeLink(target, helpText) : null;
+      if (url) {
+        if (tab) tab.location.href = url;
+        else window.location.assign(url);
+      } else {
+        tab?.close();
+        setNotice(t('track.support_help_no_contact', { code: rideShortCode(rideId) }));
+      }
+    })();
+  };
 
   if (!shown && !showHelp && !notice) return null;
 
@@ -178,18 +200,13 @@ export function SupportHelpCard({ rideId, startedAtMs, sharedRide, onChanged }: 
         </div>
       )}
 
-      {showHelp && helpUrl && (
+      {showHelp && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-          {/* A plain link, so the browser opens WhatsApp inside the click (a window.open after
-              an await is blocked as a popup). The alert goes out without waiting: the page stays. */}
           <a
-            href={helpUrl}
+            href={helpUrl ?? '#'}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={() => {
-              void rideAssistService.requestHelp(rideId);
-              setHelpSent(true);
-            }}
+            onClick={onHelpClick}
             style={{
               display: 'block',
               textAlign: 'center',

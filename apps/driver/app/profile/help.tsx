@@ -12,13 +12,13 @@ import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { supportService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
+import { useSupportPhone } from '@/hooks/useSupportPhone';
 import type { SupportTicket, TicketCategory } from '@tricigo/types';
 import { cubaTimeZone } from '@tricigo/utils';
 
 // Same contact details the onboarding screen already links to
 // (apps/driver/app/onboarding/pending.tsx:18).
 const SUPPORT_EMAIL = 'soporte@tricigo.com';
-const SUPPORT_PHONE = '+5356621636';
 
 const FAQ_KEYS = ['faq_q1', 'faq_q2', 'faq_q3'] as const;
 
@@ -45,6 +45,7 @@ export default function DriverHelpScreen() {
   const isDark = colorScheme === 'dark';
   const palette = isDark ? cubanDark : cubanLight;
   const userId = useAuthStore((s) => s.user?.id);
+  const { phone: supportPhone } = useSupportPhone();
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
   // Tickets state
@@ -191,16 +192,18 @@ export default function DriverHelpScreen() {
                   <Ionicons name="mail-outline" size={18} color={midnightEmber.screen.text.tertiary} />
                   <Text variant="bodySmall" color="primary" className="ml-2 opacity-60">{SUPPORT_EMAIL}</Text>
                 </Pressable>
-                <Pressable
-                  className="flex-row items-center"
-                  onPress={() => Linking.openURL(`https://wa.me/${SUPPORT_PHONE.replace(/\D/g, '')}`)}
-                  accessibilityRole="link"
-                  accessibilityLabel={SUPPORT_PHONE}
-                  style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, minHeight: 44 })}
-                >
-                  <Ionicons name="logo-whatsapp" size={18} color={midnightEmber.screen.text.tertiary} />
-                  <Text variant="bodySmall" color="primary" className="ml-2 opacity-60">{SUPPORT_PHONE}</Text>
-                </Pressable>
+                {supportPhone ? (
+                  <Pressable
+                    className="flex-row items-center"
+                    onPress={() => Linking.openURL(`https://wa.me/${supportPhone.replace(/\D/g, '')}`)}
+                    accessibilityRole="link"
+                    accessibilityLabel={supportPhone}
+                    style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, minHeight: 44 })}
+                  >
+                    <Ionicons name="logo-whatsapp" size={18} color={midnightEmber.screen.text.tertiary} />
+                    <Text variant="bodySmall" color="primary" className="ml-2 opacity-60">{supportPhone}</Text>
+                  </Pressable>
+                ) : null}
               </Card>
 
               {/* Create ticket button */}

@@ -9,6 +9,7 @@ import { Button } from '@tricigo/ui/Button';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
+import { useSupportPhone } from '@/hooks/useSupportPhone';
 
 const FAQ_ITEMS = [
   { qKey: 'support.faq_q1', aKey: 'support.faq_a1', defaultQ: '¿Cómo solicito un viaje?', defaultA: 'Abre la app, selecciona tu destino en el mapa o escríbelo en la barra de búsqueda, elige el tipo de vehículo y confirma tu solicitud.' },
@@ -21,14 +22,20 @@ export default function SupportScreen() {
   const { t } = useTranslation('common');
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
+  const { phone: supportPhone } = useSupportPhone();
+
   const contactMethods = [
-    {
-      icon: 'logo-whatsapp' as const,
-      label: 'WhatsApp',
-      description: t('support.whatsapp_desc', { defaultValue: 'Chatea con nuestro equipo' }),
-      color: '#25D366',
-      onPress: () => Linking.openURL('https://wa.me/5356621636'),
-    },
+    ...(supportPhone
+      ? [
+          {
+            icon: 'logo-whatsapp' as const,
+            label: 'WhatsApp',
+            description: t('support.whatsapp_desc', { defaultValue: 'Chatea con nuestro equipo' }),
+            color: '#25D366',
+            onPress: () => Linking.openURL(`https://wa.me/${supportPhone.replace(/\D/g, '')}`),
+          },
+        ]
+      : []),
     {
       icon: 'mail-outline' as const,
       label: t('support.email', { defaultValue: 'Correo electrónico' }),
