@@ -66,7 +66,9 @@
           "android": {
             "compileSdkVersion": 36,
             "targetSdkVersion": 36,
-            "minSdkVersion": 24
+            "minSdkVersion": 24,
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true
           },
           "ios": {
             "deploymentTarget": "15.1"
@@ -77,6 +79,7 @@
       "./plugins/with-user-leave-hint-safe",
       "./plugins/with-large-screen-compat",
       "./plugins/with-large-heap",
+      "./plugins/with-proguard-rules",
       "expo-router",
       "expo-localization",
       "expo-apple-authentication",
