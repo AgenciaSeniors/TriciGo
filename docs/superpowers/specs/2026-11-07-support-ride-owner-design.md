@@ -49,7 +49,7 @@ Date: 2026-11-07 · Status: draft, answers from the founder in chat · Target: a
 
 - **"Pide ayuda"** opens WhatsApp to the ride owner's number, with the same message and ride code as today. With nobody on shift, it opens to the last operator who was on shift.
 - **The help screens** (rider Ayuda and Soporte, driver Ayuda, driver waiting for approval, web `/support`) show the number of an operator on shift, or the last one. With no number known, they hide WhatsApp and keep e-mail and tickets.
-- **Offline.** The apps keep the last number they received and use it when the server cannot be reached. The founder's number is never a fallback.
+- **Offline.** The apps keep the last number they received and use it when the server cannot be reached. The help screens show it at once, while they ask the server, and the server's answer replaces it (also when the server has no number). The founder's number is never a fallback.
 - **The "could not open WhatsApp" toast** says the number it tried, or, with none, to write to soporte@tricigo.com with the ride code.
 - `faq_a7` loses the phone number and points to the WhatsApp button on that screen and to the e-mail.
 
@@ -58,14 +58,15 @@ Date: 2026-11-07 · Status: draft, answers from the founder in chat · Target: a
 - **Who gets a new ride.**
   - Among operators on shift with a WhatsApp number: the one with the fewest open owned rides; on a tie, the one assigned least recently. Open means searching, or active with the assist page used.
   - With nobody on shift: no owner. Every ops staff account gets the push, as today. The rider's WhatsApp goes to the last operator who was on shift.
-- **When the ride is assigned.** When `_support_alert` fires: the rider's help request, or the 60 s wait alert from the cron. A help request on a ride whose owner is on shift keeps her, and the help push goes to her. For an owner off shift, see below.
+- **When the ride is assigned.** When `_support_alert` fires: the rider's help request, or the 60 s wait alert from the cron. A help request on a ride whose owner is on shift keeps her, and the help push goes to her. Except when nobody opened the ride in time (it already passed through every operator on shift, see Handover): the owner keeps it, and the help push goes to every ops staff account (decision 5). For an owner off shift, see below.
 - **Handover.**
   - The owner has `support_handoff_after_s` (default 60) from assignment to open the ride. If she does not, the ride passes to another operator on shift who has not had it yet, and her miss counter goes up.
-  - If no such operator is left, the owner stays and every ops staff account gets one push for that ride.
-  - It applies only while the ride is still searching.
-  - An operator whose miss counter reaches `support_auto_offshift_misses` (default 2) goes off shift. Opening a ride she owns resets the counter.
+  - If no such operator is left, the owner stays and every ops staff account gets one push for that ride. A later help request on it pushes every ops staff account too.
+  - It applies only while the ride is still searching. The cron checks each ride again once it holds the support lock: a ride a driver took, or whose owner went off shift, while it waited is left alone.
+  - An operator whose miss counter reaches `support_auto_offshift_misses` (default 2) goes off shift. Opening a ride she owns resets the counter, and so does turning the switch on from off. A call that keeps the switch as it is (changing the number) does not.
+  - When several operators reach it in the same run, all of them go off shift first and then their rides are handed over, so none gets another's rides only to be taken off right after.
   - The counter goes up also when there is nobody to pass the ride to. The founder's rule ("2 rides in a row without opening them") has no exception, and an operator alone on shift is the common case: if she is away, she goes off shift and from then on the alerts reach everyone.
-- **Going off shift.** Her open rides pass to another operator on shift, by the same rule as a new ride, each with a push. With nobody else on shift they stay hers.
+- **Going off shift.** Her open rides pass to another operator on shift, by the same rule as a new ride, each with a push: also to an operator who had the ride before (only the 1-minute handover skips those). With nobody else on shift they stay hers. Only turning the switch from on to off does this.
 - **An owner who is off shift** *(Claude's call, following decision 4)*. An owner counts only while she is on shift. This covers three cases: she went off shift with nobody else on, she was taken off for misses, or an admin off shift took the ride.
   - A help request on such a ride pushes every ops staff account, as when nobody is on shift.
   - `request_ride_help` returns `get_support_contact()` (an operator on shift, else the last one), not the owner's number.
@@ -94,7 +95,7 @@ Every function follows the operator-role rules (00668, 00671-00673): SECURITY DE
 
 | Function | Caller | What it does |
 |---|---|---|
-| `ops_set_support_shift(on, whatsapp)` | ops staff | Turns the caller's shift on or off. On requires a valid number, stored on the caller's row. Off hands her open rides over (Rules). Resets `missed_in_a_row` when turning on. Logs `support_shift_on` / `support_shift_off`. |
+| `ops_set_support_shift(on, whatsapp)` | ops staff | Turns the caller's shift on or off. On requires a valid number, stored on the caller's row. Only a transition does more than store the number: on to off hands her open rides over (Rules); off to on resets `missed_in_a_row` and picks up the rides waiting for an owner. A call that keeps the state (the panel's "Cambiar número") only stores the number, resets nothing and returns zeros. Logs `support_shift_on` / `support_shift_off` for a transition, `support_shift_number` for a number change alone, nothing when neither changed. |
 | `ops_support_shift_status()` | ops staff | The caller's row, plus the names of the others on shift, for the header switch. |
 | `get_support_contact()` | `anon`, `authenticated` | The WhatsApp number of an operator on shift (by the assignment rule), else the one whose `shift_ended_at` is latest, else NULL. Only the number, no name. |
 | `_support_pick_owner(ride_id, exclude uuid[])` | internal | The assignment rule. NULL when nobody qualifies. |

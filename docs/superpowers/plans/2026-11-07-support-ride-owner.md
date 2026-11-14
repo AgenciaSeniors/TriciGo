@@ -23,7 +23,8 @@
 - Config: `support_handoff_after_s` = 60 (floor 30), `support_auto_offshift_misses` = 2 (floor 1).
 - WhatsApp numbers are stored in E.164: `^\+[1-9][0-9]{7,14}$`. An 8-digit Cuban mobile starting with 5 typed without prefix gets `+53`.
 - Push copy (Spanish, exact): owner alert title `'Te toca · ' || <today's title>`; handover title `'Te pasamos un viaje · ' || <today's title>`; nobody opened it (to every ops staff) title `'Nadie abrió el viaje · ' || <today's title>`; take-over to the previous owner title `<name> || ' tomó el viaje #' || <code>`; auto off-shift title `'Te sacamos de turno'`, body `'No abriste 2 viajes seguidos. Actívalo de nuevo cuando puedas.'` (the 2 is the config value). Push labels: `support-owner-alert`, `support-handoff`, `support-all-missed`, `support-take`, `support-auto-offshift`; `data.event`: `support_owner`, `support_handoff`, `support_all_missed`, `support_take`, `support_offshift`.
-- `admin_actions.action` values: `support_shift_on`, `support_shift_off`, `support_shift_auto_off`, `support_take_ride`.
+- `ops_set_support_shift` (Ruling 15): only a transition does more than store the number. On to off hands her open rides over; off to on resets `missed_in_a_row` and runs the pickup. A call that keeps the state (the panel's "Cambiar número") only stores the number, resets no misses and returns `handed_over`, `kept` and `picked_up` as 0; it logs `support_shift_number` when the number changed and nothing when nothing changed.
+- `admin_actions.action` values: `support_shift_on`, `support_shift_off`, `support_shift_number`, `support_shift_auto_off`, `support_take_ride`.
 - Nothing hardcodes `56621636` in `apps/` or `packages/` source afterwards (store metadata and docs excepted).
 - UI copy in Spanish with es/en/pt entries; code, comments and commits in English.
 
