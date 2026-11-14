@@ -16,8 +16,8 @@ import { useSupportPhone } from '@/hooks/useSupportPhone';
 import type { SupportTicket, TicketCategory } from '@tricigo/types';
 import { cubaTimeZone } from '@tricigo/utils';
 
-// Same contact details the onboarding screen already links to
-// (apps/driver/app/onboarding/pending.tsx:18).
+// The same e-mail the onboarding screen (apps/driver/app/onboarding/pending.tsx) writes to when
+// no support number is known.
 const SUPPORT_EMAIL = 'soporte@tricigo.com';
 
 const FAQ_KEYS = ['faq_q1', 'faq_q2', 'faq_q3'] as const;

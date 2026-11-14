@@ -27,7 +27,12 @@ export interface SupportPhoneStore {
 
 export const SUPPORT_PHONE_CACHE_KEY = 'tricigo.support_phone';
 
-async function readCached(store: SupportPhoneStore): Promise<string | null> {
+/**
+ * The last support number received, read from the cache only: the help screens show it at once,
+ * then let the server's answer (resolveSupportPhone) replace it. Null when nothing is cached or
+ * the cached value is not E.164. Never writes; a failing store never makes this throw.
+ */
+export async function readCachedSupportPhone(store: SupportPhoneStore): Promise<string | null> {
   try {
     const value = await store.getItem(SUPPORT_PHONE_CACHE_KEY);
     return value !== null && E164.test(value) ? value : null;
@@ -52,7 +57,7 @@ export async function resolveSupportPhone(
     result = { status: 'unreachable' };
   }
 
-  if (result.status === 'unreachable') return readCached(store);
+  if (result.status === 'unreachable') return readCachedSupportPhone(store);
 
   try {
     if (result.phone) await store.setItem(SUPPORT_PHONE_CACHE_KEY, result.phone);

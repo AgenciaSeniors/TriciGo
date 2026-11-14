@@ -19,6 +19,7 @@ import {
   rideAssistService,
   RIDE_ASSIST_UNAVAILABLE,
   type ActiveRideContext,
+  type AssistOwner,
   type RideAssistContext,
   type RideOfferStatus,
 } from '@tricigo/api';
@@ -62,6 +63,8 @@ export default function RideAssistPage() {
   const [active, setActive] = useState<ActiveRideContext | null>(null);
   // The admin.json key of the server's refusal to show the active view (e.g. self_ride).
   const [activeError, setActiveError] = useState<string | null>(null);
+  // The owner from the latest load (see load): never an older read than the context just loaded.
+  const [loadedOwner, setLoadedOwner] = useState<AssistOwner | null>(null);
   const [fetchedAt, setFetchedAt] = useState(0);
   const [state, setState] = useState<LoadState>('loading');
   const [configs, setConfigs] = useState<ServiceTypeConfig[]>([]);
@@ -98,6 +101,10 @@ export default function RideAssistPage() {
         if (seq !== latestLoad.current) return;
       }
       setCtx(next);
+      // The active context is read after the searching one, so its owner is the later read; when
+      // that read failed (keepActive), the page still shows the older active view, and the owner
+      // comes from the context just loaded instead.
+      setLoadedOwner((nextActive?.owner !== undefined ? nextActive.owner : next.owner) ?? null);
       setFetchedAt(Date.now());
       setState('ready');
       if (!keepActive) {
@@ -122,8 +129,8 @@ export default function RideAssistPage() {
     };
   }, [load]);
 
-  // The owner as the page last read it (both views carry it; the active context is the later read).
-  const owner = active?.owner ?? ctx?.owner ?? null;
+  // The owner as the page last read it (both views carry it; see load for which one wins).
+  const owner = loadedOwner;
   const ownership = assistOwnership(owner?.id, userId || null);
   const ownerOpenedAt = owner?.opened_at ?? null;
 

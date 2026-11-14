@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   SUPPORT_PHONE_CACHE_KEY,
   normalizeSupportWhatsapp,
+  readCachedSupportPhone,
   resolveSupportPhone,
 } from '../supportContact';
 import type { SupportPhoneStore } from '../supportContact';
@@ -44,6 +45,51 @@ describe('normalizeSupportWhatsapp', () => {
     expect(normalizeSupportWhatsapp('+53 1234')).toBeNull();
     expect(normalizeSupportWhatsapp('+0 5512 3456')).toBeNull();
     expect(normalizeSupportWhatsapp('+53 abc 5512 3456')).toBeNull();
+  });
+});
+
+describe('readCachedSupportPhone', () => {
+  it('returns the last number received', async () => {
+    await expect(readCachedSupportPhone(memoryStore('+5355123456'))).resolves.toBe('+5355123456');
+  });
+
+  it('returns null with nothing cached', async () => {
+    await expect(readCachedSupportPhone(memoryStore())).resolves.toBeNull();
+  });
+
+  it('ignores a cached value that is not E.164', async () => {
+    await expect(readCachedSupportPhone(memoryStore('garbage'))).resolves.toBeNull();
+    await expect(readCachedSupportPhone(memoryStore('55123456'))).resolves.toBeNull();
+    await expect(readCachedSupportPhone(memoryStore(''))).resolves.toBeNull();
+  });
+
+  it('never throws, whether the store rejects or throws synchronously', async () => {
+    const rejecting: SupportPhoneStore = {
+      getItem: async () => {
+        throw new Error('read failed');
+      },
+      setItem: async () => {},
+      removeItem: async () => {},
+    };
+    const throwing: SupportPhoneStore = {
+      getItem: () => {
+        throw new Error('sync read failed');
+      },
+      setItem: async () => {},
+      removeItem: async () => {},
+    };
+    await expect(readCachedSupportPhone(rejecting)).resolves.toBeNull();
+    await expect(readCachedSupportPhone(throwing)).resolves.toBeNull();
+  });
+
+  it('only reads: never writes nor clears the cache', async () => {
+    const setItem = vi.fn(async () => {});
+    const removeItem = vi.fn(async () => {});
+    const getItem = vi.fn(async () => 'garbage');
+    await readCachedSupportPhone({ getItem, setItem, removeItem });
+    expect(getItem).toHaveBeenCalledWith(SUPPORT_PHONE_CACHE_KEY);
+    expect(setItem).not.toHaveBeenCalled();
+    expect(removeItem).not.toHaveBeenCalled();
   });
 });
 

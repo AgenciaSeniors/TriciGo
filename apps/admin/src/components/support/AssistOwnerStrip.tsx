@@ -75,17 +75,26 @@ export function AssistOwnerStrip({
   return (
     <>
       <div
-        role="status"
         className={`mb-6 flex flex-col gap-3 rounded-xl border-l-4 px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${TONE[ownership]}`}
       >
         <p className="flex min-w-0 items-center gap-2 font-display text-[15px] font-semibold leading-snug">
           <Icon className="h-4 w-4 shrink-0" strokeWidth={2.2} aria-hidden="true" />
           <span className="min-w-0">
-            {ownership === 'mine'
-              ? t('ride_assist.owner_mine', { defaultValue: 'Lo atiendes tú' })
-              : ownership === 'other'
-                ? t('ride_assist.owner_other', { name: label, min, defaultValue: 'Lo atiende {{name}} desde hace {{min}} min' })
-                : t('ride_assist.owner_none', { defaultValue: 'Sin asignar · tu primera acción te lo asigna' })}
+            {/* Only who owns the ride is announced, when it changes. The minutes change every
+                minute and the button is not news: both stay out of the live region. */}
+            <span role="status">
+              {ownership === 'mine'
+                ? t('ride_assist.owner_mine', { defaultValue: 'Lo atiendes tú' })
+                : ownership === 'other'
+                  ? t('ride_assist.owner_other', { name: label, defaultValue: 'Lo atiende {{name}}' })
+                  : t('ride_assist.owner_none', { defaultValue: 'Sin asignar · tu primera acción te lo asigna' })}
+            </span>
+            {ownership === 'other' && (
+              <span aria-live="off">
+                {' '}
+                {t('ride_assist.owner_other_since', { min, defaultValue: 'desde hace {{min}} min' })}
+              </span>
+            )}
           </span>
         </p>
         {ownership === 'other' && canTake && (

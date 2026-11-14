@@ -18,7 +18,9 @@ interface SupportHelpButtonProps {
  * "¿No aparece conductor? Pide ayuda" (00628), from 45 s of searching. Alerts support once
  * (request_ride_help) and opens WhatsApp with the ride code; the search keeps running.
  * The alert is awaited for at most 4 s so it leaves before WhatsApp takes the screen (the app
- * can be suspended then); WhatsApp opens either way, also when 00628 is not applied.
+ * can be suspended then). WhatsApp opens to the number the server answered with, else to the one
+ * useSupportPhone knows (also when 00628 is not applied); with no number, a toast gives the ride
+ * code and the support e-mail instead.
  */
 export function SupportHelpButton({ rideId, elapsedSeconds }: SupportHelpButtonProps) {
   const { t } = useTranslation('rider');
