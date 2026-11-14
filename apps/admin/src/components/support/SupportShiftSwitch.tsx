@@ -18,7 +18,7 @@ import {
   type SupportShiftChange,
   type SupportShiftStatus,
 } from '@tricigo/api';
-import { normalizeSupportWhatsapp } from '@tricigo/utils';
+import { parseSupportPhone } from '@tricigo/utils';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { assistErrorKey } from './assistErrors';
@@ -176,7 +176,8 @@ export function SupportShiftSwitch() {
   const closeDialog = useCallback(() => setDialog(null), []);
 
   const confirmNumber = async () => {
-    const normalized = normalizeSupportWhatsapp(number);
+    // Same rule as the support numbers in platform_config (00682): what WhatsApp can open.
+    const normalized = parseSupportPhone(number);
     if (!normalized) {
       setNumberError(t('ride_assist.error_invalid_whatsapp', {
         defaultValue: 'Ese número no es válido. Escríbelo con código de país, por ejemplo +53 51234567.',

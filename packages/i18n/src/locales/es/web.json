@@ -401,7 +401,6 @@
     "support_help_again": "Volver a abrir WhatsApp con soporte",
     "support_help_whatsapp_text": "Hola, necesito ayuda para conseguir conductor. Viaje: {{code}}",
     "support_help_no_whatsapp": "No pudimos abrir WhatsApp. Escríbenos al {{phone}} con el código {{code}}.",
-    "support_help_no_contact": "Escríbenos a soporte@tricigo.com con el código {{code}}.",
     "support_proposal_title": "Soporte te propone otro vehículo",
     "support_proposal_body": "{{type}} por {{price}}",
     "support_proposal_before": "Ahora: {{type}}, {{price}}",

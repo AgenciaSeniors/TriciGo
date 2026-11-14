@@ -212,7 +212,6 @@ export type { EmailNoticeErrorKey } from './emailNotice';
 export { createLatestLoader } from './latestLoader';
 export type { LatestLoader } from './latestLoader';
 export {
-  normalizeSupportWhatsapp,
   readCachedSupportPhone,
   resolveSupportPhone,
   SUPPORT_PHONE_CACHE_KEY,

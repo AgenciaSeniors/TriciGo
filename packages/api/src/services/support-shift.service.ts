@@ -45,7 +45,7 @@ export const supportShiftService = {
     return data as SupportShiftStatus;
   },
 
-  /** Turns the shift on or off. `whatsapp` must be E.164 (see normalizeSupportWhatsapp). */
+  /** Turns the shift on or off. `whatsapp` must be +<digits> (see parseSupportPhone). */
   async setShift(on: boolean, whatsapp?: string): Promise<SupportShiftChange> {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase.rpc('ops_set_support_shift', {

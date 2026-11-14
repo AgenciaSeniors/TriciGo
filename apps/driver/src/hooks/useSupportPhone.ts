@@ -13,7 +13,8 @@ const store: SupportPhoneStore = {
  * The support WhatsApp number: the last one received (cached) at once, then the server's answer
  * (operator on shift, else the last one), which replaces it, also with null when the server knows
  * none. The cache alone stays when the server cannot be reached. `null` when no number is known:
- * the screens then hide WhatsApp. `loading` is true until the server answered or failed.
+ * the screens then use the configured numbers (orderSupportPhones with useSupportPhones, 00682).
+ * `loading` is true until the server answered or failed.
  */
 export function useSupportPhone(): { phone: string | null; loading: boolean } {
   const [phone, setPhone] = useState<string | null>(null);

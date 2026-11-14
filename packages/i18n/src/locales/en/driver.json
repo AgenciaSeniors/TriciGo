@@ -455,8 +455,6 @@
   },
 
   "onboarding": {
-    "contact_support_email": "Email support",
-    "support_email_subject": "Help with my driver account",
     "title": "Driver registration",
     "step_personal": "Personal info",
     "step_vehicle": "Vehicle",

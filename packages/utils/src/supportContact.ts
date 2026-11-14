@@ -87,20 +87,11 @@ export function supportWhatsAppUrl(phone: string, text?: string): string {
 
 // ── The operator on shift, from the server (00683) ──────────────────────────────────────────
 
-/** What the server's contact column holds (its CHECK, 00683): + and 8 to 15 digits. */
-const E164 = /^\+[1-9][0-9]{7,14}$/;
-
 /**
- * Normalizes a typed WhatsApp number to E.164, or null when it is not valid.
- * Strips spaces, dashes, dots and parentheses; keeps a leading "+"; an 8-digit
- * Cuban mobile (starts with 5) typed without prefix gets "+53".
+ * What the server's contact column holds (its CHECK, 00683): + and 8 to 15 digits. Only checks a
+ * cached value; a number someone types goes through parseSupportPhone, the one normalizer.
  */
-export function normalizeSupportWhatsapp(raw: string): string | null {
-  const compact = raw.replace(/[\s\-.()]/g, '');
-  if (compact === '') return null;
-  const candidate = /^[5][0-9]{7}$/.test(compact) ? `+53${compact}` : compact;
-  return E164.test(candidate) ? candidate : null;
-}
+const E164 = /^\+[1-9][0-9]{7,14}$/;
 
 export type SupportContactResult =
   | { status: 'ok'; phone: string | null }

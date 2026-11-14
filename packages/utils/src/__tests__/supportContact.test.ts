@@ -4,7 +4,6 @@ import {
   SUPPORT_PHONE_CACHE_KEY,
   SUPPORT_WHATSAPP_PHONES,
   formatSupportPhone,
-  normalizeSupportWhatsapp,
   orderSupportPhones,
   parseSupportPhone,
   parseSupportPhones,
@@ -165,29 +164,22 @@ function memoryStore(initial?: string): SupportPhoneStore & { data: Map<string, 
   };
 }
 
-describe('normalizeSupportWhatsapp', () => {
-  it('keeps a valid international number and strips separators', () => {
-    expect(normalizeSupportWhatsapp('+53 5512-3456')).toBe('+5355123456');
-    expect(normalizeSupportWhatsapp('+1 305 555 0100')).toBe('+13055550100');
-    expect(normalizeSupportWhatsapp('+53 (5512).3456')).toBe('+5355123456');
+describe('parseSupportPhone — the number an operator types to go on shift (00683)', () => {
+  it('keeps an international number and strips separators', () => {
+    expect(parseSupportPhone('+53 5512-3456')).toBe('+5355123456');
+    expect(parseSupportPhone('+1 305 555 0100')).toBe('+13055550100');
+    expect(parseSupportPhone('+53 (5512).3456')).toBe('+5355123456');
   });
 
-  it('adds +53 to an 8-digit Cuban mobile starting with 5', () => {
-    expect(normalizeSupportWhatsapp('55123456')).toBe('+5355123456');
-    expect(normalizeSupportWhatsapp('5512 3456')).toBe('+5355123456');
+  it('adds +53 to an 8-digit Cuban mobile', () => {
+    expect(parseSupportPhone('55123456')).toBe('+5355123456');
+    expect(parseSupportPhone('5512 3456')).toBe('+5355123456');
   });
 
-  it('rejects numbers without a plus that are not Cuban mobiles', () => {
-    expect(normalizeSupportWhatsapp('(305) 555-0100')).toBeNull();
-    expect(normalizeSupportWhatsapp('12345678')).toBeNull();
-  });
-
-  it('rejects empty and too short input', () => {
-    expect(normalizeSupportWhatsapp('')).toBeNull();
-    expect(normalizeSupportWhatsapp('   ')).toBeNull();
-    expect(normalizeSupportWhatsapp('+53 1234')).toBeNull();
-    expect(normalizeSupportWhatsapp('+0 5512 3456')).toBeNull();
-    expect(normalizeSupportWhatsapp('+53 abc 5512 3456')).toBeNull();
+  it('rejects what WhatsApp could not open', () => {
+    for (const value of ['', '   ', '12345678', '+53 1234', '+0 5512 3456']) {
+      expect(parseSupportPhone(value)).toBeNull();
+    }
   });
 });
 
