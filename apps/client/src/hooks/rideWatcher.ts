@@ -15,6 +15,27 @@ import { triggerHaptic, trackEvent, logger } from '@tricigo/utils';
 import { useRideStore } from '@/stores/ride.store';
 import { shouldSendSearchHeartbeat } from '@/hooks/searchHeartbeat';
 import { fireRideStatusEffects } from '@/hooks/rideStatusEffects';
+import type { Ride } from '@tricigo/types';
+
+/** With no ride in memory, how often the watcher asks the server for one. */
+export const ACTIVE_RIDE_LOOKUP_MS = 20_000;
+/** How soon a lookup that failed (no network, a timeout) is tried again. */
+export const ACTIVE_RIDE_RETRY_MS = 5_000;
+
+/**
+ * Is it time to ask the server for an active ride the app does not have?
+ *
+ * The rider's active ride is looked up once when the app starts. That one
+ * request used to be the only one: if it failed, nothing asked again, because
+ * the 3 s poll and the foreground check only refresh a ride that is already in
+ * memory. On 2026-11-16 an iPhone on ETECSA data reopened the app three times
+ * during a trip and the first requests after each cold start never reached the
+ * server: the ride, the driver and the vehicle were gone for the rest of the
+ * trip while the driver's app showed it normally.
+ */
+export function isActiveRideLookupDue(lastLookupAt: number, lastLookupFailed: boolean, now: number): boolean {
+  return now - lastLookupAt >= (lastLookupFailed ? ACTIVE_RIDE_RETRY_MS : ACTIVE_RIDE_LOOKUP_MS);
+}
 
 /**
  * Start watching `userId`'s rides. Returns the function that stops it.
@@ -26,9 +47,28 @@ export function startRideWatcher(userId: string): () => void {
   let channel: { unsubscribe: () => void } | null = null;
   let mounted = true;
 
-  async function checkActive() {
+  let lookupInFlight = false;
+  let lastLookupAt = 0;
+  let lastLookupFailed = false;
+
+  /**
+   * Ask the server for the rider's active ride and show it. Runs at startup
+   * and again whenever there is no ride in memory (isActiveRideLookupDue, and
+   * every time the app comes back to the foreground).
+   */
+  async function lookUpActiveRide(): Promise<void> {
+    if (lookupInFlight) return;
+    lookupInFlight = true;
+    lastLookupAt = Date.now();
+    // The ride on screen when the lookup started. If the rider starts or ends a
+    // ride before the answer arrives, the answer describes a state that is gone.
+    const startedWith = useRideStore.getState().activeRide?.id ?? null;
     try {
       const active = await rideService.getActiveRide(userId);
+      lastLookupFailed = false;
+      if (!mounted) return;
+      const now = useRideStore.getState();
+      if ((now.activeRide?.id ?? null) !== startedWith || (!startedWith && now.isLoading)) return;
       // BUG-220: clear stale local activeRide if server says no active ride.
       // This handles the case where the ride was canceled/completed
       // server-side but the realtime channel never delivered the UPDATE
@@ -111,8 +151,40 @@ export function startRideWatcher(userId: string): () => void {
         if (mounted && rwd) useRideStore.getState().setRideWithDriver(rwd);
       }
     } catch (err) {
+      lastLookupFailed = true;
       logger.warn('No active ride or failed to check', { error: String(err) });
+    } finally {
+      lookupInFlight = false;
     }
+  }
+
+  let driverLoadInFlight = false;
+
+  /**
+   * Load the driver's name, photo and vehicle for `ride` when they are not in
+   * memory. They arrive with the ride at startup and on 'accepted'
+   * (fireRideStatusEffects), each a single request: if it failed, the trip
+   * screen stayed without the details of who is coming to pick the rider up.
+   */
+  async function loadDriverDetailsIfMissing(ride: Ride): Promise<void> {
+    if (!ride.driver_id || driverLoadInFlight) return;
+    const shown = useRideStore.getState().rideWithDriver;
+    if (shown && shown.id === ride.id && shown.driver_id === ride.driver_id) return;
+    driverLoadInFlight = true;
+    try {
+      const loaded = await rideService.getRideWithDriver(ride.id);
+      if (mounted && loaded && useRideStore.getState().activeRide?.id === ride.id) {
+        useRideStore.getState().setRideWithDriver(loaded);
+      }
+    } catch {
+      // Retried on the next tick.
+    } finally {
+      driverLoadInFlight = false;
+    }
+  }
+
+  async function checkActive() {
+    await lookUpActiveRide();
 
     // F009: Check for pending review from a previous completed ride
     try {
@@ -141,6 +213,9 @@ export function startRideWatcher(userId: string): () => void {
   //
   //   Layer 1 — Aggressive polling: every 3s while pinned ride exists
   //             (was 10s — too slow when realtime channel is dead).
+  //             With no ride in memory the same tick asks the server for
+  //             one every ACTIVE_RIDE_LOOKUP_MS (ACTIVE_RIDE_RETRY_MS after a
+  //             failure), so a ride the startup lookup missed comes back.
   //   Layer 2 — AppState foreground listener: re-check immediately when
   //             user brings the app to foreground (covers the case
   //             where ride got canceled while phone was in background).
@@ -151,10 +226,19 @@ export function startRideWatcher(userId: string): () => void {
   // This watcher also carries the persistent-search HEARTBEAT (see below).
   let lastBeatAt = 0;
 
-  const checkAndClearStale = async (): Promise<void> => {
+  const checkAndClearStale = async (foreground = false): Promise<void> => {
     if (!mounted || !userId) return;
-    const { activeRide: pinned, flowStep: fs } = useRideStore.getState();
-    if (!pinned || fs === 'idle' || fs === 'completed') return;
+    const { activeRide: pinned, flowStep: fs, isLoading } = useRideStore.getState();
+    if (!pinned) {
+      // No ride in memory: ask the server whether there is one (the startup
+      // lookup may have failed). Not while the rider is creating a ride — that
+      // request puts its own ride in memory.
+      if (!isLoading && (foreground || isActiveRideLookupDue(lastLookupAt, lastLookupFailed, Date.now()))) {
+        await lookUpActiveRide();
+      }
+      return;
+    }
+    if (fs === 'idle' || fs === 'completed') return;
 
     // Persistent-search heartbeat. `cleanup_orphan_searching_rides` cancels
     // any ride whose `searching_seen_at` went stale, so with no beat EVERY
@@ -309,6 +393,10 @@ export function startRideWatcher(userId: string): () => void {
             });
             trackEvent('ride_payment_confirmed', { ride_id: fresh.id });
           }
+        } else {
+          // Nothing changed. A change to 'accepted' fetches the driver itself
+          // (fireRideStatusEffects), so only an unchanged ride is checked here.
+          void loadDriverDetailsIfMissing(fresh);
         }
       } else {
         // The pinned id no longer matches the active ride — clear
@@ -327,13 +415,13 @@ export function startRideWatcher(userId: string): () => void {
   };
 
   // Layer 1: aggressive 3s polling
-  const watcherInterval = setInterval(checkAndClearStale, 3_000);
+  const watcherInterval = setInterval(() => { void checkAndClearStale(); }, 3_000);
 
   // Layer 2: re-check on app foreground
   const appStateSub = AppState.addEventListener('change', (state) => {
     if (state === 'active' && mounted) {
       // Fire immediately when user returns to the app
-      void checkAndClearStale();
+      void checkAndClearStale(true);
     }
   });
 
