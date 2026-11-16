@@ -395,6 +395,21 @@
     "contact_text": "For inquiries about these Terms and Conditions:",
     "contact_email": "soporte@tricigo.com"
   },
+  "active_ride_banner": {
+    "title": "You have a trip in progress",
+    "title_delivery": "You have a delivery in progress",
+    "status_searching": "Looking for a driver",
+    "status_on_the_way": "Your driver is on the way",
+    "status_arrived": "Your driver is at the pickup point",
+    "status_arrived_delivery": "Your driver is at the pickup point for the package",
+    "status_in_progress": "On your way to your destination",
+    "status_in_progress_delivery": "Your package is on its way",
+    "status_arriving": "Arriving at your destination",
+    "status_arriving_delivery": "Your package is arriving",
+    "to": "To {{address}}",
+    "cta": "View trip in progress",
+    "cta_delivery": "View delivery in progress"
+  },
   "track": {
     "support_help_cta": "No driver showing up? Ask for help",
     "support_help_hint": "We help you get one on WhatsApp. The search keeps running meanwhile.",

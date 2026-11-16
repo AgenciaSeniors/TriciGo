@@ -395,6 +395,21 @@
     "contact_text": "Para consultas sobre estos Términos y Condiciones:",
     "contact_email": "soporte@tricigo.com"
   },
+  "active_ride_banner": {
+    "title": "Tienes un viaje en curso",
+    "title_delivery": "Tienes un envío en curso",
+    "status_searching": "Buscando conductor",
+    "status_on_the_way": "Tu conductor va en camino",
+    "status_arrived": "Tu conductor llegó a recogerte",
+    "status_arrived_delivery": "Tu conductor llegó a recoger el envío",
+    "status_in_progress": "Vas camino a tu destino",
+    "status_in_progress_delivery": "Tu envío va en camino",
+    "status_arriving": "Llegando a tu destino",
+    "status_arriving_delivery": "Tu envío está llegando",
+    "to": "Hacia {{address}}",
+    "cta": "Ver viaje en curso",
+    "cta_delivery": "Ver envío en curso"
+  },
   "track": {
     "support_help_cta": "¿No aparece conductor? Pide ayuda",
     "support_help_hint": "Te ayudamos por WhatsApp a conseguir uno. La búsqueda sigue mientras tanto.",

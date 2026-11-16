@@ -395,6 +395,21 @@
     "contact_text": "Para consultas sobre estes Termos e Condições:",
     "contact_email": "soporte@tricigo.com"
   },
+  "active_ride_banner": {
+    "title": "Você tem uma viagem em andamento",
+    "title_delivery": "Você tem uma entrega em andamento",
+    "status_searching": "Procurando motorista",
+    "status_on_the_way": "Seu motorista está a caminho",
+    "status_arrived": "Seu motorista chegou ao ponto de embarque",
+    "status_arrived_delivery": "Seu motorista chegou para buscar a encomenda",
+    "status_in_progress": "A caminho do seu destino",
+    "status_in_progress_delivery": "Sua encomenda está a caminho",
+    "status_arriving": "Chegando ao seu destino",
+    "status_arriving_delivery": "Sua encomenda está chegando",
+    "to": "Para {{address}}",
+    "cta": "Ver viagem em andamento",
+    "cta_delivery": "Ver entrega em andamento"
+  },
   "track": {
     "support_help_cta": "Nenhum motorista aparece? Peça ajuda",
     "support_help_hint": "Ajudamos você a conseguir um pelo WhatsApp. A busca continua enquanto isso.",

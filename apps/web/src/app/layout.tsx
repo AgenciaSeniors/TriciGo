@@ -8,6 +8,7 @@ import { WebFooter } from './web-footer';
 import { JsonLd } from '../components/JsonLd';
 import { DemoBanner } from '../components/DemoBanner';
 import { WebOfflineBanner } from '../components/WebOfflineBanner';
+import { ActiveRideBanner } from '../components/ActiveRideBanner';
 
 // Self-hosted Montserrat (variable font, latin subset) instead of
 // next/font/google. The deployed standalone build was NOT baking the Google
@@ -177,6 +178,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               OfflineBanner). Inside I18nProvider so it can use t(). */}
           <WebOfflineBanner />
           <WebHeader />
+          {/* The rider's ride in progress, from any page: closing /track/<id>
+              no longer loses it. Inside I18nProvider for useAuth and t(). */}
+          <ActiveRideBanner />
           {/* Suspense boundary so pages that read useSearchParams() (login,
               wallet, gift, corporate…) don't trigger the CSR-bailout build
               error now that the whole site is server-rendered. Pages that don't

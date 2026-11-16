@@ -215,6 +215,13 @@ export { EMAIL_NOTICE_SNOOZE_MS, emailNoticeVisible, emailNoticeErrorKey, profil
 export type { EmailNoticeErrorKey } from './emailNotice';
 export { createLatestLoader } from './latestLoader';
 export type { LatestLoader } from './latestLoader';
+export {
+  ACTIVE_RIDE_POLL_MS,
+  ACTIVE_RIDE_RETRY_MS,
+  isLiveActiveRide,
+  startActiveRidePoller,
+} from './activeRidePoller';
+export type { ActiveRideLike, ActiveRidePollerOptions, PollerWakeSignals } from './activeRidePoller';
 export { assistOwnership, sortWaitingForViewer } from './supportOwnership';
 export type { AssistOwnership } from './supportOwnership';
 export { shortAddress, riderAssistMessage, activeDriverAssistMessage } from './assistWhatsApp';
