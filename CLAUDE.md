@@ -2580,6 +2580,22 @@ Desde `/missed-rides` ("Sin chofer"), operadores y admins le escriben por WhatsA
 
 **Estado: aplicada en prod el 2026-11-02** por MCP (`20261102171645`), con un `DO` que leyó el archivo del commit `4804555b` desde `net._http_response` y lo ejecutó solo si su md5 era el del repo (`8f201180…`). Antes, ensayo en prod en un bloque revertido con la pasajera demo como persona y la cuenta de prueba `b2c3d4e5…` como operadora. Aplicar la migración tardó 0,6 s. La operadora la vio en la lista (71 personas pendientes ese día) y le dio el cupón, y la app lo mostró y lo validó por 500 CUP. Su siguiente viaje lo obtuvo solo. Escribirle otra vez devolvió `coupon_used`, apagar `grant_only` se rechazó y marketing recibió `forbidden`. Verificado por objeto después: los 11 cuerpos con el md5 del ensayo y sin `\r`, el orden de los triggers, las dos CHECK, las dos tablas-candado y los permisos. Falta: el merge (despliega el panel) y crear el cupón en Promociones.
 
+### Cada validación de un código de promoción queda registrada (00684)
+
+El 2026-11-16 marketing contó que BIENVENIDA les apareció como "ya usado" en una cuenta que nunca lo había usado. No se pudo saber qué les contestó la app: `validate_promo_code` no escribía nada, y los registros de PostgREST guardan el pedido pero no la respuesta.
+
+- **Desde 00684, cada llamada deja una fila en `rpc_attempt_log`.** Lleva `rpc_name = 'validate_promo_code'`, `caller_uid` = quien llama, `target_id` = `p_user_id`, `outcome` = `valid` o el error que recibió la app, y en `metadata` el código normalizado (hasta 40 caracteres), `promotion_id` y `discount`. Se borra a los 90 días (cron `prune-rpc-attempt-log`).
+- **La respuesta no cambia.** El cuerpo es el de 00674 con cada uno de sus 13 `RETURN` envuelto en `_log_promo_validation()`. Esa función devuelve lo mismo que recibe, nunca lanza y solo la ejecuta `service_role`. `validate_promo_code` pasó a `VOLATILE`, porque una `STABLE` no puede escribir.
+- **Una migración que redefina `validate_promo_code` parte de este cuerpo** (md5 `40087366d75f95b020596288dfb75f69`, largo 3742). Si no, el registro deja de escribirse sin ningún error.
+- **`invalid` agrupa tres causas:** el código no existe o está apagado, es un cupón de disculpa que esa cuenta no tiene, o todavía no empezó (`valid_from`). La fila trae el código, así que se distinguen mirando la promoción.
+- **Ensayo:** en prod, dentro de un bloque revertido, con tres cuentas reales y seis códigos como `authenticated`. Las 19 respuestas fueron iguales antes y después, quedaron 19 filas con el resultado correcto y la autoprueba de la migración no dejó la suya.
+
+```sql
+-- Qué le contestó la app a una cuenta
+SELECT created_at, outcome, metadata FROM rpc_attempt_log
+WHERE rpc_name = 'validate_promo_code' AND target_id = '<user_id>' ORDER BY created_at DESC LIMIT 20;
+```
+
 ### Disculpa automática cuando no hay chofer (00681)
 
 Desde la 00681, nadie del equipo tiene que hacer nada para disculparse con quien se quedó sin chofer. Diseño: `docs/superpowers/specs/2026-11-14-missed-ride-auto-apology-design.md`. Ensayo: `supabase/tests/00681/run.sh` (con `none` pasa solo S0; con la migración, todo).
