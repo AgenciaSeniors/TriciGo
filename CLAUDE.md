@@ -3054,6 +3054,27 @@ Cada mañana, cada cuenta con rol de panel (super_admin, admin, marketing) recib
 - Comparar el mismo usuario en otra red (`request.headers.cf_connecting_ip`) separa la red del celular de un bug de la app.
 - Los timestamps de estos teléfonos llegan en ráfagas: 25 pedidos en 20 ms son pedidos que esperaron en el celular, no un pico real.
 
+**Reproducido en un emulador, sin teléfono (2026-11-16).** Con el código viejo, la búsqueda falló a las 22:05:14 y el viaje no volvió en el minuto siguiente, ni al mandar la app al fondo y traerla de vuelta. Con el arreglo volvió en `accepted`, `driver_en_route` e `in_progress`. El método:
+- En esta PC ya están la imagen `system-images;android-34;google_apis;x86_64` (la aceleración WHPX funciona) y los APK de desarrollo en `Downloads\tricigo-dev-apks\client\`.
+  - El APK sirve mientras no cambien los módulos nativos: comparar `git diff <fecha del APK> HEAD -- apps/client/package.json apps/client/app.json`.
+  - Crear el emulador: `avdmanager create avd -n tricigo-test -k "system-images;android-34;google_apis;x86_64" -d pixel_6`.
+- Metro desde el worktree con `--dev-client`, y abrir la app por `adb reverse` (`exp+tricigo-client://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081`).
+  - No usar `http://10.0.2.2:8081`: el bundle llega cortado (`ProtocolException: Expected leading [0-9a-fA-F] character`).
+  - La primera vez, abrir la app recién cuando Metro termine el bundle, o falla con `unexpected end of stream`.
+- Cortar internet sin cortar Metro. El modo avión también corta Metro, así que en su lugar:
+  - `adb root` (la imagen `google_apis` es `userdebug`).
+  - Para cortar: `iptables -I OUTPUT -p tcp --dport 443 -j REJECT`, y lo mismo con `ip6tables`. Para devolver la red, lo mismo con `-D`.
+  - Los pedidos fallan a los ~2 s con `Network request failed`.
+- En este emulador la app tarda ~22 s en arrancar, así que el corte tiene que durar ~45 s para que la búsqueda caiga entera adentro.
+- **Para reproducirlo, el token tiene que estar vigente.** Si el token está por vencer, todos los pedidos esperan a que se renueve (el lock de GoTrue), salen recién cuando vuelve la red y el viaje aparece igual. Esa es la variante que tampoco falló en el iPhone (15:18).
+- Leer la pantalla como texto, sin capturas: `uiautomator dump /sdcard/ui.xml` y extraer `text=`/`content-desc=`.
+- Los `console.log` de la app con hora exacta: `logcat -c` antes de abrir y `logcat -d -v time -s ReactNativeJS:V` después. En `preview_logs` de Metro se mezclan los arranques, y su `search` es texto literal (un `|` no separa alternativas).
+- El viaje de prueba se arma con el pasajero y el chofer demo:
+  - Nace programado y en la misma transacción pasa a `accepted` con el chofer: 0 ofertas y ningún aviso a soporte.
+  - Renovar `driver_profiles.last_heartbeat_at` en cada fase, o a los 12 min lo libera `release_rides_from_dead_drivers`.
+  - El pasajero demo no tiene contactos de confianza, así que no salen SMS.
+  - Al final, cancelarlo con `admin_cancel_ride`.
+
 ### Contactos de confianza + viaje en vivo — estado canónico (auditado + E2E real 2026-07-02)
 
 **Qué es.** Contactos (máx 5, `trusted_contacts`, RLS own-only) que reciben **SMS automáticos** del viaje del pasajero: al **aceptarse** el viaje (link `https://tricigo.com/track/share/<token>`), al **completarse** ("✅ llegó a su destino"), y en **SOS**. La página pública `apps/web/src/app/track/share/[token]/page.tsx` (sin login) resuelve por RPCs anon token-gated (`get_shared_ride_by_token` + `get_shared_trip_state` polling 3s + waypoints); token de 24 hex generado on-accept (trigger BEFORE), expira 48h post-terminal. Verificado E2E con SMS reales a un número en Brasil (DLR `delivered` + confirmación en mano): PRs #734/#735/#736 + migs 00473/00474/00475, todas aplicadas a prod.
