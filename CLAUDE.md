@@ -3037,6 +3037,23 @@ Cada mañana, cada cuenta con rol de panel (super_admin, admin, marketing) recib
 
 **Fix canónico:** envolver el fetch existente en un `refetch` (`useCallback`) y llamar `useRefreshOnFocus(refetch)`. Mirar `apps/client/app/(tabs)/wallet.tsx` (useFocusEffect) y `apps/client/app/(tabs)/index.tsx` (#631) como referencia. Cambio mobile → **requiere rebuild de APK**. Estado del barrido + las pantallas migradas: `docs/AUDIT_DATA_FRESHNESS_2026-06-21.md`.
 
+### Viaje que desaparece al reabrir la app del pasajero: un pedido de una sola vez al arrancar (2026-11-16)
+
+**Síntoma:** con un viaje en curso, el pasajero cierra la app, la vuelve a abrir y el viaje ya no está (ni el chofer ni el vehículo), mientras la app del chofer lo muestra normal. Marketing lo vio en un iPhone con datos de ETECSA.
+
+**Causa:** el vigilante del viaje (`startRideWatcher`, `apps/client/src/hooks/rideWatcher.ts`, montado por `useRideInit`) buscaba el viaje activo una sola vez al arrancar. Si ese pedido fallaba, nada volvía a preguntar: el sondeo de 3 s y la revisión al volver a la app solo actualizaban un viaje que ya estaba en memoria. En esa red, los primeros pedidos de cada arranque en frío no llegaban al servidor: en los tres arranques del viaje faltaron el viaje activo y `GET /rest/v1/users`. Los pedidos que React Query reintenta, y los que salen unos segundos después, sí llegaron.
+
+**Arreglo:** sin viaje en memoria, el vigilante busca el viaje activo cada 20 s, 5 s después de un intento fallido, y enseguida al volver a la app (`isActiveRideLookupDue`). Con un chofer asignado, si faltan sus datos, los vuelve a pedir en el siguiente ciclo. Tests: `apps/client/src/hooks/__tests__/rideWatcher.test.ts`.
+
+**Regla:** un dato que la pantalla necesita y se pide una sola vez al arrancar (fuera de React Query) necesita un segundo intento. Si no, un solo pedido perdido lo borra hasta el próximo reinicio de la app.
+
+**Diagnóstico desde el servidor** (`query_logs`, `source = 'edge_logs'`):
+- Filtrar por `request.sb.jwt.authorization.payload.subject` y mirar `request.path` y `request.search`.
+- Un arranque en frío normal manda `GET /rest/v1/users?select=*&id=eq.<id>`, el viaje activo (`rides?...status=in.(searching,...)`) y `rpc/report_app_open` en el mismo segundo.
+- Si falta `GET /users` en el arranque, la app cargó el perfil guardado en el celular (`hydrateFromCacheOrReset`): `getSession`/`getUserById` fallaron o tardaron más de 8 s.
+- Comparar el mismo usuario en otra red (`request.headers.cf_connecting_ip`) separa la red del celular de un bug de la app.
+- Los timestamps de estos teléfonos llegan en ráfagas: 25 pedidos en 20 ms son pedidos que esperaron en el celular, no un pico real.
+
 ### Contactos de confianza + viaje en vivo — estado canónico (auditado + E2E real 2026-07-02)
 
 **Qué es.** Contactos (máx 5, `trusted_contacts`, RLS own-only) que reciben **SMS automáticos** del viaje del pasajero: al **aceptarse** el viaje (link `https://tricigo.com/track/share/<token>`), al **completarse** ("✅ llegó a su destino"), y en **SOS**. La página pública `apps/web/src/app/track/share/[token]/page.tsx` (sin login) resuelve por RPCs anon token-gated (`get_shared_ride_by_token` + `get_shared_trip_state` polling 3s + waypoints); token de 24 hex generado on-accept (trigger BEFORE), expira 48h post-terminal. Verificado E2E con SMS reales a un número en Brasil (DLR `delivered` + confirmación en mano): PRs #734/#735/#736 + migs 00473/00474/00475, todas aplicadas a prod.
