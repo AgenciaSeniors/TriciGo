@@ -217,4 +217,6 @@ export { createLatestLoader } from './latestLoader';
 export type { LatestLoader } from './latestLoader';
 export { assistOwnership, sortWaitingForViewer } from './supportOwnership';
 export type { AssistOwnership } from './supportOwnership';
+export { shortAddress, riderAssistMessage, activeDriverAssistMessage } from './assistWhatsApp';
+export type { AssistWhatsAppMessage } from './assistWhatsApp';
 export * from './motoDeportiva';
