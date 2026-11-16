@@ -2115,3 +2115,105 @@ html {
   background: var(--primary-alpha-20);
   color: var(--text-primary);
 }
+
+/* ── Ride in progress notice (components/ActiveRideBanner.tsx) ──
+   Under the sticky header on every page. Scrolls away with the page so it
+   never covers the booking form; the rider sees it when the page opens. */
+.active-ride-banner {
+  background: var(--primary-alpha-10);
+  border-bottom: 1px solid var(--primary-alpha-20);
+}
+
+.active-ride-banner__inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: 0.75rem 1.5rem;
+}
+
+.active-ride-banner__icon {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  background: var(--primary);
+  color: #fff;
+}
+
+/* Expanding ring while a driver is still being looked for. */
+.active-ride-banner__pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--primary);
+  animation: activeRidePulse 1.8s ease-out infinite;
+}
+
+.active-ride-banner__icon svg {
+  position: relative;
+}
+
+@keyframes activeRidePulse {
+  from { transform: scale(1); opacity: 0.45; }
+  to { transform: scale(1.7); opacity: 0; }
+}
+
+/* Basis 0: with a long destination, an auto basis pushes the text under the
+   icon when the row wraps on a phone. */
+.active-ride-banner__text {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.active-ride-banner__title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text-primary);
+}
+
+.active-ride-banner__detail {
+  margin: 2px 0 0;
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.active-ride-banner__cta {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0.625rem 1rem;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .active-ride-banner__inner {
+    flex-wrap: wrap;
+    gap: var(--space-sm) var(--space-md);
+    padding: 0.75rem 1rem;
+  }
+  /* Two lines for the destination instead of cutting it after a few words. */
+  .active-ride-banner__detail {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    white-space: normal;
+  }
+  .active-ride-banner__cta {
+    flex-basis: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .active-ride-banner__pulse {
+    display: none;
+  }
+}
