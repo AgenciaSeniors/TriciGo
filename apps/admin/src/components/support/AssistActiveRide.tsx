@@ -11,7 +11,7 @@ import { useCallback, useState } from 'react';
 import { MessageCircle, Phone } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
 import { rideAssistService, type ActiveRideAction, type ActiveRideContext } from '@tricigo/api';
-import { formatCUP, waMeLink } from '@tricigo/utils';
+import { activeDriverAssistMessage, formatCUP, riderAssistMessage, waMeLink } from '@tricigo/utils';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { formatAdminDate } from '@/lib/formatDate';
@@ -76,9 +76,12 @@ export function AssistActiveRide({
   const { ride, driver, last_point: point, alert, preview } = ctx;
   // The driver support saw. Every action sends it back; without it the actions stay hidden.
   const driverId = ctx.driver_profile_id;
-  const riderWa = waMeLink(ride.customer_phone, t('ride_assist.rider_whatsapp_text', { code: ride.code }));
+  // The texts name the trip by its addresses: rider and driver do not know ride.code.
+  const riderMsg = riderAssistMessage(ride.dropoff_address);
+  const riderWa = waMeLink(ride.customer_phone, t(riderMsg.key, riderMsg.vars));
   const riderTel = telLink(ride.customer_phone);
-  const driverWa = waMeLink(driver?.phone ?? null, t('ride_assist.active_driver_whatsapp_text', { code: ride.code }));
+  const driverMsg = activeDriverAssistMessage(ride.status, ride.pickup_address, ride.dropoff_address);
+  const driverWa = waMeLink(driver?.phone ?? null, t(driverMsg.key, driverMsg.vars));
   const driverTel = telLink(driver?.phone);
   const beforePickup = ride.status === 'accepted' || ride.status === 'driver_en_route';
   const towardPickup = beforePickup || ride.status === 'arrived_at_pickup';

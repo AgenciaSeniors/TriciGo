@@ -24,7 +24,7 @@ import {
   type RideOfferStatus,
 } from '@tricigo/api';
 import type { ServiceTypeConfig } from '@tricigo/types';
-import { assistOwnership, formatCUP, waMeLink } from '@tricigo/utils';
+import { assistOwnership, formatCUP, riderAssistMessage, waMeLink } from '@tricigo/utils';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { AssistActiveRide } from '@/components/support/AssistActiveRide';
 import { AssistCandidates } from '@/components/support/AssistCandidates';
@@ -182,7 +182,9 @@ export default function RideAssistPage() {
   const { ride, offers, proposal } = ctx;
   const searching = ride.status === 'searching';
   const waitS = ride.wait_s + Math.max(0, Math.floor((now - fetchedAt) / 1000));
-  const riderWa = waMeLink(ride.customer_phone, t('ride_assist.rider_whatsapp_text', { code: ride.code }));
+  // The rider does not know ride.code: the text names the trip by its destination.
+  const riderMsg = riderAssistMessage(ride.dropoff_address);
+  const riderWa = waMeLink(ride.customer_phone, t(riderMsg.key, riderMsg.vars));
   const riderTel = telLink(ride.customer_phone);
 
   let proposalLine: string | null = null;
