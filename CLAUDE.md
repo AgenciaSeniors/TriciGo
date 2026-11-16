@@ -2589,6 +2589,7 @@ El 2026-11-16 marketing contó que BIENVENIDA les apareció como "ya usado" en u
 - **Una migración que redefina `validate_promo_code` parte de este cuerpo** (md5 `40087366d75f95b020596288dfb75f69`, largo 3742). Si no, el registro deja de escribirse sin ningún error.
 - **`invalid` agrupa tres causas:** el código no existe o está apagado, es un cupón de disculpa que esa cuenta no tiene, o todavía no empezó (`valid_from`). La fila trae el código, así que se distinguen mirando la promoción.
 - **Ensayo:** en prod, dentro de un bloque revertido, con tres cuentas reales y seis códigos como `authenticated`. Las 19 respuestas fueron iguales antes y después, quedaron 19 filas con el resultado correcto y la autoprueba de la migración no dejó la suya.
+- **Estado: aplicada en prod el 2026-11-16** por MCP (`20261116171927`), dentro de un `DO` que solo la ejecutaba si el texto tenía el md5 del archivo (`8ed5a6eb…`). Verificado por objeto: `validate_promo_code` `40087366…/3742` y `_log_promo_validation` `a31fe7ee…/509`, las dos `VOLATILE` y sin `\r`; el registro solo lo ejecutan `postgres` y `service_role`. Después de un `NOTIFY pgrst, 'reload schema'`, una llamada por HTTP a `/rest/v1/rpc/validate_promo_code` respondió lo mismo de siempre y dejó su fila, con el código `00684-HTTPTEST` y sin `caller_uid`.
 
 ```sql
 -- Qué le contestó la app a una cuenta
