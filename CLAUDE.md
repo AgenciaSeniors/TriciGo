@@ -3175,10 +3175,10 @@ SELECT public.accept_ride_v2('<ride_id>', '<driver_profile_id>');
 
 **Emulador** (`tricigo-test`, Android 14): GPU de la PC (`hw.gpu.mode = host`), 4 GB de RAM y 720×1600 a 320 dpi (360 dp de ancho, como un teléfono chico). Arranca en unos 50 s:
 ```bash
-"$LOCALAPPDATA/Android/Sdk/emulator/emulator.exe" -avd tricigo-test -gpu host -no-snapshot -no-boot-anim -no-audio
+"$LOCALAPPDATA/Android/Sdk/emulator/emulator.exe" -avd tricigo-test -gpu host -no-snapshot -no-boot-anim -no-audio -feature -QuickbootFileBacked
 ```
-- **Siempre con `-no-snapshot`.** Esta PC tiene poco disco y el snapshot de arranque ocupaba 4,1 GB. La config anterior quedó en `config.ini.bak-20261117`, en la carpeta del AVD.
-- **Idioma y hora de Cuba:** `adb root`, `setprop persist.sys.locale es-US` + `setprop ctl.restart zygote`, y `service call alarm 3 s16 America/Havana`. El GPS se fija con `adb emu geo fix -82.3597 23.1352` (primero la longitud). El reinicio del zygote borra el GPS y los `adb reverse`, así que hay que volver a ponerlos.
+- **Las dos opciones de disco son necesarias.** Esta PC tiene poco disco. Sin `-no-snapshot`, el emulador guarda un snapshot de arranque. Con `-no-snapshot` solo, igual escribe la memoria del emulador en `snapshots/default_boot/ram.img`, que pesa lo mismo que la RAM (4 GB), y queda ahí al apagarlo. `-feature -QuickbootFileBacked` evita ese archivo. Si aparece, se puede borrar con el emulador apagado. La config anterior quedó en `config.ini.bak-20261117`, en la carpeta del AVD.
+- **Idioma y hora de Cuba:** `adb root`, `setprop persist.sys.locale es-US` + `setprop ctl.restart zygote`, y `service call alarm 3 s16 America/Havana`. El idioma queda guardado; la zona horaria vuelve a GMT en cada arranque, así que hay que repetir el `service call` (con `adb root` antes). El GPS se fija con `adb emu geo fix -82.3597 23.1352` (primero la longitud). El reinicio del zygote y cada arranque borran el GPS y los `adb reverse`, así que hay que volver a ponerlos.
 - **Animaciones de Android en 0** (`settings put global window_animation_scale 0`, igual con `transition_animation_scale` y `animator_duration_scale`). Con animaciones, `uiautomator dump` falla en las pantallas que se mueven.
 - **Apps instaladas:** los dev clients del 27/06 (`Downloads\tricigo-dev-apks`). Desde entonces el conductor solo sumó un módulo nativo, `expo-updates`, y el JS no lo importa.
 
