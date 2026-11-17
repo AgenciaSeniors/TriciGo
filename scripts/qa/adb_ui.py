@@ -103,17 +103,31 @@ class Node:
         return f'#{self.idx:<3} {" ".join(parts) or self.cls} @({cx},{cy})' + (f' [{",".join(flags)}]' if flags else '')
 
 
-def dump_nodes() -> list[Node]:
+class DumpFailed(Exception):
+    pass
+
+
+def try_dump_nodes() -> list[Node]:
     last_err = ''
     for _ in range(4):
-        out = adb('shell', 'uiautomator', 'dump', '/sdcard/qa_ui.xml', check=False)
+        proc = subprocess.run([adb_path(), 'shell', 'uiautomator', 'dump', '/sdcard/qa_ui.xml'], capture_output=True)
+        out = (proc.stdout + proc.stderr).decode('utf-8', errors='replace').strip()
         if 'dumped to' in out:
             xml = adb('exec-out', 'cat', '/sdcard/qa_ui.xml', binary=True)
             root = ET.fromstring(xml)
             return [Node(el, i) for i, el in enumerate(root.iter('node'))]
-        last_err = out.strip()
+        last_err = out or f'no output (exit {proc.returncode})'
         time.sleep(0.8)  # uiautomator fails while the screen animates
-    sys.exit(f'uiautomator dump failed: {last_err}')
+    # Persistent failures with no output usually mean Android itself is down
+    # (DeadSystemException in `logs`), not that the screen keeps moving.
+    raise DumpFailed(f'uiautomator dump failed: {last_err}')
+
+
+def dump_nodes() -> list[Node]:
+    try:
+        return try_dump_nodes()
+    except DumpFailed as exc:
+        sys.exit(str(exc))
 
 
 def foreground() -> str:
@@ -190,7 +204,12 @@ def cmd_swipe(args):
 def cmd_wait(args):
     deadline = time.time() + args.timeout
     while time.time() < deadline:
-        hits = matches(dump_nodes(), args.text)
+        try:
+            nodes = try_dump_nodes()
+        except DumpFailed as exc:
+            print(exc, file=sys.stderr)  # keep waiting: the screen may still be loading
+            continue
+        hits = matches(nodes, args.text)
         if bool(hits) != args.gone:
             print(hits[0].label() if hits else f'gone: {args.text}')
             return
