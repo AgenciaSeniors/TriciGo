@@ -38,6 +38,7 @@ import { RideMapView } from '@/components/RideMapView';
 import type { RideMapViewHandle } from '@/components/RideMapView';
 import { useLocateMe } from '@/hooks/useLocateMe';
 import { useAndroidBack } from '@/hooks/useAndroidBack';
+import { usePickupFromGps } from '@/hooks/usePickupFromGps';
 import { AddressSearchInput } from '@/components/AddressSearchInput';
 import { ConfirmLocationScreen } from '@/components/ConfirmLocationScreen';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
@@ -3711,6 +3712,11 @@ function SelectingView({ openPicker }: {
       setPickup(prefetchedPickup.address, prefetchedPickup.location);
     }
   }, [prefetchedPickup, setPickup]);
+
+  // When the home screen did not finish locating the rider (a quick tap, or
+  // no GPS fix yet), keep looking from here. Runs after the effect above, so
+  // a pickup it copied is left alone.
+  usePickupFromGps();
 
   // Auto-open destination search when entering selecting flow without dropoff
   useEffect(() => {
