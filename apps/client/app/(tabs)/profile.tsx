@@ -295,7 +295,7 @@ function NativeProfileScreen() {
         { icon: 'settings-outline' as const, label: t('profile.settings', { defaultValue: 'Configuración' }), onPress: () => router.push('/profile/settings'), iconBg: 'neutral' as const },
         { icon: 'gift-outline' as const, label: t('profile.referral_title'), onPress: () => router.push('/profile/referral'), iconBg: 'warning' as const },
         { icon: 'help-circle-outline' as const, label: t('profile.help'), onPress: () => router.push('/profile/help'), iconBg: 'neutral' as const },
-        { icon: 'newspaper-outline' as const, label: t('profile.blog_title', { defaultValue: 'Blog' }), onPress: () => router.push('/profile/blog'), iconBg: 'info' as const },
+        { icon: 'newspaper-outline' as const, label: t('profile.blog', { defaultValue: 'Blog' }), onPress: () => router.push('/profile/blog'), iconBg: 'info' as const },
         { icon: 'information-circle-outline' as const, label: t('profile.about'), onPress: () => router.push('/profile/about'), iconBg: 'neutral' as const },
       ],
     },
