@@ -37,6 +37,7 @@ import { RideCompleteView } from '@/components/RideCompleteView';
 import { RideMapView } from '@/components/RideMapView';
 import type { RideMapViewHandle } from '@/components/RideMapView';
 import { useLocateMe } from '@/hooks/useLocateMe';
+import { useAndroidBack } from '@/hooks/useAndroidBack';
 import { AddressSearchInput } from '@/components/AddressSearchInput';
 import { ConfirmLocationScreen } from '@/components/ConfirmLocationScreen';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
@@ -3522,6 +3523,19 @@ function SelectingView({ openPicker }: {
   const [pickupSuggestion, setPickupSuggestion] = useState<{
     latitude: number; longitude: number; address: string;
   } | null>(null);
+
+  // Android back does what the visible controls do: the search panel's arrow
+  // closes the panel, and the ✕ goes home discarding the draft. Without this
+  // the press reached nothing on the home tab and Android closed the app.
+  useAndroidBack(() => {
+    if (searchingField) {
+      setSearchingField(null);
+      return true;
+    }
+    resetDraft();
+    setFlowStep('idle');
+    return true;
+  });
 
   // Crowdsourcing — "Sugerir lugar" sheet visibility + snapshotted coords.
   // PR 3 of POI parity program. Coords default to user's location; we
