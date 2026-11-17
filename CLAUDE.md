@@ -3137,8 +3137,61 @@ Para que un agente pueda hacer rondas de prueba en prod, un viaje de una cuenta 
 - **Dónde no:** la oferta y la asignación manuales de soporte (`admin_offer_ride_to_driver`, `admin_assign_ride_to_driver`) siguen como estaban, porque elige una persona. El mapa de vehículos cercanos (`find_nearby_vehicles`) y `count_online_drivers` tampoco distinguen: un chofer de prueba conectado en La Habana aparece en el mapa de los pasajeros reales.
 - **Cuerpos tras 00685** (parche en sitio con verja md5): `dispatch_ride` `36b69c9e4c3cb6235d780e41099ea150`/5837 y `notify_offline_drivers_for_searching_rides` `dc738b434302e9f010ca8ff28d72b125`/5949, que conserva su línea `-- 00679`. Una migración que redefina cualquiera de las dos parte de estos cuerpos.
 - **Ensayo en prod, en un bloque revertido,** con la pasajera demo, un pasajero real, el chofer demo y un chofer real conectados en el mismo punto. Antes, el viaje de prueba generaba ofertas a 3 choferes reales en línea y el aviso "conéctate" a 81 choferes reales desconectados, y el viaje real también le llegaba al chofer demo. Después, el viaje de prueba solo le llegó al chofer demo, y el real llegó a los mismos 3 y 81 choferes reales, sin el demo.
-- **Para probar con más choferes** hacen falta más cuentas de prueba aprobadas, con el vehículo del tipo que se quiera probar. Hoy hay un solo chofer de prueba (triciclo).
+- **Choferes de prueba:** desde el 2026-11-17 hay uno por tipo de vehículo; ver § "Rondas de prueba en el emulador".
 - **Estado: aplicada en prod el 2026-11-17** por MCP (`20261117011516`), dentro de un `DO` que solo la ejecutaba si el texto tenía el md5 del archivo (`a06b29a0…`). Verificado por objeto: los dos cuerpos con los md5 de arriba y sin `\r`, `_dispatch_same_test_world` `913ddc01…/189`, y las tres funciones solo para `postgres` y `service_role`. Probado después con las funciones vivas, en un bloque revertido: el viaje de la pasajera demo solo generó oferta al chofer demo, y el de un pasajero real, a los 2 choferes reales en línea en ese momento y no al demo.
+
+### Rondas de prueba en el emulador: cuentas QA, Metro en modo producción y `adb_ui.py` (2026-11-17)
+
+Para que un agente pruebe las dos apps sin teléfono, contra prod. Se apoya en 00685: las cuentas de prueba solo despachan entre ellas.
+
+**Cuentas** (todas `is_test` y con `sms_notifications_enabled = false`):
+
+| Cuenta | `users.id` / `driver_profiles.id` | Uso |
+|---|---|---|
+| María Pérez, +5355550100 | `f2b1564e-c0b3-44e5-86e7-7b2c5a0ff7ad` | Pasajera demo de las tiendas. Su sesión está guardada en el emulador. |
+| Carlos Hernández, +5355550101 | `feccfe1f-…` / `70fda82e-3fe3-4129-99fe-c6f5042e4f70` | Conductor demo de las tiendas, triciclo. |
+| QA Pasajero, +12025550140 | `ebdf285e-5016-4a86-9d52-013da2eadb25` | Pasajero que se maneja por SQL. |
+| QA Moto, +12025550141 | `defc7431-e647-4f66-972d-468416624750` / `2cde9fb0-8d2c-4a4d-9d3f-5310a3771a3f` | Moto `QA-0141`. |
+| QA Auto, +12025550142 | `49d106b1-a128-4a3f-821d-7017a8d93e80` / `2d148ee0-9080-4df2-a45e-d8938ef070c8` | Auto `QA-0142`. |
+| QA Confort, +12025550143 | `c657f1d9-40a6-4560-8b70-2cce4c1b8bf6` / `ac85d5e2-a073-477e-99cb-ed6a167892c4` | Confort `QA-0143`. |
+
+- **Las QA usan números de ficción de Estados Unidos** (el rango 555-01xx está reservado para ficción): nadie recibe su código, así que nadie puede entrar con ellas desde una app. Se manejan solo por SQL. Se crearon con la API admin de GoTrue: `net.http_post` a `/auth/v1/admin/users` con `phone_confirm`, y `get_service_role_key()` dentro de la consulta.
+- **Los choferes QA quedaron aprobados y desconectados**, cada uno con 5000 en `tricicoin`. Se los cargó `admin_adjust_wallet`, actuando como la cuenta de plataforma, porque `accept_ride_v2` exige saldo para cubrir el 15 % de comisión.
+- **María y Carlos son las cuentas que usan los revisores de las tiendas.** No cambiarles el vehículo, el estado ni nada que un revisor vea.
+- **Solo Eduardo puede iniciar sesión con María o con Carlos**: el código demo es una credencial de prod. La app del conductor del emulador quedó en la pantalla de login.
+
+**Actuar como una cuenta por SQL**, en una sola llamada de `execute_sql`:
+```sql
+SELECT set_config('role', 'authenticated', true),
+       set_config('request.jwt.claim.sub', '<user_id>', true),
+       set_config('request.jwt.claims', '{"sub":"<user_id>","role":"authenticated"}', true);
+SELECT public.accept_ride_v2('<ride_id>', '<driver_profile_id>');
+```
+- **Para recibir ofertas, un chofer QA necesita** `is_online = true`, `current_location` cerca de la recogida y `last_heartbeat_at = now()`. Antes de aceptar hay que llamar a `driver_heartbeat`, o la respuesta es `driver_stale_heartbeat`.
+- **La oferta dura 60 s** (`offer_ttl_seconds`). Si vence, el cron la vuelve a armar a los ~2 min. Para no perderla, conviene un `DO` que espere con `pg_sleep(2)` hasta que haya una oferta con `expires_at > clock_timestamp()` y acepte en el mismo bloque.
+- **Una sola `update_driver_position` por llamada.** Dos en la misma sentencia tienen la misma hora y chocan con `idx_ride_location_dedup`.
+- **Al terminar, desconectar al chofer** (`is_online = false`). Si no, a los 10 min lo saca el cron y le deja el aviso de desconexión.
+- **Primer viaje de punta a punta (2026-11-17):** María lo pidió desde la app (El Capitolio → Hotel Nacional, moto, efectivo). La única oferta fue para QA Moto, que llegó, hizo el viaje y cobró 2.463 CUP con 369 de comisión, y la app mostró cada estado. No salió ningún SMS.
+
+**Emulador** (`tricigo-test`, Android 14): GPU de la PC (`hw.gpu.mode = host`), 4 GB de RAM y 720×1600 a 320 dpi (360 dp de ancho, como un teléfono chico). Arranca en unos 50 s:
+```bash
+"$LOCALAPPDATA/Android/Sdk/emulator/emulator.exe" -avd tricigo-test -gpu host -no-snapshot -no-boot-anim -no-audio -feature -QuickbootFileBacked
+```
+- **Las dos opciones de disco son necesarias.** Esta PC tiene poco disco. Sin `-no-snapshot`, el emulador guarda un snapshot de arranque. Con `-no-snapshot` solo, igual escribe la memoria del emulador en `snapshots/default_boot/ram.img`, que pesa lo mismo que la RAM (4 GB), y queda ahí al apagarlo. `-feature -QuickbootFileBacked` evita ese archivo. Si aparece, se puede borrar con el emulador apagado. La config anterior quedó en `config.ini.bak-20261117`, en la carpeta del AVD.
+- **Idioma y hora de Cuba:** `adb root`, `setprop persist.sys.locale es-US` + `setprop ctl.restart zygote`, y `service call alarm 3 s16 America/Havana`. El idioma queda guardado; la zona horaria vuelve a GMT en cada arranque, así que hay que repetir el `service call` (con `adb root` antes). El GPS se fija con `adb emu geo fix -82.3597 23.1352` (primero la longitud). El reinicio del zygote y cada arranque borran el GPS y los `adb reverse`, así que hay que volver a ponerlos.
+- **Animaciones de Android en 0** (`settings put global window_animation_scale 0`, igual con `transition_animation_scale` y `animator_duration_scale`). Con animaciones, `uiautomator dump` falla en las pantallas que se mueven.
+- **Apps instaladas:** los dev clients del 27/06 (`Downloads\tricigo-dev-apks`). Desde entonces el conductor solo sumó un módulo nativo, `expo-updates`, y el JS no lo importa.
+
+**Metro en modo producción** (configs `client-android` y `driver-android` en `.claude/launch.json`, que no está en git: `expo start --dev-client --no-dev --minify`, puertos 8081 y 8082):
+- **Los `.env` de la worktree son copias para pruebas**, con tres diferencias:
+  - no tienen `EXPO_PUBLIC_SENTRY_DSN` ni `EXPO_PUBLIC_POSTHOG_API_KEY`, así que las pruebas no llegan a Sentry ni a PostHog de prod;
+  - tienen `EXPO_PUBLIC_DEMO_MODE=false`, como los builds de tienda (el `.env` del conductor del checkout principal tiene `true`);
+  - tienen `EXPO_NO_METRO_LAZY=1`.
+- **`EXPO_NO_METRO_LAZY=1` es obligatorio en modo producción.** Con paquetes lazy, cada `import()` dinámico pide un trozo aparte, y un paquete de producción servido por Metro no sabe de dónde bajarlo: `Unable to determine the production URL where additional JavaScript chunks are hosted`. El conductor hace `await import('expo-location')` al arrancar, y así fallaba su ubicación. Los builds de tienda empaquetan todo junto.
+- **`preview_start` abre una pestaña en `localhost:<puerto>`, y esa pestaña pide el paquete web** (3 min de CPU la primera vez).
+- **Antes de abrir una app, conviene armar su paquete con `curl`.** La URL sale del manifest (`launchAsset.url`, pidiéndolo con `expo-platform: android`). La primera vez tarda ~2 min y con caché ~30 s. Si la app pide el paquete mientras Metro todavía arranca, falla con `unexpected end of stream`.
+
+**`scripts/qa/adb_ui.py`** lee la pantalla como texto (`uiautomator dump`) y toca por texto, descripción o id, sin capturas. Tiene `open client|driver`, `dump`, `find`, `tap`, `type` (solo ASCII: el buscador ignora las tildes), `wait`, `key`, `swipe` y `logs`. Ejemplo: `python scripts/qa/adb_ui.py tap "¿A dónde vas?"`.
 
 ### Sembrar un viaje de prueba para UN conductor específico (patrón canónico, verificado 2026-07-16)
 
