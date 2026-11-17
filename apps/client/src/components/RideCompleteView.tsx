@@ -422,7 +422,8 @@ export function RideCompleteView() {
             vehiclePlate={rideWithDriver.vehicle_plate}
             vehicleYear={rideWithDriver.vehicle_year}
             compact
-            ridesLabel={t('ride.driver_rides_count', { count: rideWithDriver.driver_total_rides ?? 0, defaultValue: '{{count}} viajes' }).replace(/^\d+\s*/, '')}
+            ridesText={t('ride.driver_rides_count', { count: rideWithDriver.driver_total_rides ?? 0 })}
+            plateLabel={t('ride.plate_label')}
           />
         </View>
       )}

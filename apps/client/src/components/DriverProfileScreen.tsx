@@ -164,7 +164,7 @@ export function DriverProfileScreen({ driverUserId }: DriverProfileScreenProps) 
           <View style={styles.statItem}>
             <Text style={styles.statValue}>{totalRides}</Text>
             <Text style={styles.statLabel}>
-              {t('ride.driver_profile_trips', { count: totalRides, defaultValue: '{{count}} trips' })}
+              {t('ride.driver_profile_trips', { count: totalRides })}
             </Text>
           </View>
           <View style={styles.statDivider} />

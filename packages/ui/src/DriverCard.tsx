@@ -5,6 +5,7 @@ import type { ImageSourcePropType } from 'react-native';
 import { Text } from './Text';
 import { Card } from './Card';
 import { Avatar } from './Avatar';
+import { driverCardText } from './driverCardText';
 
 export interface DriverCardProps {
   /** Driver display name */
@@ -31,8 +32,10 @@ export interface DriverCardProps {
   actions?: React.ReactNode;
   /** Compact mode: smaller avatar (40px), no vehicle photo */
   compact?: boolean;
-  /** Localized label for ride count */
-  ridesLabel?: string;
+  /** Ride count as a translated phrase, number included ("312 viajes", "1 viaje") */
+  ridesText?: string;
+  /** Translated word read before the plate by screen readers ("Placa") */
+  plateLabel?: string;
   /** Service type icon (e.g. triciclo, moto, auto) shown next to vehicle info */
   serviceTypeIcon?: ImageSourcePropType;
 }
@@ -50,30 +53,26 @@ export function DriverCard({
   vehicleYear,
   actions,
   compact = false,
-  ridesLabel = 'viajes',
+  ridesText,
+  plateLabel,
   serviceTypeIcon,
 }: DriverCardProps) {
   const avatarSize = compact ? 40 : 60;
 
-  // Build vehicle description line: "2021 Honda Wave · Azul"
-  const vehicleParts: string[] = [];
-  if (vehicleYear) vehicleParts.push(String(vehicleYear));
-  if (vehicleMake) vehicleParts.push(vehicleMake);
-  if (vehicleModel) vehicleParts.push(vehicleModel);
-  const vehicleDesc = vehicleParts.join(' ');
-  const vehicleLine = vehicleColor
-    ? `${vehicleDesc} · ${vehicleColor}`
-    : vehicleDesc;
-
-  // Rating + rides line: "★ 4.8 · 312 viajes"
-  const ratingParts: string[] = [];
-  if (driverRating != null) {
-    ratingParts.push(`★ ${driverRating.toFixed(1)}`);
-  }
-  if (driverTotalRides != null && driverTotalRides > 0) {
-    ratingParts.push(`${driverTotalRides} ${ridesLabel}`);
-  }
-  const ratingLine = ratingParts.join(' · ');
+  // "★ 4.8 · 312 viajes" and "2021 Honda Wave · Azul", plus the label a
+  // screen reader announces for the whole card.
+  const { ratingLine, vehicleLine, accessibilityLabel } = driverCardText({
+    driverName,
+    driverRating,
+    driverTotalRides,
+    vehicleMake,
+    vehicleModel,
+    vehicleColor,
+    vehiclePlate,
+    vehicleYear,
+    ridesText,
+    plateLabel,
+  });
 
   return (
     <Card variant="elevated" padding="md">
@@ -88,7 +87,7 @@ export function DriverCard({
         </View>
 
         {/* Info */}
-        <View className="flex-1" accessible accessibilityLabel={[driverName, ratingLine, vehicleLine, vehiclePlate ? `plate ${vehiclePlate}` : ''].filter(Boolean).join(', ')}>
+        <View className="flex-1" accessible accessibilityLabel={accessibilityLabel}>
           <Text variant={compact ? 'body' : 'h4'} className="font-semibold">
             {driverName}
           </Text>
