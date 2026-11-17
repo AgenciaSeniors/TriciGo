@@ -18,10 +18,11 @@ function source(path: string): string {
 
 /** Literal `t('key', { ns: '…' })` calls, with the namespace they resolve in. */
 function usedKeys(code: string, defaultNs: string): { ns: string; key: string }[] {
-  return [...code.matchAll(/\bt\(\s*(['"])([^'"]+)\1\s*(?:,\s*\{([^}]*)\})?/g)].map((m) => ({
-    ns: m[3]?.match(/\bns:\s*['"](\w+)['"]/)?.[1] ?? defaultNs,
-    key: m[2],
-  }));
+  return [...code.matchAll(/\bt\(\s*(['"])([^'"]+)\1\s*(?:,\s*\{([^}]*)\})?/g)].flatMap((m) => {
+    const key = m[2];
+    if (!key) return [];
+    return [{ ns: m[3]?.match(/\bns:\s*['"](\w+)['"]/)?.[1] ?? defaultNs, key }];
+  });
 }
 
 function missing(keys: { ns: string; key: string }[]): string[] {
