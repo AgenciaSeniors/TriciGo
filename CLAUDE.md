@@ -2357,6 +2357,7 @@ Desde la 00660, `/rides/[id]/assist` también ayuda a un viaje `accepted`, `driv
 - **La app del conductor no cambió:** ya vuelve a mostrar un viaje que le reasignan (el chequeo de 30 s o al volver al frente). El pasajero recibe de nuevo "Conductor asignado", y los contactos de confianza, otra vez el SMS del viaje.
 - **Cuerpos tras 00686** (parche en sitio con verja md5; una migración que los redefina parte de estos): `release_rides_from_dead_drivers` `90f9fe8b…/6457`, `update_driver_position` `bf109db4…/1714`, `driver_heartbeat` `81afe7bd…/2428`, `tg_ride_location_events_guard` `6d098605…/1113`, `_reclaim_released_ride` `638c9028…/2826`.
 - Ensayo: `supabase/tests/00686/run.sh` (sin la migración, 16 fallos; con ella, 37/37 con aplicación doble, copia CRLF y pruebas negativas). No necesita PostGIS. Con solo el servidor de Postgres a mano, `PSQL` acepta otro cliente con las mismas opciones de `psql`.
+- **Estado: aplicada en prod el 2026-11-18** por MCP (`20261118043445`), con un `DO` que leyó el archivo del commit `e3c430e9` desde `net._http_response` y lo ejecutó solo si su md5 era el del repo (`1dc5fd1c…`). Verificado por objeto: los cinco md5 de arriba, sin `\r`, y la tabla solo para `service_role`. Probado después en un bloque revertido con QA Moto y QA Pasajero: la liberación anotó el viaje, la posición de QA Moto se lo devolvió con su `accepted_at`, guardó su punto y dejó la oferta a QA Confort en `superseded`.
 - **Diagnóstico:**
   ```sql
   SELECT d.ride_id, d.released_at, d.reclaimed_at, r.status FROM dead_driver_releases d
