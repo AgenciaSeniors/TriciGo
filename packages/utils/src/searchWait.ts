@@ -150,6 +150,30 @@ export function searchHelpAvailable(elapsedSeconds: number): boolean {
   return stage === 'extended' || stage === 'long';
 }
 
+/** The two places the searching screen learns about drivers. */
+export interface SearchingDriverCountInput {
+  /** Drivers whose phone holds a live offer (`get_ride_offer_stats.pending_count`, polled every 3 s). */
+  pendingOfferCount: number;
+  /** Drivers with the offer open on screen right now (the `ride-search:<rideId>` presence channel). */
+  reviewingDriverCount: number;
+}
+
+/**
+ * How many drivers the searching screen says are looking at the ride. The card header, its
+ * badge and the status line under it all show this one number.
+ *
+ * They used to disagree. On 2026-11-17 (ride c4d2110e) the server held live offers for César
+ * and Jasmany, but only César had the offer open, so the card said "1 conductor revisando tu
+ * solicitud" while the line under it said "2 conductores evaluando". A driver joins presence
+ * only while the offer card is on screen, so presence misses everyone who got the push and has
+ * not opened it yet. The offer count is the truth about who can still accept; presence only
+ * counts first because it arrives over realtime, before the first 3 s poll.
+ */
+export function searchingDriverCount(input: SearchingDriverCountInput): number {
+  const whole = (n: number) => (Number.isFinite(n) && n > 0 ? Math.floor(n) : 0);
+  return Math.max(whole(input.pendingOfferCount), whole(input.reviewingDriverCount));
+}
+
 /**
  * The ride code the rider and support talk about: the first 8 characters of the id, upper
  * case. The same as the server's _ride_short_code (00628), so the app can write it on

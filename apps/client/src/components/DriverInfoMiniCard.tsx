@@ -24,7 +24,14 @@ import { useThemeStore } from '@/stores/theme.store';
 import type { SearchingDriverPresence } from '@tricigo/types';
 
 interface DriverInfoMiniCardProps {
+  /** Drivers with the offer open on screen; their names and photos fill the driver row. */
   drivers: SearchingDriverPresence[];
+  /**
+   * How many drivers the header and badge announce (`searchingDriverCount`), so they match the
+   * status line under the card. It can exceed `drivers.length`: a driver who got the offer but
+   * has not opened it counts here and has no row. Defaults to `drivers.length`.
+   */
+  driverCount?: number;
   isSearching: boolean;
   /** BUG-293: optional trip-summary block under the driver section. */
   pickupAddress?: string | null;
@@ -240,6 +247,7 @@ function TripSummary({
 
 export function DriverInfoMiniCard({
   drivers,
+  driverCount,
   isSearching,
   pickupAddress,
   dropoffAddress,
@@ -257,7 +265,7 @@ export function DriverInfoMiniCard({
 
   if (!isSearching) return null;
 
-  const count = drivers.length;
+  const count = driverCount ?? drivers.length;
   const hasTripSummary = !!(pickupAddress || dropoffAddress || fareDisplay || etaLabel);
 
   // Even with 0 drivers we now show the trip summary while the radar
@@ -299,10 +307,10 @@ export function DriverInfoMiniCard({
         ) : null}
       </View>
 
-      {/* Driver section */}
-      {count === 1 ? (
+      {/* Driver section — only the drivers with the offer open have a name and photo to show */}
+      {drivers.length === 1 ? (
         <DriverHeroRow driver={drivers[0]!} isDark={isDark} serviceTypeLabel={serviceTypeLabel} />
-      ) : count > 1 ? (
+      ) : drivers.length > 1 ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
