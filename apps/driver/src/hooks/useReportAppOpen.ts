@@ -4,6 +4,7 @@ import { deviceService } from '@tricigo/api';
 import { logger, shouldReportAppOpen, type AppOpenReport } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { getDeviceInfo } from '@/lib/device';
+import { reportOverlayStatus } from '@/lib/overlayReport';
 
 // Per process. An app update restarts the process, so the version reported
 // here never goes stale while the app keeps running.
@@ -53,8 +54,13 @@ export function useReportAppOpen(): void {
   useEffect(() => {
     if (!userId || Platform.OS === 'web') return;
     void reportAppOpen(userId);
+    // The offer auto-open status (00689) rides on the same moments: it sends
+    // only when the status changed or 6 hours passed.
+    void reportOverlayStatus(userId);
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void reportAppOpen(userId);
+      if (state !== 'active') return;
+      void reportAppOpen(userId);
+      void reportOverlayStatus(userId);
     });
     return () => sub.remove();
   }, [userId]);

@@ -834,7 +834,13 @@
     "prompt_title": "No te pierdas ningún viaje",
     "prompt_body": "Permite que TriciGo aparezca sobre otras apps: cuando llegue un viaje, la app se abrirá sola aunque estés usando otra aplicación, y verás un botón flotante para volver rápido.",
     "prompt_enable": "Activar",
-    "prompt_later": "Ahora no"
+    "prompt_later": "Ahora no",
+    "xiaomi_title": "Un permiso más en tu Xiaomi",
+    "xiaomi_body": "Para que TriciGo se abra sola, activa también «Mostrar ventanas emergentes mientras se ejecuta en segundo plano». Toca Abrir permisos y búscalo en la lista.",
+    "xiaomi_open": "Abrir permisos",
+    "xiaomi_done": "Ya lo activé",
+    "settings_xiaomi_title": "Permiso extra de Xiaomi",
+    "settings_xiaomi_sub": "Necesario en Xiaomi, Redmi y POCO para que la app se abra sola"
   },
   "fleet": {
     "load_error_title": "No pudimos cargar tu información corporativa",

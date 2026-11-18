@@ -834,7 +834,13 @@
     "prompt_title": "Não perca nenhuma corrida",
     "prompt_body": "Permita que o TriciGo apareça sobre outros apps: quando chegar uma corrida, o app abrirá sozinho mesmo se você estiver usando outro aplicativo, e você verá um botão flutuante para voltar rápido.",
     "prompt_enable": "Ativar",
-    "prompt_later": "Agora não"
+    "prompt_later": "Agora não",
+    "xiaomi_title": "Mais uma permissão no seu Xiaomi",
+    "xiaomi_body": "Para o TriciGo abrir sozinho, ative também «Exibir janelas pop-up durante a execução em segundo plano». Toque em Abrir permissões e procure na lista.",
+    "xiaomi_open": "Abrir permissões",
+    "xiaomi_done": "Já ativei",
+    "settings_xiaomi_title": "Permissão extra da Xiaomi",
+    "settings_xiaomi_sub": "Necessária em Xiaomi, Redmi e POCO para o app abrir sozinho"
   },
   "fleet": {
     "load_error_title": "Não foi possível carregar suas informações corporativas",
