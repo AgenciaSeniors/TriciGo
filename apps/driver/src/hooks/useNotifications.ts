@@ -18,6 +18,7 @@ import { router } from 'expo-router';
 import { emitRideAssignedPush, isRideAssignedPush } from '@/utils/rideAssignedPush';
 import { claimNotificationResponse } from '@/utils/notificationResponses';
 import { fleetUpdateRoute } from '@/utils/fleetPush';
+import { openSupportPanelLink } from '@/utils/supportPanel';
 
 const NOTIF_PREF_KEY = '@tricigo/notifications_enabled';
 
@@ -95,6 +96,8 @@ Notifications.setNotificationHandler({
 
 /** Navigate to the appropriate screen based on notification data */
 function handleNotificationNavigation(data: Record<string, unknown> | undefined) {
+  // A support alert sent to an operator: open the ride in the panel, not this app's home.
+  if (openSupportPanelLink(data)) return;
   if (!data?.type) return;
 
   const fleetRoute = fleetUpdateRoute(data);
