@@ -1,8 +1,14 @@
 import { create } from 'zustand';
 import type { DriverProfile } from '@tricigo/types';
+import { shiftAfterServerRow } from '@/services/systemOfflineRecovery';
 
 interface DriverState {
   profile: DriverProfile | null;
+  /**
+   * The app's shift. Follows the server, except that a row saying the SYSTEM took
+   * the driver offline does not end it (see shiftAfterServerRow): the recovery
+   * decides, and ends it with setOnline(false) when it cannot reconnect.
+   */
   isOnline: boolean;
   /** True once the initial profile fetch has completed SUCCESSFULLY. */
   isProfileLoaded: boolean;
@@ -26,7 +32,12 @@ export const useDriverStore = create<DriverState>((set) => ({
   isProfileLoaded: false,
   profileLoadError: false,
   setProfile: (profile) =>
-    set({ profile, isOnline: profile?.is_online ?? false, isProfileLoaded: true, profileLoadError: false }),
+    set((state) => ({
+      profile,
+      isOnline: shiftAfterServerRow(state.isOnline, profile),
+      isProfileLoaded: true,
+      profileLoadError: false,
+    })),
   setOnline: (isOnline) => set({ isOnline }),
   setProfileLoaded: () => set({ isProfileLoaded: true, profileLoadError: false }),
   setProfileError: () => set({ profileLoadError: true }),

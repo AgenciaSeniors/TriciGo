@@ -3,24 +3,32 @@
  * The decisions live in services/systemOfflineRecovery.ts (tested); this hook
  * wires them to the app: the server row, AppState, the driver store and toasts.
  *
- * Three triggers:
+ * Four triggers:
  *  1. The 2-min heartbeat on the home screen reads is_online back and passes
  *     the row in (the app thinks it is online; the server may not).
- *  2. A server row arriving in the store (realtime, profile reload) that flips
- *     the app from online to offline.
+ *  2. A server row arriving in the store (realtime, profile reload) that says
+ *     offline while the app is on shift. A system drop does not end the shift
+ *     (driver.store), so the background service keeps running while this runs.
  *  3. The app coming back to the foreground with a pending drop, or while it
  *     shows the driver online.
+ *  4. The internet coming back while on shift (NetInfo), so the reconnect does
+ *     not wait for the next 2-min heartbeat.
  */
 import { useEffect, useMemo } from 'react';
 import { AppState, Platform } from 'react-native';
 import * as Location from 'expo-location';
+import * as TaskManager from 'expo-task-manager';
+import NetInfo from '@react-native-community/netinfo';
 import Toast from 'react-native-toast-message';
 import { driverService, getSupabaseClient } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { logger, trackEvent } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
+import { LOCATION_TASK } from '@/services/locationBackgroundTask';
 import {
   createSystemOfflineRecovery,
+  internetCameBack,
+  serverRowNeedsRecovery,
   type ServerOnlineState,
 } from '@/services/systemOfflineRecovery';
 
@@ -46,6 +54,11 @@ export function useSystemOfflineRecovery(profileId: string | undefined): SystemO
         }
       },
       isAppActive: () => AppState.currentState === 'active',
+      async isBackgroundServiceRunning() {
+        if (Platform.OS === 'web') return false;
+        return TaskManager.isTaskRegisteredAsync(LOCATION_TASK);
+      },
+      isOnShift: () => useDriverStore.getState().isOnline,
       async blockedReason() {
         if (useDriverStore.getState().profile?.is_financially_eligible === false) return 'negative_balance';
         if (Platform.OS !== 'web') {
@@ -110,16 +123,15 @@ export function useSystemOfflineRecovery(profileId: string | undefined): SystemO
     });
   }, [profileId, t]);
 
-  // (2) A server row that flips the app from online to offline.
+  // (2) A server row that says offline while the app is on shift.
   useEffect(() => {
     if (!recovery) return;
     return useDriverStore.subscribe((state, prev) => {
       // setOnline() from the driver's own toggle keeps the same profile
       // object; only a row from the server replaces it.
-      if (state.profile === prev.profile) return;
-      if (!prev.isOnline || state.isOnline) return;
-      if (state.profile?.id !== profileId) return;
-      // A fresh read decides: the row in the store may come from the cache.
+      if (!serverRowNeedsRecovery(state, prev, profileId)) return;
+      // A fresh read decides: the row in the store may come from the cache,
+      // and the server restore is a second row right behind this one.
       void recovery.evaluate();
     });
   }, [recovery, profileId]);
@@ -132,6 +144,18 @@ export function useSystemOfflineRecovery(profileId: string | undefined): SystemO
       if (recovery.hasPending() || useDriverStore.getState().isOnline) void recovery.evaluate();
     });
     return () => sub.remove();
+  }, [recovery]);
+
+  // (4) The internet came back while on shift.
+  useEffect(() => {
+    if (!recovery || Platform.OS === 'web') return;
+    let prev: { isConnected: boolean | null; isInternetReachable?: boolean | null } | null = null;
+    const unsubscribe = NetInfo.addEventListener((next) => {
+      const cameBack = internetCameBack(prev, next);
+      prev = { isConnected: next.isConnected, isInternetReachable: next.isInternetReachable };
+      if (cameBack && useDriverStore.getState().isOnline) void recovery.evaluate();
+    });
+    return () => unsubscribe();
   }, [recovery]);
 
   return recovery;

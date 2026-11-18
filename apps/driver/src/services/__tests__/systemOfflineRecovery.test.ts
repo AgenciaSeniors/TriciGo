@@ -2,6 +2,9 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   createSystemOfflineRecovery,
   decideSystemOffline,
+  internetCameBack,
+  serverRowNeedsRecovery,
+  BACKGROUND_RECONNECT_ATTEMPTS,
   type RecoveryDeps,
   type ServerOnlineState,
 } from '../systemOfflineRecovery';
@@ -14,6 +17,8 @@ function deps(over: Partial<RecoveryDeps> = {}): RecoveryDeps & { [K in keyof Re
   return {
     fetchServerState: vi.fn(async () => BY_SYSTEM),
     isAppActive: vi.fn(() => true),
+    isBackgroundServiceRunning: vi.fn(async () => false),
+    isOnShift: vi.fn(() => true),
     blockedReason: vi.fn(async () => null),
     goOnline: vi.fn(async () => {}),
     onReconnected: vi.fn(),
@@ -35,6 +40,35 @@ describe('decideSystemOffline', () => {
   });
   it('waits for the app to come to the foreground', () => {
     expect(decideSystemOffline(BY_SYSTEM, { appActive: false, attempted: none })).toBe('defer');
+  });
+  it('reconnects in the background while the background service keeps the app alive', () => {
+    expect(
+      decideSystemOffline(BY_SYSTEM, { appActive: false, backgroundServiceRunning: true, attempted: none }),
+    ).toBe('reconnect');
+  });
+  it('without that service it still waits: a reconnect would be dropped again in 10 min', () => {
+    expect(
+      decideSystemOffline(BY_SYSTEM, { appActive: false, backgroundServiceRunning: false, attempted: none }),
+    ).toBe('defer');
+  });
+  it('after giving up in the background it waits for the foreground', () => {
+    const gaveUp = new Set([BY_SYSTEM.auto_offline_at as string]);
+    expect(
+      decideSystemOffline(BY_SYSTEM, {
+        appActive: false,
+        backgroundServiceRunning: true,
+        attempted: none,
+        backgroundGaveUp: gaveUp,
+      }),
+    ).toBe('defer');
+    expect(
+      decideSystemOffline(BY_SYSTEM, { appActive: true, attempted: none, backgroundGaveUp: gaveUp }),
+    ).toBe('reconnect');
+  });
+  it('never reconnects in the background someone a person took offline', () => {
+    expect(
+      decideSystemOffline(BY_PERSON, { appActive: false, backgroundServiceRunning: true, attempted: none }),
+    ).toBe('show_offline');
   });
   it('tries once per drop: if it did not stick, it shows the driver offline', () => {
     const tried = new Set([BY_SYSTEM.auto_offline_at as string]);
@@ -120,6 +154,90 @@ describe('createSystemOfflineRecovery', () => {
     expect(d.onShownOffline).toHaveBeenCalledWith('failed', 'driver_has_no_active_vehicle_for_online');
   });
 
+  it('the signal comes back with the phone in the pocket: reconnects with no tap', async () => {
+    const d = deps({
+      isAppActive: vi.fn(() => false),
+      isBackgroundServiceRunning: vi.fn(async () => true),
+    });
+    const r = createSystemOfflineRecovery(d);
+    expect(await r.evaluate()).toBe('reconnect');
+    expect(d.goOnline).toHaveBeenCalledTimes(1);
+    expect(d.onReconnected).toHaveBeenCalledTimes(1);
+    expect(r.hasPending()).toBe(false);
+  });
+
+  it('only asks about the background service when the app is not on screen', async () => {
+    const d = deps();
+    const r = createSystemOfflineRecovery(d);
+    await r.evaluate();
+    expect(d.isBackgroundServiceRunning).not.toHaveBeenCalled();
+  });
+
+  it('a failed write in the background keeps the shift and tries again on the next trigger', async () => {
+    let fail = true;
+    const d = deps({
+      isAppActive: vi.fn(() => false),
+      isBackgroundServiceRunning: vi.fn(async () => true),
+      goOnline: vi.fn(async () => {
+        if (fail) throw new Error('Network request failed');
+      }),
+    });
+    const r = createSystemOfflineRecovery(d);
+    expect(await r.evaluate()).toBe('defer');
+    // The network is flaky right after it comes back: never end the shift for that.
+    expect(d.onShownOffline).not.toHaveBeenCalled();
+    expect(r.hasPending()).toBe(true);
+
+    fail = false;
+    expect(await r.evaluate()).toBe('reconnect');
+    expect(d.goOnline).toHaveBeenCalledTimes(2);
+    expect(d.onShownOffline).not.toHaveBeenCalled();
+  });
+
+  it(`gives up in the background after ${BACKGROUND_RECONNECT_ATTEMPTS} failed writes and waits for the foreground`, async () => {
+    let active = false;
+    const d = deps({
+      isAppActive: vi.fn(() => active),
+      isBackgroundServiceRunning: vi.fn(async () => true),
+      goOnline: vi.fn(async () => {
+        throw new Error('driver_has_no_active_vehicle_for_online');
+      }),
+    });
+    const r = createSystemOfflineRecovery(d);
+    for (let i = 0; i < BACKGROUND_RECONNECT_ATTEMPTS; i++) {
+      expect(await r.evaluate()).toBe('defer');
+    }
+    // No more writes while it stays in the background.
+    expect(await r.evaluate()).toBe('defer');
+    expect(d.goOnline).toHaveBeenCalledTimes(BACKGROUND_RECONNECT_ATTEMPTS);
+    expect(d.onShownOffline).not.toHaveBeenCalled();
+
+    // On screen, the existing rule applies: one attempt, then tell the driver.
+    active = true;
+    expect(await r.evaluate()).toBe('show_offline');
+    expect(d.goOnline).toHaveBeenCalledTimes(BACKGROUND_RECONNECT_ATTEMPTS + 1);
+    expect(d.onShownOffline).toHaveBeenCalledWith('failed', 'driver_has_no_active_vehicle_for_online');
+  });
+
+  it('never reconnects after the driver tapped Desconectar, even with a drop still pending', async () => {
+    // The system dropped the driver while the app still showed "En línea" (the
+    // store keeps the shift), and he tapped Desconectar: is_online was already
+    // false on the server, so auto_offline_at stays. The app's shift decides.
+    let active = false;
+    let onShift = true;
+    const d = deps({ isAppActive: vi.fn(() => active), isOnShift: vi.fn(() => onShift) });
+    const r = createSystemOfflineRecovery(d);
+    expect(await r.evaluate()).toBe('defer');
+    expect(r.hasPending()).toBe(true);
+
+    onShift = false; // Desconectar
+    active = true;
+    expect(await r.evaluate()).toBe('none');
+    expect(r.hasPending()).toBe(false);
+    expect(d.goOnline).not.toHaveBeenCalled();
+    expect(d.onShownOffline).not.toHaveBeenCalled();
+  });
+
   it('two triggers at once reconnect once', async () => {
     let release!: () => void;
     const gate = new Promise<void>((r) => { release = r; });
@@ -130,5 +248,55 @@ describe('createSystemOfflineRecovery', () => {
     release();
     await Promise.all([a, b]);
     expect(d.goOnline).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('serverRowNeedsRecovery', () => {
+  const ON = { id: 'd1', is_online: true, auto_offline_at: null };
+  const SYS = { id: 'd1', is_online: false, auto_offline_at: '2026-11-17T22:35:00Z' };
+  const PER = { id: 'd1', is_online: false, auto_offline_at: null };
+
+  it('a system drop arriving while the app is on shift (the store kept the shift)', () => {
+    expect(
+      serverRowNeedsRecovery({ profile: SYS, isOnline: true }, { profile: ON, isOnline: true }, 'd1'),
+    ).toBe(true);
+  });
+  it('an offline that ended the shift (a person did it): the recovery confirms it', () => {
+    expect(
+      serverRowNeedsRecovery({ profile: PER, isOnline: false }, { profile: ON, isOnline: true }, 'd1'),
+    ).toBe(true);
+  });
+  it('ignores the driver\'s own toggle: same row, only the shift changed', () => {
+    expect(
+      serverRowNeedsRecovery({ profile: ON, isOnline: false }, { profile: ON, isOnline: true }, 'd1'),
+    ).toBe(false);
+  });
+  it('ignores rows that say online, rows of another driver, and an app that is off shift', () => {
+    expect(serverRowNeedsRecovery({ profile: ON, isOnline: true }, { profile: SYS, isOnline: true }, 'd1')).toBe(false);
+    expect(serverRowNeedsRecovery({ profile: SYS, isOnline: true }, { profile: ON, isOnline: true }, 'd2')).toBe(false);
+    expect(serverRowNeedsRecovery({ profile: SYS, isOnline: false }, { profile: PER, isOnline: false }, 'd1')).toBe(false);
+  });
+});
+
+describe('internetCameBack', () => {
+  const down = { isConnected: false, isInternetReachable: false };
+  const noInternet = { isConnected: true, isInternetReachable: false };
+  const up = { isConnected: true, isInternetReachable: true };
+  const unknown = { isConnected: true, isInternetReachable: null };
+
+  it('fires when the network or the internet comes back', () => {
+    expect(internetCameBack(down, up)).toBe(true);
+    // Common in Cuba: still on the network, but with no internet. Coming back counts.
+    expect(internetCameBack(noInternet, up)).toBe(true);
+    expect(internetCameBack(down, unknown)).toBe(true);
+  });
+  it('does not fire for the first reading or while nothing changed', () => {
+    expect(internetCameBack(null, up)).toBe(false);
+    expect(internetCameBack(up, up)).toBe(false);
+    expect(internetCameBack(unknown, up)).toBe(false);
+  });
+  it('does not fire when the connection is lost', () => {
+    expect(internetCameBack(up, noInternet)).toBe(false);
+    expect(internetCameBack(up, down)).toBe(false);
   });
 });
