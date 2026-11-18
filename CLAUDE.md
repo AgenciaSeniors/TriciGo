@@ -3818,6 +3818,18 @@ resto (status, approved_at…)       0,2 %   ← SEÑAL
 
 **Watchdog de salud (00577).** `check_database_health()` cada hora (muestra + alerta **solo en transición** ok↔warn↔critical, patrón 00503) y `send_db_health_digest()` diario a las 07:30 UTC al `business_notification_email`. Es SQL puro y no una Edge Function por la misma razón que 00503: si la base está por colapsar, la EF puede no conseguir conexión justo cuando hay que avisar. El aviso temprano real es la **proyección**: con 7 días de muestras calcula MB/día y pasa a `warn` cuando faltan ≤14 días para el umbral, *antes* de cruzarlo. `db_size_warn_mb`/`crit_mb` (6000/7500) son el **único número asumido y no medido** — Postgres no conoce el tamaño del disco que le dio Supabase; ajustar si el disco real es otro.
 
+**Qué cuenta como conexión, y cuándo avisa (00690, 2026-11-18).** Hasta la 00690 el vigilante mandaba "Base de datos: atención" y una hora después "normalizada" (24 pares en 30 días), y la base estaba bien. Se disparaba solo la regla de conexiones, y medía mal por tres motivos:
+- **Contaba procesos que no ocupan lugar.** Tomaba `count(*)` de `pg_stat_activity`, y ahí aparecen unos 9 procesos internos (checkpointer, walwriter, archiver, el lanzador de pg_cron, el worker de pg_net, el walsender...) que no usan `max_connections`.
+- **Medía en el peor segundo.** El chequeo corre a los :55, un minuto `*/5` en el que arrancan 14 a 17 tareas de pg_cron. pg_cron corre en modo libpq (`cron.use_background_workers = off`), así que cada tarea es una conexión de cliente durante menos de un segundo. Medido a las 04:55:00 del 18/11: el total pasó de 22 a 34, y las 12 de más eran `client backend | postgres | pg_cron`.
+- **Dividía por 60, pero un cliente tiene 57 lugares:** 3 quedan reservados para superusuarios.
+
+Desde la 00690:
+- **`sample_database_health` cuenta solo conexiones de clientes** (`_db_health_counts_connection`), sin las tareas de pg_cron que arrancaron en el último minuto, sobre `max_connections − superuser_reserved_connections − reserved_connections` (57). Una tarea de pg_cron viva hace más de un minuto está trabada y ocupa su lugar, así que cuenta. Una sesión cuyo tipo el dueño no puede ver también cuenta: sin `pg_read_all_stats`, `backend_type` sale NULL para las sesiones ajenas (medido en PG16), y así el vigilante cuenta de más en vez de quedar ciego. La migración aborta si `postgres` no ve el tipo de todas las sesiones.
+- **`check_database_health` avisa un cambio solo cuando dos muestras seguidas coinciden.** Pasar a crítico se avisa enseguida. `db_health_status` es lo último que se le avisó al equipo, y cada muestra guarda su propio estado en `db_health_samples.status`. Dos corridas en la misma hora son una sola muestra. Mientras un cambio espera confirmación, `db_health_detail` termina en "· sin confirmar: …".
+- Los umbrales no cambiaron: el 75 % de 57 son 43 conexiones reales. En el ensayo en prod dio 7/57 (antes contaba 15/60).
+
+Ensayo: `supabase/tests/00690/run.sh`. Abre sesiones reales con `application_name` `pg_cron` y espera a que tengan 61 s, así que tarda algo más de un minuto. Si `pg_cron` vuelve a correr las tareas como background workers, revisar el filtro: dejarían de ser `client backend` y no ocuparían lugar.
+
 ### Tercera tabla de historial sin retención: `admin_actions` (verificado 2026-10-06, mig 00606)
 
 **Síntoma:** el inicio del panel daba 500 de vez en cuando (`PostgREST; error=57014`, tiempo agotado) en `admin_actions?admin_id=eq.<plataforma>&order=created_at.desc&limit=6`. La página se traga el error y muestra la lista vacía, así que solo se ve en `edge_logs` (`response.headers.proxy_status`).
