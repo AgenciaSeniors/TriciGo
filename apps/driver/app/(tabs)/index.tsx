@@ -166,7 +166,7 @@ function ActiveTripMap({
 function NativeDriverHomeScreen() {
   const { t } = useTranslation('driver');
   const insets = useSafeAreaInsets();
-  const { profile, isOnline, setOnline } = useDriverStore();
+  const { profile, isOnline, setOnline, setShiftChangeInFlight } = useDriverStore();
   const user = useAuthStore((s) => s.user);
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
   const incomingRequests = useDriverRideStore((s) => s.incomingRequests);
@@ -1042,7 +1042,13 @@ function NativeDriverHomeScreen() {
       return;
     }
     setToggling(true);
+    // The system-offline recovery may be reconnecting right now (the app keeps
+    // showing "En línea" through a system drop). Keep it out while this runs,
+    // and let a reconnect already writing finish first, so the driver's write
+    // is always the last one.
+    setShiftChangeInFlight(true);
     try {
+      await offlineRecovery?.idle();
       const newStatus = !isOnline;
       // Don't write a fallback location on toggle — the real GPS from
       // watchPositionAsync (in useDriverLocationTracking) is the single
@@ -1102,9 +1108,10 @@ function NativeDriverHomeScreen() {
       });
       triggerHaptic('error');
     } finally {
+      setShiftChangeInFlight(false);
       setToggling(false);
     }
-  }, [profile, isOnline, setOnline, activeTrip, t, user?.id]);
+  }, [profile, isOnline, setOnline, setShiftChangeInFlight, activeTrip, t, offlineRecovery, user?.id]);
 
   const handleToggleBreak = useCallback(async () => {
     if (!profile || togglingBreak) return;

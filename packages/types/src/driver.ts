@@ -14,6 +14,12 @@ export interface DriverProfile {
   user_id: string;
   status: DriverStatus;
   is_online: boolean;
+  /**
+   * When the cron took the driver offline for missing heartbeats (00540). NULL
+   * after anything a person did (the driver's toggle, an admin). Optional:
+   * rows read with an explicit column list may not carry it.
+   */
+  auto_offline_at?: string | null;
   is_on_break: boolean;
   current_location: GeoPoint | null;
   current_heading: number | null;
