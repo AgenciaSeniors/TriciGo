@@ -141,4 +141,55 @@ describe('deviceService', () => {
       await expect(deviceService.reportAppOpen(input)).rejects.toMatchObject({ message: 'not signed in' });
     });
   });
+
+  describe('reportDriverOverlay', () => {
+    const input = {
+      device_id: 'dev-1',
+      manufacturer: 'Xiaomi',
+      brand: 'Redmi',
+      os_version: '14',
+      app_version: '1.8.0',
+      module_available: true,
+      overlay_granted: true,
+      xiaomi_ok: false,
+      launch_result: 'foreground' as const,
+    };
+
+    it('reports through report_driver_overlay with every argument', async () => {
+      mockRpc.mockResolvedValueOnce({ data: 'recorded', error: null });
+
+      await expect(deviceService.reportDriverOverlay(input)).resolves.toBe('recorded');
+
+      expect(mockRpc).toHaveBeenCalledWith('report_driver_overlay', {
+        p_device_id: 'dev-1',
+        p_manufacturer: 'Xiaomi',
+        p_brand: 'Redmi',
+        p_os_version: '14',
+        p_app_version: '1.8.0',
+        p_module_available: true,
+        p_overlay_granted: true,
+        p_xiaomi_ok: false,
+        p_launch_result: 'foreground',
+      });
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+
+    it("answers 'unavailable' while the migration is not applied (PGRST202)", async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: {
+          code: 'PGRST202',
+          message: 'Could not find the function public.report_driver_overlay in the schema cache',
+        },
+      });
+
+      await expect(deviceService.reportDriverOverlay(input)).resolves.toBe('unavailable');
+    });
+
+    it('throws any other error', async () => {
+      mockRpc.mockResolvedValueOnce({ data: null, error: { code: '42501', message: 'not signed in' } });
+
+      await expect(deviceService.reportDriverOverlay(input)).rejects.toMatchObject({ message: 'not signed in' });
+    });
+  });
 });
