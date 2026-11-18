@@ -2342,6 +2342,28 @@ Desde la 00660, `/rides/[id]/assist` también ayuda a un viaje `accepted`, `driv
   ```
   Un push que no salió deja `rpc_attempt_log` con `push_failed`, y una liberación cuyo despacho falló deja `dispatch_failed`. Las dos acciones siguen valiendo.
 
+### Un viaje liberado por silencio vuelve a su conductor (00686, 2026-11-18)
+
+`release_rides_from_dead_drivers` devuelve a búsqueda un viaje `accepted` o `driver_en_route` cuando el conductor pasa 12 minutos sin latido. En 90 días liberó 9 viajes y ninguno lo tomó otro conductor: los 9 terminaron cancelados. En 7, el mismo conductor volvió a dar señal en menos de 10 minutos con el viaje todavía buscando. El caso que lo destapó (viaje `c4d2110e`, 2026-11-17): el conductor hizo el viaje sin datos durante 17 minutos. El servidor lo liberó 18 s antes de que volviera, rechazó su cambio de estado ("Forbidden") y descartó los ~30 puntos de GPS del trayecto. El pasajero vio el viaje buscando otra vez y lo canceló: un viaje hecho quedó cancelado y sin comisión.
+
+- **Desde la 00686,** la liberación anota en `dead_driver_releases` (tabla-candado) a quién se le quitó el viaje, con su `accepted_at`, su tarifa propia y la marca del aviso de proximidad.
+- **`_reclaim_released_ride(driver)`** devuelve el viaje a `accepted` con ese conductor si:
+  - el viaje sigue `searching` y sin conductor;
+  - no pasaron más de `dead_driver_reclaim_window_min` minutos (15; 0 lo apaga);
+  - el conductor está aprobado y no tomó otro viaje;
+  - la señal viene de su propia sesión (un latido que manda un admin por él no cuenta).
+- **Lo dispara la primera llamada de la app al volver:** `update_driver_position` (antes de guardar el punto) o `driver_heartbeat`, cada una en su propio bloque: si falla, la posición y el latido se guardan igual y queda `rpc_attempt_log` con `reclaim_failed`. Las ofertas que salieron mientras buscaba pasan a `superseded`, como en un `accept_ride_v2`, y el latido se renueva para que la pasada siguiente de la liberación no se lo vuelva a quitar.
+- **`tg_ride_location_events_guard` guarda los puntos del conductor liberado** mientras el viaje no tiene conductor (misma ventana). Son el registro del viaje, y su rastro si lo recupera. Con el viaje en `searching` no disparan el "Conductor cerca".
+- **La app del conductor no cambió:** ya vuelve a mostrar un viaje que le reasignan (el chequeo de 30 s o al volver al frente). El pasajero recibe de nuevo "Conductor asignado", y los contactos de confianza, otra vez el SMS del viaje.
+- **Cuerpos tras 00686** (parche en sitio con verja md5; una migración que los redefina parte de estos): `release_rides_from_dead_drivers` `90f9fe8b…/6457`, `update_driver_position` `bf109db4…/1714`, `driver_heartbeat` `81afe7bd…/2428`, `tg_ride_location_events_guard` `6d098605…/1113`, `_reclaim_released_ride` `638c9028…/2826`.
+- Ensayo: `supabase/tests/00686/run.sh` (sin la migración, 16 fallos; con ella, 37/37 con aplicación doble, copia CRLF y pruebas negativas). No necesita PostGIS. Con solo el servidor de Postgres a mano, `PSQL` acepta otro cliente con las mismas opciones de `psql`.
+- **Estado: aplicada en prod el 2026-11-18** por MCP (`20261118043445`), con un `DO` que leyó el archivo del commit `e3c430e9` desde `net._http_response` y lo ejecutó solo si su md5 era el del repo (`1dc5fd1c…`). Verificado por objeto: los cinco md5 de arriba, sin `\r`, y la tabla solo para `service_role`. Probado después en un bloque revertido con QA Moto y QA Pasajero: la liberación anotó el viaje, la posición de QA Moto se lo devolvió con su `accepted_at`, guardó su punto y dejó la oferta a QA Confort en `superseded`.
+- **Diagnóstico:**
+  ```sql
+  SELECT d.ride_id, d.released_at, d.reclaimed_at, r.status FROM dead_driver_releases d
+  JOIN rides r ON r.id = d.ride_id ORDER BY d.released_at DESC LIMIT 20;
+  ```
+
 ---
 
 ### Chat, soporte, objetos perdidos e incidentes: qué escribe un cliente (00653, 2026-10-11)
