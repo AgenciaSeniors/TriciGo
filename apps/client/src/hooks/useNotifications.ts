@@ -16,6 +16,7 @@ import { Platform, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { fleetUpdateRoute } from '@/utils/fleetPush';
+import { openSupportPanelLink } from '@/utils/supportPanel';
 
 const NOTIF_PREF_KEY = '@tricigo/notifications_enabled';
 
@@ -173,6 +174,8 @@ Notifications.setNotificationHandler({
 
 /** Navigate to the appropriate screen based on notification data */
 function handleNotificationNavigation(data: Record<string, unknown> | undefined) {
+  // A support alert sent to an operator: open the ride in the panel, not this app's home.
+  if (openSupportPanelLink(data)) return;
   // Moto Deportiva "ya está disponible" notice: open the home/selection screen.
   if (data?.content_type === 'moto_deportiva') {
     router.push('/(tabs)');

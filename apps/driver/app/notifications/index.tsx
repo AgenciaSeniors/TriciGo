@@ -14,6 +14,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useNotificationStore } from '@/stores/notification.store';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { fleetUpdateRoute } from '@/utils/fleetPush';
+import { openSupportPanelLink } from '@/utils/supportPanel';
 import type { AppNotification } from '@tricigo/types';
 
 // Keyed by the real notification categories send-push writes to
@@ -165,6 +166,9 @@ export default function NotificationsScreen() {
 
     // Deep link based on notification data / category.
     const data = notif.data as Record<string, string> | null;
+    // A support alert sent to an operator: open the ride in the panel. It carries a ride_id that
+    // is not this person's trip, so it must not reach the trip screen below.
+    if (openSupportPanelLink(data)) return;
     // Fleet changes are stored as `system`: only data.type tells them apart.
     const fleetRoute = fleetUpdateRoute(data);
     if (fleetRoute) {

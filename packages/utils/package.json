@@ -30,6 +30,7 @@
     "./geo": "./src/geo.ts",
     "./haptics": "./src/haptics.ts",
     "./htmlSafety": "./src/htmlSafety.ts",
+    "./supportPanelLink": "./src/supportPanelLink.ts",
     "./sharedRequest": "./src/sharedRequest.ts",
     "./teamInvitation": "./src/teamInvitation.ts",
     "./historyExport": "./src/historyExport.ts",

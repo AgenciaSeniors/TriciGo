@@ -21,6 +21,7 @@ export {
   type DriverReceiptData,
 } from './receipt-template';
 export { escapeHtml, serializeJsonLd, safeInternalPath } from './htmlSafety';
+export { supportPanelLink } from './supportPanelLink';
 export { triggerHaptic, triggerSelection } from './haptics';
 export { playSound, triggerFeedback, registerSoundAssets } from './sounds';
 export type { SoundEvent } from './sounds';
