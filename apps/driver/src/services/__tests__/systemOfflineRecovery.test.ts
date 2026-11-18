@@ -5,6 +5,7 @@ import {
   internetCameBack,
   serverRowNeedsRecovery,
   BACKGROUND_RECONNECT_ATTEMPTS,
+  BACKGROUND_RECONNECT_MAX_AGE_MS,
   type RecoveryDeps,
   type ServerOnlineState,
 } from '../systemOfflineRecovery';
@@ -19,6 +20,8 @@ function deps(over: Partial<RecoveryDeps> = {}): RecoveryDeps & { [K in keyof Re
     isAppActive: vi.fn(() => true),
     isBackgroundServiceRunning: vi.fn(async () => false),
     isOnShift: vi.fn(() => true),
+    // 20 min after BY_SYSTEM's drop, on the server's clock.
+    nowMs: vi.fn(() => Date.parse(BY_SYSTEM.auto_offline_at as string) + 20 * 60_000),
     blockedReason: vi.fn(async () => null),
     goOnline: vi.fn(async () => {}),
     onReconnected: vi.fn(),
@@ -63,6 +66,24 @@ describe('decideSystemOffline', () => {
     ).toBe('defer');
     expect(
       decideSystemOffline(BY_SYSTEM, { appActive: true, attempted: none, backgroundGaveUp: gaveUp }),
+    ).toBe('reconnect');
+  });
+  it('in the background only within the window: hours later it waits for the driver to open the app', () => {
+    const dropMs = Date.parse(BY_SYSTEM.auto_offline_at as string);
+    const ctx = { appActive: false, backgroundServiceRunning: true, attempted: none };
+    expect(
+      decideSystemOffline(BY_SYSTEM, { ...ctx, nowMs: dropMs + BACKGROUND_RECONNECT_MAX_AGE_MS - 1 }),
+    ).toBe('reconnect');
+    expect(
+      decideSystemOffline(BY_SYSTEM, { ...ctx, nowMs: dropMs + BACKGROUND_RECONNECT_MAX_AGE_MS + 1 }),
+    ).toBe('defer');
+    // On screen there is no limit: the driver is looking.
+    expect(
+      decideSystemOffline(BY_SYSTEM, {
+        appActive: true,
+        attempted: none,
+        nowMs: dropMs + 10 * BACKGROUND_RECONNECT_MAX_AGE_MS,
+      }),
     ).toBe('reconnect');
   });
   it('never reconnects in the background someone a person took offline', () => {
@@ -236,6 +257,34 @@ describe('createSystemOfflineRecovery', () => {
     expect(r.hasPending()).toBe(false);
     expect(d.goOnline).not.toHaveBeenCalled();
     expect(d.onShownOffline).not.toHaveBeenCalled();
+  });
+
+  it('idle() lets the Desconectar toggle wait for a reconnect that is already writing', async () => {
+    // The toggle awaits idle() before its own write, so the driver's write
+    // always lands after the recovery's and the shift ends where he chose.
+    let release!: () => void;
+    const gate = new Promise<void>((res) => { release = res; });
+    const d = deps({ goOnline: vi.fn(() => gate) });
+    const r = createSystemOfflineRecovery(d);
+    const run = r.evaluate();
+    let idle = false;
+    const waited = r.idle().then(() => { idle = true; });
+    await Promise.resolve();
+    expect(idle).toBe(false);
+    release();
+    await run;
+    await waited;
+    expect(idle).toBe(true);
+    // Nothing in flight: resolves right away, also after a run that threw.
+    await expect(r.idle()).resolves.toBeUndefined();
+  });
+
+  it('idle() resolves even when the run in flight failed', async () => {
+    const d = deps({ fetchServerState: vi.fn(async () => { throw new Error('boom'); }) });
+    const r = createSystemOfflineRecovery(d);
+    const run = r.evaluate().catch(() => 'threw');
+    await expect(r.idle()).resolves.toBeUndefined();
+    await run;
   });
 
   it('two triggers at once reconnect once', async () => {

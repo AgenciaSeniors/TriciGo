@@ -10,6 +10,12 @@ interface DriverState {
    * decides, and ends it with setOnline(false) when it cannot reconnect.
    */
   isOnline: boolean;
+  /**
+   * The driver's own Conectarme/Desconectar is being written. The system-offline
+   * recovery stays out of the way meanwhile, so it never lands a reconnect
+   * after the driver's choice.
+   */
+  shiftChangeInFlight: boolean;
   /** True once the initial profile fetch has completed SUCCESSFULLY. */
   isProfileLoaded: boolean;
   /**
@@ -20,6 +26,7 @@ interface DriverState {
   profileLoadError: boolean;
   setProfile: (profile: DriverProfile | null) => void;
   setOnline: (isOnline: boolean) => void;
+  setShiftChangeInFlight: (inFlight: boolean) => void;
   setProfileLoaded: () => void;
   /** Mark that the profile fetch errored. Keeps any previously-loaded profile. */
   setProfileError: () => void;
@@ -29,6 +36,7 @@ interface DriverState {
 export const useDriverStore = create<DriverState>((set) => ({
   profile: null,
   isOnline: false,
+  shiftChangeInFlight: false,
   isProfileLoaded: false,
   profileLoadError: false,
   setProfile: (profile) =>
@@ -39,8 +47,15 @@ export const useDriverStore = create<DriverState>((set) => ({
       profileLoadError: false,
     })),
   setOnline: (isOnline) => set({ isOnline }),
+  setShiftChangeInFlight: (shiftChangeInFlight) => set({ shiftChangeInFlight }),
   setProfileLoaded: () => set({ isProfileLoaded: true, profileLoadError: false }),
   setProfileError: () => set({ profileLoadError: true }),
   reset: () =>
-    set({ profile: null, isOnline: false, isProfileLoaded: false, profileLoadError: false }),
+    set({
+      profile: null,
+      isOnline: false,
+      shiftChangeInFlight: false,
+      isProfileLoaded: false,
+      profileLoadError: false,
+    }),
 }));

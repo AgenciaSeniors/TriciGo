@@ -17,10 +17,9 @@
 import { useEffect, useMemo } from 'react';
 import { AppState, Platform } from 'react-native';
 import * as Location from 'expo-location';
-import * as TaskManager from 'expo-task-manager';
 import NetInfo from '@react-native-community/netinfo';
 import Toast from 'react-native-toast-message';
-import { driverService, getSupabaseClient } from '@tricigo/api';
+import { driverService, getSupabaseClient, serverNowMs } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { logger, trackEvent } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
@@ -56,9 +55,16 @@ export function useSystemOfflineRecovery(profileId: string | undefined): SystemO
       isAppActive: () => AppState.currentState === 'active',
       async isBackgroundServiceRunning() {
         if (Platform.OS === 'web') return false;
-        return TaskManager.isTaskRegisteredAsync(LOCATION_TASK);
+        // Location updates started for the task: the foreground service that
+        // keeps heartbeating. A proxy (it cannot tell that batches still
+        // arrive), but the one the OS gives us.
+        return Location.hasStartedLocationUpdatesAsync(LOCATION_TASK);
       },
-      isOnShift: () => useDriverStore.getState().isOnline,
+      isOnShift: () => {
+        const s = useDriverStore.getState();
+        return s.isOnline && !s.shiftChangeInFlight;
+      },
+      nowMs: () => serverNowMs(),
       async blockedReason() {
         if (useDriverStore.getState().profile?.is_financially_eligible === false) return 'negative_balance';
         if (Platform.OS !== 'web') {

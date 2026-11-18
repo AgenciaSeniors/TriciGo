@@ -17,6 +17,7 @@ function row(over: Partial<DriverProfile> & { auto_offline_at?: string | null })
   return {
     id: 'driver-1',
     user_id: 'user-1',
+    status: 'approved',
     is_online: true,
     auto_offline_at: null,
     ...over,
@@ -78,6 +79,12 @@ describe('driver store: the shift survives a system drop', () => {
 
     // Once off, a later system-drop row does not bring the shift back.
     useDriverStore.getState().setProfile({ ...SYSTEM_DROP });
+    expect(useDriverStore.getState().isOnline).toBe(false);
+  });
+
+  it('ends the shift when the dropped driver is no longer approved (suspended, vehicle re-review)', () => {
+    useDriverStore.getState().setProfile(ONLINE_ROW);
+    useDriverStore.getState().setProfile({ ...SYSTEM_DROP, status: 'suspended' } as DriverProfile);
     expect(useDriverStore.getState().isOnline).toBe(false);
   });
 

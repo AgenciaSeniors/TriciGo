@@ -20,12 +20,15 @@
  * by then Android had often killed the process and he had to tap "Conectarme". Now the app also
  * reconnects in the background, but only while the background location service is running: that
  * service is what keeps sending heartbeats afterwards, and without it the driver would be dropped
- * again 10 min later. A failed write in the background does not end the shift (the network is
- * flaky right after it comes back); after BACKGROUND_RECONNECT_ATTEMPTS failures it waits for the
- * foreground, where the one-attempt rule above applies.
+ * again 10 min later. Only within BACKGROUND_RECONNECT_MAX_AGE_MS of the drop: hours later the
+ * driver is more likely done for the day than out of coverage. A failed write in the background
+ * does not end the shift (the network is flaky right after it comes back); after
+ * BACKGROUND_RECONNECT_ATTEMPTS failures it waits for the foreground, where the one-attempt rule
+ * above applies.
  *
- * It only runs inside a process that saw the driver online, so a driver who killed the app to end
- * the shift and opens it the next day is NOT put back online.
+ * It only acts while the app is on shift (driver.store keeps the shift through a system drop, see
+ * shiftAfterServerRow), so a driver who tapped Desconectar, or killed the app to end the shift and
+ * opens it the next day, is NOT put back online.
  */
 
 export interface ServerOnlineState {
@@ -39,6 +42,14 @@ export type SystemOfflineAction = 'none' | 'reconnect' | 'defer' | 'show_offline
 /** Failed writes in the background before the recovery waits for the foreground. */
 export const BACKGROUND_RECONNECT_ATTEMPTS = 3;
 
+/**
+ * How old a drop can be for the recovery to reconnect in the background. A signal loss on the
+ * road lasts minutes to about an hour (prod: many drops came back 61-66 min later, just past the
+ * server's 60-min restore). Past this, the driver is more likely done for the day (mobile data off
+ * at home) than out of coverage, so the app waits for him to open it.
+ */
+export const BACKGROUND_RECONNECT_MAX_AGE_MS = 3 * 60 * 60_000;
+
 export function decideSystemOffline(
   server: ServerOnlineState,
   ctx: {
@@ -48,21 +59,36 @@ export function decideSystemOffline(
     attempted: ReadonlySet<string>;
     /** Drops that failed BACKGROUND_RECONNECT_ATTEMPTS times in the background. */
     backgroundGaveUp?: ReadonlySet<string>;
+    /** Now on the server's clock. Without it the background has no age limit. */
+    nowMs?: number;
   },
 ): SystemOfflineAction {
   if (server.is_online) return 'none';
   if (!server.auto_offline_at) return 'show_offline';
   if (ctx.attempted.has(server.auto_offline_at)) return 'show_offline';
   if (ctx.appActive) return 'reconnect';
-  if (ctx.backgroundServiceRunning && !ctx.backgroundGaveUp?.has(server.auto_offline_at)) {
+  if (
+    ctx.backgroundServiceRunning &&
+    !ctx.backgroundGaveUp?.has(server.auto_offline_at) &&
+    withinBackgroundWindow(server.auto_offline_at, ctx.nowMs)
+  ) {
     return 'reconnect';
   }
   return 'defer';
 }
 
+function withinBackgroundWindow(dropAt: string, nowMs: number | undefined): boolean {
+  if (nowMs === undefined) return true;
+  const dropMs = Date.parse(dropAt);
+  if (Number.isNaN(dropMs)) return false;
+  return nowMs - dropMs <= BACKGROUND_RECONNECT_MAX_AGE_MS;
+}
+
 interface ServerRow {
   is_online: boolean;
   auto_offline_at?: string | null;
+  /** driver_profiles.status; a dropped driver keeps his shift only while approved. */
+  status?: string;
 }
 
 /** The row says the cron took the driver offline, not a person. */
@@ -80,11 +106,16 @@ export function isSystemDrop(row: ServerRow | null | undefined): boolean {
  * heartbeating with the screen off. The recovery decides what happens next and, when it cannot
  * reconnect, ends the shift itself (setOnline(false)).
  *
- * A shift never STARTS from such a row: a fresh process that loads it stays offline.
+ * A shift never STARTS from such a row: a process whose first profile comes from the server and
+ * says dropped stays offline. (A cold start that falls back to the offline profile cache in
+ * useAuth starts from the cached row, which may say online; that predates this rule.)
+ * A driver who is no longer approved (suspended, vehicle re-review) loses the shift even if the
+ * system had dropped him first: going online would only fail.
  */
 export function shiftAfterServerRow(onShift: boolean, row: ServerRow | null): boolean {
   if (!row) return false;
   if (row.is_online) return true;
+  if (row.status !== undefined && row.status !== 'approved') return false;
   return onShift && isSystemDrop(row);
 }
 
@@ -146,6 +177,8 @@ export interface RecoveryDeps {
    * cleared it): the app's shift is what says he chose to stop.
    */
   isOnShift(): boolean;
+  /** Now on the server's clock (auto_offline_at is server time; phones can be an hour off). */
+  nowMs(): number;
   /**
    * Something the driver must fix before going online (location permission, negative balance),
    * or null. Reconnecting past it would only fail or put an unusable driver in the matching.
@@ -181,6 +214,7 @@ export function createSystemOfflineRecovery(deps: RecoveryDeps) {
       backgroundServiceRunning,
       attempted,
       backgroundGaveUp,
+      nowMs: appActive ? undefined : deps.nowMs(),
     });
     if (action === 'defer') {
       pending = true;
@@ -239,6 +273,15 @@ export function createSystemOfflineRecovery(deps: RecoveryDeps) {
     /** A drop seen in the background, waiting for the next foreground or retry. */
     hasPending(): boolean {
       return pending;
+    },
+    /**
+     * Resolves once no run is in flight. The Desconectar toggle awaits it before its own write,
+     * so a reconnect that was already writing can never land after the driver's choice.
+     */
+    async idle(): Promise<void> {
+      while (running) {
+        await running.catch(() => undefined);
+      }
     },
   };
 }
