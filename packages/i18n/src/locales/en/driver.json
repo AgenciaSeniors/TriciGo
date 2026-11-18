@@ -836,11 +836,9 @@
     "prompt_enable": "Enable",
     "prompt_later": "Not now",
     "xiaomi_title": "One more permission on your Xiaomi",
-    "xiaomi_body": "For TriciGo to open by itself, also turn on «Display pop-up windows while running in the background». Tap Open permissions and find it in the list.",
+    "xiaomi_body": "For TriciGo to open by itself, also turn on «Display pop-up windows while running in the background». Tap Open permissions and find it in the list; if the app info page opens, it is under Other permissions.",
     "xiaomi_open": "Open permissions",
-    "xiaomi_done": "I turned it on",
-    "settings_xiaomi_title": "Extra Xiaomi permission",
-    "settings_xiaomi_sub": "Needed on Xiaomi, Redmi and POCO for the app to open by itself"
+    "xiaomi_done": "I turned it on"
   },
   "fleet": {
     "load_error_title": "We couldn't load your corporate information",

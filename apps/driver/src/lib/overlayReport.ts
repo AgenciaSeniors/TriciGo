@@ -13,7 +13,7 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
-import { deviceService, type DriverLaunchResult } from '@tricigo/api';
+import { deviceService, getSupabaseClient, type DriverLaunchResult } from '@tricigo/api';
 import { APP_OPEN_REPORT_INTERVAL_MS, logger } from '@tricigo/utils';
 import DriverOverlay, { isDriverOverlayAvailable } from '../../modules/driver-overlay';
 import { getDeviceMaker, getOrCreateDeviceId } from '@/lib/device';
@@ -21,6 +21,22 @@ import { useAuthStore } from '@/stores/auth.store';
 
 /** Storage key: this account finished the Xiaomi step on this phone. */
 export const XIAOMI_OK_KEY = (userId: string): string => `@tricigo/xiaomi_popup_ok:${userId}`;
+
+/**
+ * The signed-in driver: the auth store's user, or, when the store is still
+ * empty because the data-only push started the app and no screen has mounted
+ * yet, the stored Supabase session's user. null without a session. Never throws.
+ */
+export async function currentDriverUserId(): Promise<string | null> {
+  const fromStore = useAuthStore.getState().user?.id;
+  if (fromStore) return fromStore;
+  try {
+    const { data } = await getSupabaseClient().auth.getSession();
+    return data.session?.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
 
 // Per process.
 let unavailable = false;
@@ -53,7 +69,7 @@ async function send(userId: string, launchResult: DriverLaunchResult | null): Pr
 /** Report one launch attempt for the signed-in driver. Nothing without a session. */
 export async function reportOverlayLaunch(result: DriverLaunchResult): Promise<void> {
   if (Platform.OS !== 'android' || unavailable) return;
-  const userId = useAuthStore.getState().user?.id;
+  const userId = await currentDriverUserId();
   if (!userId) return;
   try {
     await send(userId, result);

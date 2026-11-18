@@ -37,9 +37,12 @@ const reportLaunch = vi.fn(async (..._a: unknown[]) => undefined);
 vi.mock('@/lib/overlayReport', () => ({
   reportOverlayLaunch: (...a: unknown[]) => reportLaunch(...a),
   XIAOMI_OK_KEY: (u: string) => `@tricigo/xiaomi_popup_ok:${u}`,
+  // The real helper falls back to the stored session; here `sessionUser` plays it.
+  currentDriverUserId: async () => user?.id ?? sessionUser,
 }));
 
 let user: { id: string } | null = { id: 'u1' };
+let sessionUser: string | null = null;
 vi.mock('@/stores/auth.store', () => ({ useAuthStore: { getState: () => ({ user }) } }));
 
 const setItem = vi.fn(async (..._a: unknown[]) => undefined);
@@ -178,6 +181,27 @@ describe('attemptOfferLaunch', () => {
     expect(setItem).not.toHaveBeenCalled();
   });
 
+  it('a resume later than 4 s of wall clock is not_foreground, even if the timer never fired', async () => {
+    // Realtime path: JS timers are paused in the background, so the 4 s timer
+    // may not fire before the driver opens the app by hand (tapping the push).
+    maker = { manufacturer: 'Xiaomi', brand: 'Redmi', osVersion: '14' };
+    const p = attemptOfferLaunch('r1', 'realtime');
+    vi.setSystemTime(Date.now() + 10_000);
+    fireAppState('active');
+    expect(await p).toBe('not_foreground');
+    expect(reportLaunch).toHaveBeenCalledWith('not_foreground');
+    expect(setItem).not.toHaveBeenCalled();
+  });
+
+  it('a resume after 1.5 s counts as foreground but does not prove the Xiaomi permission', async () => {
+    maker = { manufacturer: 'Xiaomi', brand: 'Redmi', osVersion: '14' };
+    const p = attemptOfferLaunch('r1', 'push');
+    vi.setSystemTime(Date.now() + 2_500);
+    fireAppState('active');
+    expect(await p).toBe('foreground');
+    expect(setItem).not.toHaveBeenCalled();
+  });
+
   it('never clears the Xiaomi flag on not_foreground', async () => {
     maker = { manufacturer: 'Xiaomi', brand: 'POCO', osVersion: '14' };
     const p = attemptOfferLaunch('r1', 'push');
@@ -185,6 +209,17 @@ describe('attemptOfferLaunch', () => {
     await p;
     expect(removeItem).not.toHaveBeenCalled();
     expect(setItem).not.toHaveBeenCalled();
+  });
+
+  it("marks the Xiaomi step for the session's user when the push started the app", async () => {
+    user = null;
+    sessionUser = 'u9';
+    maker = { manufacturer: 'Xiaomi', brand: 'Redmi', osVersion: '14' };
+    const p = attemptOfferLaunch('r1', 'push');
+    fireAppState('active');
+    expect(await p).toBe('foreground');
+    expect(setItem).toHaveBeenCalledWith('@tricigo/xiaomi_popup_ok:u9', 'true');
+    sessionUser = null;
   });
 
   it('still launches when no driver is signed in', async () => {

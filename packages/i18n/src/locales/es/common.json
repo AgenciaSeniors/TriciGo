@@ -760,7 +760,9 @@
     "settings_granted": "Activado: la app se abre sola al llegar un viaje",
     "settings_denied": "Actívalo para que la app se abra sola al llegar un viaje",
     "settings_on": "Sí",
-    "settings_off": "No"
+    "settings_off": "No",
+    "settings_xiaomi_title": "Permiso extra de Xiaomi",
+    "settings_xiaomi_sub": "Necesario en Xiaomi, Redmi y POCO para que la app se abra sola"
   },
 
   "email_notice": {

@@ -73,7 +73,7 @@ async function showXiaomiAlert(userId: string): Promise<void> {
     tr('xiaomi_title', 'Un permiso más en tu Xiaomi'),
     tr(
       'xiaomi_body',
-      'Para que TriciGo se abra sola, activa también «Mostrar ventanas emergentes mientras se ejecuta en segundo plano». Toca Abrir permisos y búscalo en la lista.',
+      'Para que TriciGo se abra sola, activa también «Mostrar ventanas emergentes mientras se ejecuta en segundo plano». Toca Abrir permisos y búscalo en la lista; si se abre la información de la app, está en Otros permisos.',
     ),
     [
       { text: tr('prompt_later', 'Ahora no'), style: 'cancel' },

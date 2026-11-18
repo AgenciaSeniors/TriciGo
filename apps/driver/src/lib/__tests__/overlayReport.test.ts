@@ -25,12 +25,17 @@ vi.mock('@/lib/device', () => ({
   getOrCreateDeviceId: async () => 'install-1',
   getDeviceMaker: () => ({ manufacturer: 'Xiaomi', brand: 'Redmi', osVersion: '14' }),
 }));
+const getSession = vi.hoisted(() =>
+  vi.fn(async () => ({ data: { session: null as { user: { id: string } } | null } })),
+);
 vi.mock('@tricigo/api', () => ({
   deviceService: { reportDriverOverlay: (...a: unknown[]) => reportDriverOverlay(...a) },
+  getSupabaseClient: () => ({ auth: { getSession: () => getSession() } }),
 }));
 
 import {
   XIAOMI_OK_KEY,
+  currentDriverUserId,
   reportOverlayLaunch,
   reportOverlayStatus,
   resetOverlayReportsForTests,
@@ -62,6 +67,21 @@ describe('overlay reports (driver)', () => {
     h.user = null;
     await reportOverlayLaunch('foreground');
     expect(reportDriverOverlay).not.toHaveBeenCalled();
+  });
+
+  it("uses the session's user when the store is empty (the push started the app)", async () => {
+    h.user = null;
+    getSession.mockResolvedValueOnce({ data: { session: { user: { id: 'u9' } } } });
+    await reportOverlayLaunch('no_permission');
+    expect(reportDriverOverlay).toHaveBeenCalledWith(expect.objectContaining({ launch_result: 'no_permission' }));
+    await expect(currentDriverUserId()).resolves.toBeNull();
+  });
+
+  it('currentDriverUserId prefers the store and never throws', async () => {
+    await expect(currentDriverUserId()).resolves.toBe('u1');
+    h.user = null;
+    getSession.mockRejectedValueOnce(new Error('storage locked'));
+    await expect(currentDriverUserId()).resolves.toBeNull();
   });
 
   it('sends nothing on iOS, where the app cannot open itself', async () => {

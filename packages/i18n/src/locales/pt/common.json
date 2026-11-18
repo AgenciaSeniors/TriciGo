@@ -760,7 +760,9 @@
     "settings_granted": "Ativado: o app abre sozinho quando chega uma corrida",
     "settings_denied": "Ative para que o app abra sozinho quando chegar uma corrida",
     "settings_on": "Sim",
-    "settings_off": "Não"
+    "settings_off": "Não",
+    "settings_xiaomi_title": "Permissão extra da Xiaomi",
+    "settings_xiaomi_sub": "Necessária em Xiaomi, Redmi e POCO para o app abrir sozinho"
   },
 
   "email_notice": {
