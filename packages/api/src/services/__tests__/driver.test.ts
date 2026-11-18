@@ -665,6 +665,20 @@ describe('driverService', () => {
       expect(chain.select).toHaveBeenCalledWith('id');
     });
 
+    // 00540: auto_offline_at marks an offline the cron made, and the server
+    // restores it on the next heartbeat within 60 min. The shift-intent trigger
+    // clears the mark only when is_online changes, so a driver who taps
+    // Desconectar while the system already has him offline (false -> false)
+    // kept the mark, and a heartbeat still in flight put him back online.
+    it('going offline clears the mark of an offline the system made', async () => {
+      const chain = createMockQueryChain({ data: [{ id: 'd-1' }], error: null });
+      mockFrom.mockReturnValueOnce(chain);
+
+      await driverService.setOnlineStatus('d-1', false);
+
+      expect(chain.update).toHaveBeenCalledWith({ is_online: false, auto_offline_at: null });
+    });
+
     it('throws on supabase error', async () => {
       const err = { message: 'Update failed', code: '42P01' };
       const chain = createMockQueryChain({ data: null, error: err });

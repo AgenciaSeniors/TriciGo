@@ -445,6 +445,13 @@ export const driverService = {
     }
 
     const updates: Record<string, unknown> = { is_online: isOnline };
+    if (!isOnline) {
+      // A person ending the shift. tg_driver_profiles_shift_intent clears the
+      // cron's mark (00540) only when is_online changes; a driver the system
+      // already took offline goes false -> false and kept it, so a heartbeat
+      // still in flight put him back online against his choice.
+      updates.auto_offline_at = null;
+    }
     if (location) {
       updates.current_location = `POINT(${location.longitude} ${location.latitude})`;
     }
