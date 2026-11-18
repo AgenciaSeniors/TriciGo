@@ -40,6 +40,41 @@ export async function getOrCreateDeviceId(): Promise<string> {
   }
 }
 
+/** The fields getDeviceMaker reads from expo-device. */
+interface ExpoDeviceMaker {
+  manufacturer?: string | null;
+  brand?: string | null;
+  osVersion?: string | null;
+}
+
+/** The phone's maker, brand and OS version, for the overlay permission flow. */
+export interface DeviceMaker {
+  manufacturer: string | null;
+  brand: string | null;
+  osVersion: string | null;
+}
+
+/**
+ * Maker and brand (Xiaomi phones need an extra permission to open the app by
+ * itself) and OS version. Like getDeviceInfo, never throws: without the
+ * ExpoDevice native module everything comes back null. `load` exists so tests
+ * can replace expo-device.
+ */
+export function getDeviceMaker(
+  load: () => ExpoDeviceMaker = () => require('expo-device') as ExpoDeviceMaker,
+): DeviceMaker {
+  try {
+    const device = load();
+    return {
+      manufacturer: device.manufacturer ?? null,
+      brand: device.brand ?? null,
+      osVersion: device.osVersion ?? null,
+    };
+  } catch {
+    return { manufacturer: null, brand: null, osVersion: null };
+  }
+}
+
 /** Device metadata sent at login for new-device detection. */
 export async function getDeviceInfo(): Promise<RegisterLoginDeviceInput> {
   // expo-device's native module ('ExpoDevice') may be absent in a dev client

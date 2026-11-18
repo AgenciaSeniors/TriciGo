@@ -31,34 +31,29 @@
 //     side effects from app/_layout.tsx before the OS can fire it.
 //   - The task body runs without React state; only module-scoped
 //     imports are available.
-import { AppState, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import * as TaskManager from 'expo-task-manager';
 import * as Notifications from 'expo-notifications';
 import { logger } from '@tricigo/utils';
-import DriverOverlay from '../../modules/driver-overlay';
+import { attemptOfferLaunch } from '@/lib/offerLaunch';
 
 export const RIDE_OFFER_LAUNCH_TASK = 'ride-offer-launch-task';
 
-// Same 3s throttle as the Realtime path (useDriverRide): relaunching an
-// already-foregrounded task is a no-op, but no reason to spam
-// startActivity when offers arrive back-to-back.
-let lastLaunchAt = 0;
-
 /**
- * Pull the notification `type` out of the background-task payload.
+ * Pull a string field out of the background-task payload.
  * The shape of a data-only FCM message differs across expo-notifications
  * versions and delivery paths (keys at the root, nested under `data`,
  * or JSON-encoded in a `body` string), so probe every known layout
  * instead of trusting one.
  */
-export function extractNotificationType(raw: unknown): string | undefined {
+function extractField(raw: unknown, field: string): string | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const payload = raw as Record<string, unknown>;
   const candidates: unknown[] = [payload, payload.data, payload.notification];
   for (const cand of candidates) {
     if (!cand || typeof cand !== 'object') continue;
     const obj = cand as Record<string, unknown>;
-    if (typeof obj.type === 'string') return obj.type;
+    if (typeof obj[field] === 'string') return obj[field] as string;
     // Expo → FCM puts the request's `data` JSON in the `body` key of the
     // data map; RemoteMessageSerializer additionally mirrors it as
     // `dataString` (the documented cross-platform key). Probe both.
@@ -66,16 +61,26 @@ export function extractNotificationType(raw: unknown): string | undefined {
       if (typeof obj[key] === 'string') {
         try {
           const parsed = JSON.parse(obj[key] as string) as Record<string, unknown>;
-          if (typeof parsed?.type === 'string') return parsed.type;
+          if (typeof parsed?.[field] === 'string') return parsed[field] as string;
         } catch { /* not JSON — keep probing */ }
       }
     }
     if (obj.data && typeof obj.data === 'object') {
       const inner = obj.data as Record<string, unknown>;
-      if (typeof inner.type === 'string') return inner.type;
+      if (typeof inner[field] === 'string') return inner[field] as string;
     }
   }
   return undefined;
+}
+
+/** The notification `type` of a background-task payload. */
+export function extractNotificationType(raw: unknown): string | undefined {
+  return extractField(raw, 'type');
+}
+
+/** The offer's ride id (notify_driver_new_offer puts `ride_id` in the push data). */
+export function extractRideId(raw: unknown): string | undefined {
+  return extractField(raw, 'ride_id');
 }
 
 TaskManager.defineTask(RIDE_OFFER_LAUNCH_TASK, async ({ data, error }) => {
@@ -83,22 +88,12 @@ TaskManager.defineTask(RIDE_OFFER_LAUNCH_TASK, async ({ data, error }) => {
     if (error || Platform.OS !== 'android') return;
     if (extractNotificationType(data) !== 'ride_offer_launch') return;
 
-    // FirebaseMessagingDelegate.onMessageReceived runs task consumers
-    // unconditionally (also in foreground). Launching while active would
-    // be a no-op anyway (SINGLE_TOP) — skip it explicitly, mirroring the
-    // Realtime path's AppState gate.
-    if (AppState.currentState === 'active') return;
-
-    const now = Date.now();
-    if (now - lastLaunchAt < 3000) return;
-
-    // Same gate as the Realtime path: without the SYSTEM_ALERT_WINDOW
-    // grant, Android silently ignores background startActivity — the
-    // visible push notification remains the UX.
-    if (!DriverOverlay.canDrawOverlays()) return;
-
-    lastLaunchAt = now;
-    DriverOverlay.bringAppToForeground();
+    // attemptOfferLaunch skips when the app is already in front
+    // (FirebaseMessagingDelegate.onMessageReceived runs task consumers in
+    // foreground too) and when the Realtime path already tried this offer.
+    // Without the SYSTEM_ALERT_WINDOW grant it does not launch (Android would
+    // ignore it) and the visible push notification remains the UX.
+    await attemptOfferLaunch(extractRideId(data) ?? null, 'push');
   } catch (err) {
     // A throwing background task is pure noise — log and swallow.
     logger.warn('[rideOfferLaunch] task failed', {
