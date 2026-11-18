@@ -69,7 +69,7 @@ import { PACKAGE_CATEGORIES } from '@tricigo/types';
 import type { PredictedDestination } from '@tricigo/utils';
 import { useCorporateAccounts } from '@/hooks/useCorporateAccounts';
 import { rideService } from '@tricigo/api/services/ride';
-import { reverseGeocode, isPlaceholderAddress } from '@tricigo/utils';
+import { reverseGeocode, isPlaceholderAddress, searchingDriverCount } from '@tricigo/utils';
 import { NotificationPermissionSheet, requestNotificationPermissionSheet } from '@/components/NotificationPermissionSheet';
 import { MarketingConsentSheet } from '@/components/MarketingConsentSheet';
 import { UpdateAvailableSheet } from '@/components/UpdateAvailableSheet';
@@ -5478,13 +5478,19 @@ function SearchingView() {
     t('home.few_drivers'),
   ];
 
+  // One count for the card header, its badge and the status line below it.
+  const shownDriverCount = searchingDriverCount({
+    pendingOfferCount: offerStats?.pending_count ?? 0,
+    reviewingDriverCount: searchingDrivers.length,
+  });
+
   // Prefer live server-side state over the legacy time-based phases.
   const fallbackMessage = SEARCH_MESSAGES[searchPhase] ?? SEARCH_MESSAGES[0];
   const searchMessage = (() => {
     if (showExpandingMsg) {
       return t('home.expanding_moment', { defaultValue: 'Ampliando búsqueda…' });
     }
-    const pending = offerStats?.pending_count ?? 0;
+    const pending = shownDriverCount;
     if (pending > 0) {
       if (offerSecondsLeft !== null && offerSecondsLeft > 0) {
         return t('home.drivers_evaluating_countdown', {
@@ -5581,6 +5587,7 @@ function SearchingView() {
         return (
           <DriverInfoMiniCard
             drivers={searchingDrivers}
+            driverCount={shownDriverCount}
             isSearching
             pickupAddress={activeRide.pickup_address ?? null}
             dropoffAddress={activeRide.dropoff_address ?? null}

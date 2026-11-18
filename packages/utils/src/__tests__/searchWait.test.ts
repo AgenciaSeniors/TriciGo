@@ -5,6 +5,7 @@ import {
   searchWaitStage,
   searchWaitView,
   searchHelpAvailable,
+  searchingDriverCount,
   rideShortCode,
 } from '../searchWait';
 
@@ -132,6 +133,31 @@ describe('searchHelpAvailable — when the searching screen offers "Pedir ayuda"
   it('stays hidden on a nonsense clock', () => {
     expect(searchHelpAvailable(Number.NaN)).toBe(false);
     expect(searchHelpAvailable(-5)).toBe(false);
+  });
+});
+
+describe('searchingDriverCount — one number for the card and the status line', () => {
+  it('counts every driver whose phone has the offer, not only the ones with it open', () => {
+    // 2026-11-17, ride c4d2110e: the server held live offers for César and
+    // Jasmany, but only César had the offer open on screen. The card said
+    // "1 conductor revisando" while the line under it said "2 conductores
+    // evaluando".
+    expect(searchingDriverCount({ pendingOfferCount: 2, reviewingDriverCount: 1 })).toBe(2);
+  });
+
+  it('counts the drivers with the offer open before the first offer poll lands', () => {
+    // Presence arrives over realtime; the offer stats poll every 3 s and start at 0.
+    expect(searchingDriverCount({ pendingOfferCount: 0, reviewingDriverCount: 1 })).toBe(1);
+  });
+
+  it('is zero when no driver has the offer', () => {
+    expect(searchingDriverCount({ pendingOfferCount: 0, reviewingDriverCount: 0 })).toBe(0);
+  });
+
+  it('never returns a negative or non-integer count', () => {
+    expect(searchingDriverCount({ pendingOfferCount: Number.NaN, reviewingDriverCount: 0 })).toBe(0);
+    expect(searchingDriverCount({ pendingOfferCount: -3, reviewingDriverCount: 0 })).toBe(0);
+    expect(searchingDriverCount({ pendingOfferCount: 2.7, reviewingDriverCount: 1 })).toBe(2);
   });
 });
 

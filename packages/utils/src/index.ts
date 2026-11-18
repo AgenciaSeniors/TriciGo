@@ -187,10 +187,11 @@ export {
   searchWaitStage,
   searchWaitView,
   searchHelpAvailable,
+  searchingDriverCount,
   rideShortCode,
 } from './searchWait';
 export { equalSplitSharePct, splitAmountTrc, requesterShareTrc } from './fareSplit';
-export type { SearchWaitStage, SearchWaitInput, SearchWaitView } from './searchWait';
+export type { SearchWaitStage, SearchWaitInput, SearchWaitView, SearchingDriverCountInput } from './searchWait';
 export { REQUIRED_DRIVER_DOCS, driverDocLabel, whatsAppDigits, waMeLink, incompleteSignupMessage } from './driverOutreach';
 export type { IncompleteSignupMessageInput } from './driverOutreach';
 export {
