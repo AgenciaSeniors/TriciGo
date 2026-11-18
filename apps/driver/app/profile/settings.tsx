@@ -54,6 +54,7 @@ import { useVoiceGuidancePref } from '@/hooks/useVoiceGuidancePref';
 import { SettingsRow } from '@/components/settings/SettingsRow';
 import { SettingsGroup } from '@/components/settings/SettingsGroup';
 import DriverOverlay, { isDriverOverlayAvailable } from '../../modules/driver-overlay';
+import { isXiaomiPhone, openXiaomiPermissions } from '@/lib/overlayPrompt';
 
 const NOTIF_PREF_KEY = '@tricigo/notifications_enabled';
 
@@ -146,6 +147,9 @@ export default function DriverSettingsScreen() {
   // bubble. Android gives no callback when the user returns from the system
   // Settings screen, so re-read the grant every time the app regains focus.
   const [overlayGranted, setOverlayGranted] = useState(() => DriverOverlay.canDrawOverlays());
+  // Xiaomi, Redmi and POCO add their own pop-up permission, which Android
+  // cannot read: the row only opens its screen.
+  const [xiaomiPhone] = useState(() => Platform.OS === 'android' && isXiaomiPhone());
   useEffect(() => {
     if (Platform.OS !== 'android') return;
     const sub = AppState.addEventListener('change', (state) => {
@@ -627,8 +631,20 @@ export default function DriverSettingsScreen() {
                 value={overlayGranted ? t('overlay.settings_on', { defaultValue: 'Sí' }) : t('overlay.settings_off', { defaultValue: 'No' })}
                 iconBg="warning"
                 onPress={() => DriverOverlay.openOverlaySettings()}
-                showBorder={false}
+                showBorder={xiaomiPhone}
               />
+              {xiaomiPhone && (
+                <MenuRow
+                  icon="phone-portrait-outline"
+                  label={t('overlay.settings_xiaomi_title', { defaultValue: 'Permiso extra de Xiaomi' })}
+                  subtitle={t('overlay.settings_xiaomi_sub', {
+                    defaultValue: 'Necesario en Xiaomi, Redmi y POCO para que la app se abra sola',
+                  })}
+                  iconBg="warning"
+                  onPress={() => void openXiaomiPermissions()}
+                  showBorder={false}
+                />
+              )}
             </Card>
           )}
         </SettingsGroup>

@@ -4,7 +4,6 @@ import {
   Pressable,
   FlatList,
   Image,
-  Alert,
   Animated,
   Dimensions,
   StyleSheet,
@@ -47,7 +46,8 @@ import { LocationPermissionSheet } from '@/components/LocationPermissionSheet';
 import { useDriverLocationTracking } from '@/hooks/useDriverLocation';
 import { useSystemOfflineRecovery } from '@/hooks/useSystemOfflineRecovery';
 import { useOverlayBubble } from '@/hooks/useOverlayBubble';
-import DriverOverlay, { isDriverOverlayAvailable } from '../../modules/driver-overlay';
+import { isDriverOverlayAvailable } from '../../modules/driver-overlay';
+import { maybePromptOverlay } from '@/lib/overlayPrompt';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { useEmailConfirmation } from '@/hooks/useEmailConfirmation';
 import * as Location from 'expo-location';
@@ -1074,37 +1074,14 @@ function NativeDriverHomeScreen() {
           : t('driver.now_offline_sub', { defaultValue: 'No recibirás nuevas ofertas hasta que te conectes.' }),
         visibilityTime: 2200,
       });
-      // One-time overlay-permission pitch (Android): with "Mostrar sobre
-      // otras apps" granted, the app launches itself when an offer arrives
-      // while the driver is in another app, and shows the floating bubble in
-      // the background. Never blocks going online; declining sets the flag
-      // so we don't nag — the settings screen keeps a persistent entry.
-      if (newStatus && Platform.OS === 'android' && isDriverOverlayAvailable && !DriverOverlay.canDrawOverlays()) {
-        const OVERLAY_PROMPT_KEY = '@tricigo/overlay_prompt_shown';
-        AsyncStorage.getItem(OVERLAY_PROMPT_KEY).then((shown) => {
-          if (shown) return;
-          Alert.alert(
-            t('overlay.prompt_title', { defaultValue: 'No te pierdas ningún viaje' }),
-            t('overlay.prompt_body', {
-              defaultValue:
-                'Permite que TriciGo aparezca sobre otras apps: cuando llegue un viaje, la app se abrirá sola aunque estés usando otra aplicación, y verás un botón flotante para volver rápido.',
-            }),
-            [
-              {
-                text: t('overlay.prompt_later', { defaultValue: 'Ahora no' }),
-                style: 'cancel',
-                onPress: () => { AsyncStorage.setItem(OVERLAY_PROMPT_KEY, '1').catch(() => {}); },
-              },
-              {
-                text: t('overlay.prompt_enable', { defaultValue: 'Activar' }),
-                onPress: () => {
-                  AsyncStorage.setItem(OVERLAY_PROMPT_KEY, '1').catch(() => {});
-                  DriverOverlay.openOverlaySettings();
-                },
-              },
-            ],
-          );
-        }).catch(() => {});
+      // Overlay-permission pitch (Android): with "Mostrar sobre otras apps"
+      // granted, the app launches itself when an offer arrives while the
+      // driver is in another app, and shows the floating bubble in the
+      // background. Xiaomi-family phones also need their own pop-up
+      // permission. maybePromptOverlay asks at most every 3 days per step and
+      // never blocks going online; the settings screen keeps both entries.
+      if (newStatus && Platform.OS === 'android' && isDriverOverlayAvailable && user?.id) {
+        void maybePromptOverlay(user.id);
       }
     } catch (err) {
       const rawMsg = getErrorMessage(err);
@@ -1134,7 +1111,7 @@ function NativeDriverHomeScreen() {
       setShiftChangeInFlight(false);
       setToggling(false);
     }
-  }, [profile, isOnline, setOnline, setShiftChangeInFlight, activeTrip, t, offlineRecovery]);
+  }, [profile, isOnline, setOnline, setShiftChangeInFlight, activeTrip, t, offlineRecovery, user?.id]);
 
   const handleToggleBreak = useCallback(async () => {
     if (!profile || togglingBreak) return;

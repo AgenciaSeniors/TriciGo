@@ -760,7 +760,9 @@
     "settings_granted": "Enabled: the app opens by itself when a ride arrives",
     "settings_denied": "Enable it so the app opens by itself when a ride arrives",
     "settings_on": "Yes",
-    "settings_off": "No"
+    "settings_off": "No",
+    "settings_xiaomi_title": "Extra Xiaomi permission",
+    "settings_xiaomi_sub": "Needed on Xiaomi, Redmi and POCO for the app to open by itself"
   },
 
   "email_notice": {

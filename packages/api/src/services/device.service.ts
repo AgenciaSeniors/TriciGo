@@ -25,6 +25,34 @@ export interface ReportAppOpenInput {
  */
 export type ReportAppOpenOutcome = 'recorded' | 'updated' | 'capped' | 'invalid' | 'unavailable';
 
+/**
+ * What happened when the driver app tried to come to the front for a ride offer:
+ * it reached the front within 4 s, it did not (blocked, or the screen was off), or
+ * it did not try because "Display over other apps" is not granted.
+ */
+export type DriverLaunchResult = 'foreground' | 'not_foreground' | 'no_permission';
+
+/** What the driver app reports about its auto-open permissions (report_driver_overlay, migration 00689). */
+export interface ReportDriverOverlayInput {
+  /** The same per-install id the app sends at login. */
+  device_id: string;
+  manufacturer: string | null;
+  brand: string | null;
+  os_version: string | null;
+  app_version: string | null;
+  /** The DriverOverlay native module is in the binary. */
+  module_available: boolean;
+  /** "Display over other apps" is granted. */
+  overlay_granted: boolean;
+  /** Xiaomi-family phone: the driver confirmed the extra permission, or a launch reached the front. */
+  xiaomi_ok: boolean;
+  /** null for a plain status report. */
+  launch_result: DriverLaunchResult | null;
+}
+
+/** As ReportAppOpenOutcome: 'unavailable' while migration 00689 is not applied. */
+export type ReportDriverOverlayOutcome = 'recorded' | 'updated' | 'capped' | 'invalid' | 'unavailable';
+
 /** A device row recorded in user_known_devices (returned by listMyDevices). */
 export interface KnownDevice {
   id: string;
@@ -81,6 +109,36 @@ export const deviceService = {
       throw error;
     }
     return data as ReportAppOpenOutcome;
+  },
+
+  /**
+   * Record the driver app's auto-open status on this install, and the result of
+   * a launch attempt when there is one (report_driver_overlay, migration 00689).
+   * Tells the server which drivers the app can open by itself on an offer.
+   *
+   * Fire-and-forget from the driver app. Resolves 'unavailable' while the
+   * migration is not applied; throws any other error.
+   */
+  async reportDriverOverlay(input: ReportDriverOverlayInput): Promise<ReportDriverOverlayOutcome> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('report_driver_overlay', {
+      p_device_id: input.device_id,
+      p_manufacturer: input.manufacturer,
+      p_brand: input.brand,
+      p_os_version: input.os_version,
+      p_app_version: input.app_version,
+      p_module_available: input.module_available,
+      p_overlay_granted: input.overlay_granted,
+      p_xiaomi_ok: input.xiaomi_ok,
+      p_launch_result: input.launch_result,
+    });
+    if (error) {
+      if (error.code === 'PGRST202' || /could not find the function/i.test(error.message ?? '')) {
+        return 'unavailable';
+      }
+      throw error;
+    }
+    return data as ReportDriverOverlayOutcome;
   },
 
   /**

@@ -16,6 +16,7 @@ const getDeviceInfo = vi.fn(async () => ({
   app_version: '1.7.4',
 }));
 vi.mock('@/lib/device', () => ({ getDeviceInfo: () => getDeviceInfo() }));
+vi.mock('@/lib/overlayReport', () => ({ reportOverlayStatus: vi.fn(async () => undefined) }));
 
 const reportAppOpenRpc = vi.fn(async (..._args: unknown[]) => 'recorded');
 vi.mock('@tricigo/api', () => ({
