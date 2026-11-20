@@ -3,7 +3,7 @@
 //   node --test scripts/check-pr.test.mjs     (pnpm test:pr-gate)
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -236,5 +236,139 @@ describe('cross-review', () => {
     const after = ['packages/api/src/services/wallet.service.ts'];
     assert.match(checkCrossReview({ areas, verdict, required: true, reviewedIsAncestor: true, sensitiveAfterReview: after }).errors[0], /round 2/);
     assert.deepEqual(checkCrossReview({ areas, verdict, required: true, reviewedIsAncestor: true, sensitiveAfterReview: [] }).errors, []);
+  });
+});
+
+describe('CLI', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'check-pr-'));
+  const outside = mkdtempSync(join(tmpdir(), 'check-pr-body-'));
+  after(() => {
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  });
+  const g = (...a) => execFileSync('git', a, { cwd: repo, encoding: 'utf8' }).trim();
+  const write = (path, text) => {
+    mkdirSync(dirname(join(repo, path)), { recursive: true });
+    writeFileSync(join(repo, path), text);
+  };
+  const commit = (message) => {
+    g('add', '-A');
+    g('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', message);
+    return g('rev-parse', 'HEAD');
+  };
+  const MAP = {
+    ignore: ['\\.md$'],
+    areas: {
+      money: { title: 'Money', checklist: 'docs/review/money.md', paths: ['^packages/api/src/services/wallet\\.service\\.ts$'], migrationWords: ['wallet'] },
+    },
+    crossReview: { required: true },
+  };
+  const env = { ...process.env, GITHUB_ACTIONS: '', GITHUB_STEP_SUMMARY: '' };
+  const gate = (body, base = 'master', ...extra) => {
+    const file = join(outside, 'body.md');
+    writeFileSync(file, body);
+    return spawnSync(
+      process.execPath,
+      [join(ROOT, 'scripts/check-pr.mjs'), '--base', base, '--head', 'HEAD', '--body-file', file, ...extra],
+      { cwd: repo, encoding: 'utf8', env },
+    );
+  };
+
+  g('init', '-q', '-b', 'master');
+  write('docs/review/areas.json', JSON.stringify(MAP));
+  write('supabase/migrations/00001_first.sql', 'select 1;\n');
+  write('packages/api/src/services/wallet.service.ts', 'export const walletService = {};\n');
+  write('apps/client/src/zz/Plain.tsx', 'export const plain = 1;\n');
+  commit('base');
+
+  test('a change with its test and a filled description passes', () => {
+    g('checkout', '-q', '-B', 'clean', 'master');
+    write('apps/client/src/zz/Plain.tsx', 'export const plain = 2;\n');
+    write('apps/client/src/zz/__tests__/Plain.test.tsx', 'test\n');
+    commit('clean');
+    const r = gate(filledBody());
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /Review areas: none/);
+  });
+
+  test('editing a migration of master fails', () => {
+    g('checkout', '-q', '-B', 'edit', 'master');
+    write('supabase/migrations/00001_first.sql', 'select 2;\n');
+    commit('edit');
+    const r = gate(filledBody());
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /00001_first\.sql is already on master/);
+  });
+
+  test('a change in a review area needs the verdict of its last sensitive commit', () => {
+    g('checkout', '-q', '-B', 'money', 'master');
+    write('apps/client/src/zz/Pay.tsx', 'walletService.pay();\n');
+    write('apps/client/src/zz/__tests__/Pay.test.tsx', 'test\n');
+    const reviewed = commit('pay');
+    assert.match(gate(filledBody()).stdout, /touches money/);
+    const body = filledBody({ 'Cross-review': `Cross-review: APPROVED w1 ${reviewed}` });
+    let r = gate(body);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    write('docs/notes.md', 'not sensitive\n');
+    commit('docs after review');
+    r = gate(body);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    write('apps/client/src/zz/Pay.tsx', 'walletService.pay(2);\n');
+    commit('code after review');
+    r = gate(body);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /changed after the review/);
+  });
+
+  test('the PR map can add an area but not remove one', () => {
+    g('checkout', '-q', '-B', 'weaken', 'master');
+    write('docs/review/areas.json', JSON.stringify({ ...MAP, areas: { money: { ...MAP.areas.money, paths: [] } } }));
+    write('packages/api/src/services/wallet.service.ts', 'export const walletService = { pay() {} };\n');
+    write('packages/api/src/services/__tests__/wallet.test.ts', 'test\n');
+    commit('weaken');
+    assert.match(gate(filledBody()).stdout, /touches money/);
+
+    g('checkout', '-q', '-B', 'widen', 'master');
+    const plain = { title: 'Plain', checklist: 'x.md', paths: ['^apps/client/src/zz/Plain\\.tsx$'] };
+    write('docs/review/areas.json', JSON.stringify({ ...MAP, areas: { ...MAP.areas, plain } }));
+    write('apps/client/src/zz/Plain.tsx', 'export const plain = 3;\n');
+    write('apps/client/src/zz/__tests__/Plain.test.tsx', 'test\n');
+    commit('widen');
+    assert.match(gate(filledBody()).stdout, /touches plain/);
+  });
+
+  test('when master does not require the cross-review yet, a missing verdict only warns', () => {
+    g('checkout', '-q', '-B', 'base-optional', 'master');
+    write('docs/review/areas.json', JSON.stringify({ ...MAP, crossReview: { required: false } }));
+    commit('optional');
+    g('checkout', '-q', '-B', 'optional', 'base-optional');
+    write('apps/client/src/zz/Pay2.tsx', 'walletService.pay();\n');
+    write('apps/client/src/zz/__tests__/Pay2.test.tsx', 'test\n');
+    commit('pay2');
+    const r = gate(filledBody(), 'base-optional');
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /not enforced yet/);
+  });
+
+  test('a new migration number of master or of an older open PR fails', () => {
+    g('checkout', '-q', '-B', 'numbers', 'master');
+    write('supabase/migrations/00001_again.sql', 'select 1;\n');
+    write('supabase/migrations/00002_new.sql', 'select 1;\n');
+    write('supabase/tests/00002/run.sh', 'x\n');
+    commit('numbers');
+    const open = join(outside, 'open.json');
+    writeFileSync(open, JSON.stringify([{ number: 3, files: [{ path: 'supabase/migrations/00002_theirs.sql' }] }]));
+    const r = gate(filledBody(), 'master', '--pr', '9', '--open-prs', open);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /number 00001 is already used on master/);
+    assert.match(r.stdout, /older open PR #3/);
+  });
+
+  test('bad or missing arguments fail closed with exit 2', () => {
+    for (const args of [[], ['--base', 'master', '--head', 'HEAD'], ['--base', '-x', '--head', 'HEAD', '--body-file', 'x'], ['--bogus']]) {
+      const r = spawnSync(process.execPath, [join(ROOT, 'scripts/check-pr.mjs'), ...args], { cwd: repo, encoding: 'utf8', env });
+      assert.equal(r.status, 2, args.join(' '));
+      assert.match(r.stderr, /^check-pr: /);
+    }
   });
 });
