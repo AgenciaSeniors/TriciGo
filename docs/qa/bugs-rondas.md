@@ -15,11 +15,11 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 
 | ID | App | Dónde | Qué pasa | Estado |
 |---|---|---|---|---|
-| R1-01 | Pasajero | Viaje completado | "★ 5.0 · 1 viajes": falta el singular | en arreglo (sesión qa-round1-fixes) |
-| R1-02 | Pasajero | Tarjeta del conductor | La etiqueta de accesibilidad dice "plate" en inglés | en arreglo (sesión qa-round1-fixes) |
-| R1-03 | Pasajero | Perfil | Con el teléfono en inglés, mezcla inglés y español | en arreglo (sesión qa-round1-fixes) |
-| R1-04 | Pasajero | Elegir servicio | Atrás de Android cierra la app | en arreglo (sesión qa-round1-fixes) |
-| R1-05 | Pasajero | Inicio → elegir servicio | Si se toca un destino antes de que la app tenga la ubicación, el origen queda vacío para siempre | en arreglo (sesión qa-round1-fixes) |
+| R1-01 | Pasajero | Viaje completado | "★ 5.0 · 1 viajes": falta el singular | arreglado (#1215) |
+| R1-02 | Pasajero | Tarjeta del conductor | La etiqueta de accesibilidad dice "plate" en inglés | arreglado (#1215) |
+| R1-03 | Pasajero | Perfil | Con el teléfono en inglés, mezcla inglés y español | arreglado (#1215) |
+| R1-04 | Pasajero | Elegir servicio | Atrás de Android cierra la app | arreglado (#1215) |
+| R1-05 | Pasajero | Inicio → elegir servicio | Si se toca un destino antes de que la app tenga la ubicación, el origen queda vacío para siempre | arreglado (#1215) |
 | R2-01 | Pasajero | Buscando conductor | En un teléfono de 360×800 dp, "Cancelar viaje" queda debajo del borde y la parte de arriba queda vacía | abierto |
 | R2-02 | Pasajero | Buscando conductor | El diálogo de cancelar avisa de una "tarifa de cancelación" que ya no existe, y no está traducido | abierto |
 | R2-03 | Pasajero | Buscando conductor | El primer paso del indicador sale cortado: "Buscando cond…" | abierto |
@@ -43,6 +43,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Qué pasa:** la tarjeta dice "★ 5.0 · 1 viajes".
 - **Esperado:** "1 viaje" en singular, en es, en y pt.
 - **Volver a probar:** completar un viaje con un chofer QA que tenga exactamente 1 viaje completado (QA Auto y QA Confort tenían 0 el 2026-11-17) y leer la tarjeta con `python scripts/qa/adb_ui.py find viaje`. Mirar también la tarjeta del conductor durante el viaje.
+- **Arreglado en #1215:** `ride.driver_rides_count` y `ride.driver_profile_trips` tienen singular y plural en es, en y pt. Vale para la tarjeta durante el viaje, "Viaje completado", el perfil del conductor y la versión web del viaje activo.
 
 ### R1-02 · "plate" en inglés en la etiqueta de accesibilidad
 
@@ -50,13 +51,22 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Qué pasa:** la descripción para lectores de pantalla es "QA Moto, ★ 5.0 · 1 viajes, 2022 Suzuki GN125 · Negro, plate QA-0141".
 - **Esperado:** "placa" (o la palabra del idioma de la app).
 - **Volver a probar:** con un viaje aceptado, `python scripts/qa/adb_ui.py find QA-01` y leer el `desc=`.
+- **Arreglado en #1215:** la palabra sale de `ride.plate_label` ("Placa QA-0141" con la app en español).
 
 ### R1-03 · Perfil mezcla idiomas con el teléfono en inglés
 
 - **Ronda 1, 2026-11-17.** Pestaña Perfil, con el emulador en inglés (antes de ponerlo en `es-US`).
 - **Qué pasa:** "Saved locations", "ACCOUNT" y "Diamond" salen en inglés, pero "Modo oscuro" y "SEGURIDAD" salen en español.
 - **Esperado:** todo en el idioma de la app.
-- **Volver a probar:** cambiar el idioma dentro de la app a English (o poner el emulador en `en-US`), abrir Perfil y hacer `python scripts/qa/adb_ui.py dump`. Al terminar, volver a español.
+- **Volver a probar:** con la app cerrada, poner en `en` el idioma guardado de la app, sin tocar la cuenta:
+  ```
+  adb root
+  adb shell "sqlite3 /data/data/app.tricigo.client/databases/RKStorage \"UPDATE catalystLocalStorage SET value='en' WHERE key='tricigo_language';\""
+  ```
+  Abrir Perfil y hacer `python scripts/qa/adb_ui.py dump`: todo tiene que salir en inglés (ACCOUNT, SAFETY, ACTIVITY, MORE, Dark mode, Corporate, Blog). Al terminar, lo mismo con `es`.
+  - No cambiar el idioma desde Ajustes: también escribe `preferred_language` en la fila de la cuenta (`apps/client/app/profile/settings.tsx`), y en las rondas la cuenta es la de María.
+  - Poner el emulador en `en-US` no alcanza: la app usa el idioma que tiene guardado y solo mira el del teléfono si no hay ninguno.
+- **Arreglado en #1215:** se agregaron las seis claves que faltaban en los tres idiomas (`profile.section_safety`, `section_activity`, `section_more`, `corporate`, `blog` y `dark_mode`). El inicio en inglés es otro caso (R2-12).
 
 ### R1-04 · Atrás de Android cierra la app al elegir el servicio
 
@@ -64,6 +74,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Qué pasa:** el botón Atrás de Android cierra la app. Al volver a abrirla, el pedido sigue guardado.
 - **Esperado:** volver al inicio.
 - **Volver a probar:** poner un destino, llegar a la lista de servicios y `python scripts/qa/adb_ui.py key BACK`. La app tiene que seguir en primer plano (`dump` muestra `foreground: app.tricigo.client/...`).
+- **Arreglado en #1215:** Atrás hace lo mismo que la ✕: vuelve al inicio y descarta el pedido. Con la búsqueda abierta, cierra solo la búsqueda; en "Elegir en el mapa", cierra el selector y vuelve a la búsqueda.
 
 ### R1-05 · Si se toca un destino antes de tener la ubicación, el origen queda vacío
 
@@ -72,7 +83,22 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Causa** (`apps/client/app/(tabs)/index.tsx`): la ubicación solo la busca el efecto de `IdleView`, y su limpieza cancela todo al desmontarse. Al tocar un destino, `flowStep` pasa a `selecting`, `IdleView` se desmonta y nadie vuelve a pedir la ubicación. `SelectingView` solo copia `prefetchedPickup`, que nunca se llegó a escribir. Tocar una predicción (`handleOneTapPrediction`) sí tiene un respaldo con GPS; tocar un reciente (`handleRecentTap`), no.
 - **En un teléfono real:** pasa cuando el GPS tarda (arranque en frío, interior) y la persona toca rápido. También pasa después de cancelar un viaje: tocando un destino un par de minutos después de que el chofer canceló, el origen seguía vacío. Volviendo al inicio y esperando 20 s, se llenó.
 - **Cómo sale la persona hoy:** tocar "Punto de recogida" → "Usar mi ubicación" lo llena. "Centrar en mi ubicación" (el botón del mapa) no lo llena.
-- **Volver a probar:** cerrar la app (`python scripts/qa/adb_ui.py open client` la reinicia), y tocar un destino reciente en cuanto aparece el inicio (`wait "Hace"` y después `tap "Hace"`). A los 10 s, el origen tiene que tener una dirección.
+- **Volver a probar:** hay que lograr que el GPS no tenga posición al tocar el destino. Si no, el emulador la da enseguida desde su caché y el bug puede no aparecer ni sin el arreglo.
+  1. Reiniciar el emulador (`adb reboot`) para vaciar la caché, y volver a poner la zona horaria y los `adb reverse` (CLAUDE.md § "Rondas de prueba en el emulador").
+  2. Antes de abrir la app, cambiar los proveedores `gps` y `network` por proveedores de prueba sin posición (sin el `appops`, `cmd location providers` falla con `SecurityException ... MOCK_LOCATION`):
+     ```
+     adb root
+     adb shell appops set --uid 0 MOCK_LOCATION allow
+     adb shell cmd location providers add-test-provider gps
+     adb shell cmd location providers set-test-provider-enabled gps true
+     adb shell cmd location providers add-test-provider network
+     adb shell cmd location providers set-test-provider-enabled network true
+     adb shell am force-stop com.google.android.gms
+     ```
+  3. Abrir la app y tocar un destino reciente en cuanto aparece el inicio (`wait "Hace"` y después `tap "Hace"`). El origen queda en "Punto de recogida" y el mapa no tiene que ponerse gris.
+  4. Mandar la posición: `adb shell cmd location providers set-test-provider-location gps --location 23.1352,-82.3597`, y lo mismo con `network`. En unos segundos el origen tiene que llenarse solo, con el trayecto y los precios.
+  5. Al terminar: `adb shell cmd location providers remove-test-provider gps` (y `network`), `adb shell appops set --uid 0 MOCK_LOCATION default` y `adb emu geo fix -82.3597 23.1352`.
+- **Arreglado en #1215:** la pantalla de elegir el servicio sigue buscando la ubicación mientras el origen está vacío o en "Detectando dirección...", y lo llena cuando llega, sin pisar un origen que la persona eligió. Con un solo punto en el mapa, el encuadre ya no va al zoom 25,5. "Centrar en mi ubicación" sigue sin llenar el origen.
 
 ### R2-01 · "Cancelar viaje" queda fuera de la pantalla mientras busca
 
