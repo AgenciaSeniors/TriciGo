@@ -108,6 +108,9 @@ const KNOWN_KEYS: Record<string, KnownKey> = {
   referral_bonus_driver_cup: { type: 'number', helpKey: 'platform_config.referral_bonus_driver_cup_help' },
   referral_welcome_bonus_driver_cup: { type: 'number', helpKey: 'platform_config.referral_welcome_bonus_driver_cup_help' },
 
+  // ── Driver approval bonus: the first approval pays it (00686) ──
+  driver_approval_bonus_cup: { type: 'number', helpKey: 'platform_config.driver_approval_bonus_cup_help' },
+
   // ── Cancellation reputation (Castigo por cancelar, migs 00372-00374) ──
   cancel_rating_value_second: { type: 'number', helpKey: 'platform_config.cancel_rating_value_second_help' },
   cancel_rating_value_third: { type: 'number', helpKey: 'platform_config.cancel_rating_value_third_help' },

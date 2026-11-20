@@ -166,7 +166,14 @@ export type { MotoDeportivaPilot, MotoDeportivaOverview, MotoDeportivaMetrics, M
 export { buildFleetRequest, createFleetRequestSubmission } from './services/fleetRequestSubmission';
 export type { FleetRequestFormValues } from './services/fleetRequestSubmission';
 export { onboardingService, ONBOARDING_UNAVAILABLE } from './services/onboarding.service';
-export type { DriverDecision, ReviewDecision, OutreachChannelCode } from './services/onboarding.service';
+export type {
+  DriverDecision,
+  ReviewDecision,
+  OutreachChannelCode,
+  ApprovalBonus,
+  ApprovalBonusStatus,
+  DriverStatusResult,
+} from './services/onboarding.service';
 export { caseOpsService, CASES_UNAVAILABLE } from './services/case-ops.service';
 export type { DisputeEscalation, IncidentDecision, RefundResolution, NoRefundResolution } from './services/case-ops.service';
 export { missedRideService, MISSED_RIDES_UNAVAILABLE } from './services/missed-ride.service';
