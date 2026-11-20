@@ -116,6 +116,7 @@
   "processing": "Processing…",
 
   "wallet": {
+    "recharge_other_amount": "Other amount",
     "title": "Trip credits",
     "balance": "Available balance",
     "held": "On hold",

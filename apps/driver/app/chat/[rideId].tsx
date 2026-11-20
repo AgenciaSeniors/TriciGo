@@ -4,7 +4,6 @@ import {
   FlatList,
   Pressable,
   Image,
-  KeyboardAvoidingView,
   Platform,
   Alert,
   ActionSheetIOS,
@@ -23,6 +22,7 @@ import { useChatInit, useChatActions } from '@/hooks/useChat';
 import type { ChatMessage, RideWithRider } from '@tricigo/types';
 import { ChatBubble } from '@/components/chat/ChatBubble';
 import { ChatInput } from '@/components/chat/ChatInput';
+import { KeyboardAwareView } from '@/components/KeyboardAwareView';
 import { TypingIndicator } from '@/components/chat/TypingIndicator';
 
 /** Group messages by calendar date for date separator rendering. */
@@ -238,11 +238,9 @@ export default function ChatScreen() {
 
   return (
     <Screen bg="lightPrimary">
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={0}
-      >
+      {/* Not KeyboardAvoidingView: on Android with edge-to-edge it left the
+           input and Send under the keyboard (QA R2-07). */}
+      <KeyboardAwareView>
         {/* Chat Header */}
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', backgroundColor: '#FFFFFF' }}>
           <Pressable onPress={() => router.back()} style={{ marginRight: 12, minWidth: 44, minHeight: 44, justifyContent: 'center' }}>
@@ -340,7 +338,7 @@ export default function ChatScreen() {
           theme="light"
           placeholder={t('chat.input_placeholder', { defaultValue: 'Escribe un mensaje...' })}
         />
-      </KeyboardAvoidingView>
+      </KeyboardAwareView>
     </Screen>
   );
 }

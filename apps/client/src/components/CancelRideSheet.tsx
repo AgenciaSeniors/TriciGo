@@ -11,8 +11,8 @@ import {
   type CancellationRatingImpact,
   type CancellationReasonCode,
   PASSENGER_CANCELLATION_REASONS,
-  isExemptCancellationReason,
 } from '@tricigo/types';
+import { cancelPenaltyNotice } from '@/lib/cancelPenaltyNotice';
 
 interface CancelRideSheetProps {
   visible: boolean;
@@ -70,8 +70,7 @@ function CancelRideSheetInner({
   // An exempt reason (safety) overrides the projected penalty client-side, so
   // the passenger sees "no penalty" the moment they pick it — matching what the
   // server will do (migration 00486).
-  const exempt = isExemptCancellationReason(reason);
-  const willPenalize = !!ratingImpact?.rating_penalized && !exempt;
+  const notice = cancelPenaltyNotice({ reason, ratingImpact, previewLoading });
   const hasStarFigures =
     typeof ratingImpact?.stars_before === 'number' &&
     typeof ratingImpact?.stars_after === 'number';
@@ -146,7 +145,7 @@ function CancelRideSheetInner({
 
       {/* Rating impact (replaces the old money fee block). Only meaningful once
           a reason is chosen; an exempt reason flips it to "no penalty". */}
-      {reason && (willPenalize ? (
+      {notice === 'penalized' ? (
         <View className="rounded-xl px-4 py-3 mb-4 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700">
           <View className="flex-row items-center">
             <Ionicons name="star-half" size={18} color={colors.warning.DEFAULT} />
@@ -173,7 +172,7 @@ function CancelRideSheetInner({
             })}
           </Text>
         </View>
-      ) : (exempt || ratingImpact) ? (
+      ) : notice === 'none' || notice === 'none_safety' ? (
         <View className="rounded-xl px-4 py-3 mb-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700">
           <View className="flex-row items-center">
             <Ionicons name="checkmark-circle" size={16} color={colors.success.DEFAULT} />
@@ -181,8 +180,15 @@ function CancelRideSheetInner({
               {t('ride.cancel_no_penalty', { defaultValue: 'Sin penalización' })}
             </Text>
           </View>
+          {notice === 'none_safety' && (
+            <Text variant="caption" className="text-green-700 dark:text-green-300 mt-1">
+              {t('ride.cancel_no_penalty_safety', {
+                defaultValue: 'Cancelar por seguridad nunca baja tu calificación.',
+              })}
+            </Text>
+          )}
         </View>
-      ) : previewLoading ? null : (
+      ) : notice === 'unknown' ? (
         // Preview couldn't be computed (transient error). Don't claim "no
         // penalty" — the server may still apply one. Show a neutral notice.
         <View className="rounded-xl px-4 py-3 mb-4 bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200 dark:border-neutral-700">
@@ -193,7 +199,7 @@ function CancelRideSheetInner({
             </Text>
           </View>
         </View>
-      ))}
+      ) : null}
 
       {/* Action buttons */}
       <Button

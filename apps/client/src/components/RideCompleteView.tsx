@@ -33,7 +33,15 @@ const FALLBACK_NEGATIVE_TAGS = [
   'dirty_vehicle', 'unsafe_driving', 'rude_behavior', 'wrong_route', 'long_wait',
 ];
 
-function AnimatedStar({ filled, onPress, delay = 0 }: { filled: boolean; onPress: () => void; delay?: number }) {
+// `label` and `checked` are for screen readers: each star used to be read as
+// a bare "★", without saying how many stars it gives (QA R2-14).
+function AnimatedStar({ filled, onPress, delay = 0, label, checked }: {
+  filled: boolean;
+  onPress: () => void;
+  delay?: number;
+  label: string;
+  checked: boolean;
+}) {
   const scale = useRef(new Animated.Value(1)).current;
   const fillAnim = useRef(new Animated.Value(0)).current;
 
@@ -58,6 +66,9 @@ function AnimatedStar({ filled, onPress, delay = 0 }: { filled: boolean; onPress
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityLabel={label}
+      accessibilityState={{ checked }}
       style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
     >
       <Animated.View style={{ transform: [{ scale }] }}>
@@ -621,6 +632,8 @@ export function RideCompleteView() {
               <AnimatedStar
                 key={star}
                 filled={!!selectedRating && star <= selectedRating}
+                label={t('ride.rate_stars', { count: star })}
+                checked={selectedRating === star}
                 onPress={() => { setSelectedRating(star); triggerSelection(); triggerHaptic('light'); }}
                 delay={index * 80}
               />

@@ -1968,7 +1968,8 @@ function NativeHomeScreen() {
   // own scrolling internally for the post-map content, so we disable
   // the outer Screen scroll for that flow only.
   if (flowStep !== 'idle') {
-    const enableScroll = flowStep !== 'active';
+    // SearchingView scrolls on its own so its cancel button stays in view.
+    const enableScroll = flowStep !== 'active' && flowStep !== 'searching';
     return (
       <>
         <Screen bg="cuban" padded scroll={enableScroll}>
@@ -2440,6 +2441,11 @@ function IdleView() {
                 conditionCode={weather.conditionCode}
                 city={weather.city}
                 mode={mode}
+                accessibilityLabel={
+                  weather.city
+                    ? t('home.weather_a11y', { temp: Math.round(weather.tempC), city: weather.city })
+                    : t('home.weather_a11y_no_city', { temp: Math.round(weather.tempC) })
+                }
               />
             )}
             {/* Theme toggle */}
@@ -3622,19 +3628,12 @@ function SelectingView({ openPicker }: {
     return result;
   }, [draft.pickup?.location, nearbyVehicles]);
 
-  // UBER-4.4: Load saved payment method on mount
-  useEffect(() => {
-    AsyncStorage.getItem('last_payment_method').then((saved) => {
-      if (saved && (saved === 'cash' || saved === 'tricicoin' || saved === 'mixed') && !draft.paymentMethod) {
-        setPaymentMethod(saved);
-      }
-    }).catch(() => {});
-  }, []);
-
-  // UBER-4.4: Persist payment method when it changes
+  // A pick here is for this trip only. Each new trip starts with the default
+  // from Settings (seeded from the profile below). The old "last used"
+  // memory never applied: it only restored when the draft had no method, and
+  // the draft always had one.
   const handlePaymentMethodChange = useCallback((method: 'cash' | 'tricicoin' | 'mixed') => {
     setPaymentMethod(method);
-    AsyncStorage.setItem('last_payment_method', method).catch(() => {});
   }, [setPaymentMethod]);
 
   // Predictive pickup: suggest a better pickup point near a road
@@ -3697,6 +3696,9 @@ function SelectingView({ openPicker }: {
     if (!user?.id) return;
     customerService.ensureProfile(user.id).then((cp) => {
       setSavedLocations(cp.saved_locations ?? []);
+      // QA R2-11: the Settings default was saved and never read, so every
+      // trip started in cash. A method picked for this trip stays.
+      useRideStore.getState().applyDefaultPaymentMethod(cp.default_payment_method);
       const saved = cp.ride_preferences;
       if (saved && Object.keys(saved).length > 0) {
         useRideStore.getState().setRidePreferences(saved);
@@ -5306,7 +5308,7 @@ function RadarPulseAnimation() {
 
 function SearchingView() {
   const { t } = useTranslation('rider');
-  const { isTablet } = useResponsive();
+  const { isTablet, screenHeight } = useResponsive();
   const { isLoading, error, activeRide } = useRideStore();
   const { cancelRide } = useRideActions();
   const { coordinates: routeCoordinates } = useRoutePolyline(
@@ -5537,14 +5539,26 @@ function SearchingView() {
   })();
 
   const searchSteps = useMemo(() => [
-    { key: 'searching', label: t('ride.searching_driver') },
+    // A quarter of a 360 dp phone: "Buscando conductor..." came out as
+    // "Buscando cond…" (QA R2-03).
+    { key: 'searching', label: t('ride.step_searching', { defaultValue: 'Buscando' }) },
     { key: 'accepted', label: t('ride.status_accepted') },
     { key: 'driver_en_route', label: t('ride.status_driver_en_route') },
     { key: 'in_progress', label: t('ride.status_in_progress') },
   ], [t]);
 
+  // QA R2-01: on a 360x800 dp phone "Cancelar viaje" ended up under the
+  // bottom edge, below a map and two cards. The cancel button now sits outside
+  // the scroll, always in view, and the map is shorter on short screens.
+  const mapHeight = isTablet ? 300 : screenHeight < 860 ? 150 : 220;
+
   return (
-    <View className="pt-4 flex-1 items-center">
+    <View className="flex-1">
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ flexGrow: 1, alignItems: 'center', paddingTop: 16 }}
+        showsVerticalScrollIndicator={false}
+      >
       {/* Map showing pickup + dropoff with route + searching drivers */}
       {activeRide && (
         <>
@@ -5560,7 +5574,7 @@ function SearchingView() {
             // correct vehicle icon (almendrón / moto / triciclo / confort)
             // instead of the generic blue dot fallback.
             vehicleType={acceptedDriver?.vehicleType ?? undefined}
-            height={isTablet ? 300 : 220}
+            height={mapHeight}
           />
           <View className="h-3" />
         </>
@@ -5781,7 +5795,9 @@ function SearchingView() {
           />
         </View>
       )}
+      </ScrollView>
 
+      <View style={{ paddingTop: 12, paddingBottom: 8 }}>
       <Button
         /* UX: append elapsed wait to the cancel label so the rider has
              their own timer in the primary escape action. "Cancelar
@@ -5792,13 +5808,16 @@ function SearchingView() {
         size="lg"
         fullWidth
         onPress={() => {
+          // QA R2-02: this used to warn about a cancellation fee. Cancelling
+          // costs nothing (00372–00374): a late cancel lowers the rating, and
+          // a cancel before any driver accepted does not even do that.
           Alert.alert(
-            t('ride.cancel_ride_title', { defaultValue: '¿Cancelar la búsqueda?' }),
-            t('ride.cancel_ride_msg', { defaultValue: 'Perderás el progreso de la búsqueda actual. Si un conductor ya aceptó, podría aplicar una tarifa de cancelación.' }),
+            t('ride.cancel_search_title', { defaultValue: '¿Cancelar la búsqueda?' }),
+            t('ride.cancel_search_msg', { defaultValue: 'Todavía no hay conductor asignado, así que cancelar ahora no baja tu calificación.' }),
             [
-              { text: t('common.back', { defaultValue: 'Volver' }), style: 'cancel' },
+              { text: t('ride.keep_searching', { defaultValue: 'Seguir buscando' }), style: 'cancel' },
               {
-                text: t('ride.cancel_ride', { defaultValue: 'Cancelar viaje' }),
+                text: t('ride.cancel_search_confirm', { defaultValue: 'Cancelar búsqueda' }),
                 style: 'destructive',
                 onPress: () => cancelRide(t('ride.canceled_by_passenger', { defaultValue: 'Cancelado por el pasajero' })),
               },
@@ -5807,6 +5826,7 @@ function SearchingView() {
         }}
         loading={isLoading}
       />
+      </View>
     </View>
   );
 }

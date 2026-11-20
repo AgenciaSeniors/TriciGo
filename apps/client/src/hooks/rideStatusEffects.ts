@@ -162,28 +162,30 @@ export function fireRideStatusEffects(prevStatus: string | null | undefined, rid
       return;
     }
 
+    let notice: { title: string; body: string };
     if (prevStatus === 'in_progress') {
-      Toast.show({
-        type: 'error',
-        text1: i18next.t('rider:ride.trip_interrupted_title', { defaultValue: 'Viaje interrumpido' }),
-        text2: i18next.t('rider:ride.trip_interrupted_msg', { defaultValue: 'El viaje fue interrumpido. Contacta a soporte si necesitas ayuda.' }),
-      });
+      notice = {
+        title: i18next.t('rider:ride.trip_interrupted_title', { defaultValue: 'Viaje interrumpido' }),
+        body: i18next.t('rider:ride.trip_interrupted_msg', { defaultValue: 'El viaje fue interrumpido. Contacta a soporte si necesitas ayuda.' }),
+      };
     } else if (!ride.driver_id) {
       // No driver was ever assigned, so blaming one would be a lie. This is
       // the admin/dispatcher cancel path. Now that these toasts actually
       // fire, a wrong attribution would reach real riders.
-      Toast.show({
-        type: 'error',
-        text1: i18next.t('rider:ride.driver_canceled_title', { defaultValue: 'Viaje cancelado' }),
-        text2: i18next.t('rider:ride.canceled_generic_msg', { defaultValue: 'Tu viaje fue cancelado. Puedes pedir otro cuando quieras.' }),
-      });
+      notice = {
+        title: i18next.t('rider:ride.driver_canceled_title', { defaultValue: 'Viaje cancelado' }),
+        body: i18next.t('rider:ride.canceled_generic_msg', { defaultValue: 'Tu viaje fue cancelado. Puedes pedir otro cuando quieras.' }),
+      };
     } else {
-      Toast.show({
-        type: 'error',
-        text1: i18next.t('rider:ride.driver_canceled_title', { defaultValue: 'Viaje cancelado' }),
-        text2: i18next.t('rider:ride.driver_canceled_msg', { defaultValue: 'El conductor canceló el viaje. Puedes buscar otro conductor.' }),
-      });
+      notice = {
+        title: i18next.t('rider:ride.driver_canceled_title', { defaultValue: 'Viaje cancelado' }),
+        body: i18next.t('rider:ride.driver_canceled_msg', { defaultValue: 'El conductor canceló el viaje. Puedes buscar otro conductor.' }),
+      };
     }
-    scheduleLocalNotification(i18next.t('ride.driver_canceled_notif', { ns: 'rider' }), '');
+    Toast.show({ type: 'error', text1: notice.title, text2: notice.body });
+    // The phone notification says the same as the notice (QA R2-05). It used
+    // to say "Tu conductor canceló el viaje" in every case, also when support
+    // canceled a ride that never had a driver.
+    scheduleLocalNotification(notice.title, notice.body);
   }
 }

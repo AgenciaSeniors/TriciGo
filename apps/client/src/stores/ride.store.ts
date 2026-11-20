@@ -96,6 +96,9 @@ interface RideRequestDraft {
   dropoff: LocationDraft | null;
   serviceType: ServiceTypeSlug;
   paymentMethod: PaymentMethod;
+  /** The rider picked `paymentMethod` for this trip, so the Settings default
+   *  (which can load after the draft exists) must not replace it. */
+  paymentMethodChosen: boolean;
   scheduledAt: Date | null;
   delivery: DeliveryDraft;
   waypoints: WaypointDraft[];
@@ -113,6 +116,7 @@ const defaultDraft: RideRequestDraft = {
   dropoff: null,
   serviceType: 'triciclo_basico',
   paymentMethod: 'cash',
+  paymentMethodChosen: false,
   scheduledAt: null,
   delivery: { ...defaultDelivery },
   waypoints: [],
@@ -123,6 +127,18 @@ const defaultDraft: RideRequestDraft = {
   shareRide: false,
   walletRatio: 0.5,
 };
+
+/** The methods Settings offers as a default (profile/settings.tsx). */
+const DEFAULT_PAYMENT_METHODS: readonly PaymentMethod[] = ['cash', 'tricicoin', 'mixed'];
+
+function toDefaultPaymentMethod(method: string | null | undefined): PaymentMethod {
+  return DEFAULT_PAYMENT_METHODS.find((m) => m === method) ?? 'cash';
+}
+
+/** A fresh draft, paid the way the rider chose in Settings. */
+function freshDraft(defaultPaymentMethod: PaymentMethod): RideRequestDraft {
+  return { ...defaultDraft, paymentMethod: defaultPaymentMethod };
+}
 
 interface PromoResult {
   valid: boolean;
@@ -144,6 +160,10 @@ interface RideState {
 
   // Pre-fetched pickup from GPS on app launch
   prefetchedPickup: LocationDraft | null;
+
+  /** `customer_profiles.default_payment_method`, the Settings choice. Every
+   *  new draft starts with it. Account-level, so draft resets keep it. */
+  defaultPaymentMethod: PaymentMethod;
 
   // Promo state
   promoCode: string;
@@ -186,7 +206,11 @@ interface RideState {
    *  the coordinate was already committed through setPickup/setDropoff. */
   setEndpointAddress: (target: 'pickup' | 'dropoff', address: string) => void;
   setServiceType: (type: ServiceTypeSlug) => void;
+  /** The rider picks how to pay THIS trip. */
   setPaymentMethod: (method: PaymentMethod) => void;
+  /** The Settings default, as loaded from the profile. Applies to the current
+   *  draft unless the rider already picked a method for it. */
+  applyDefaultPaymentMethod: (method: string | null | undefined) => void;
   setScheduledAt: (date: Date | null) => void;
   setFareEstimate: (estimate: FareEstimate | null) => void;
   setActiveRide: (ride: Ride | null) => void;
@@ -237,6 +261,7 @@ export const useRideStore = create<RideState>((set, get) => ({
   isFareEstimating: false,
   error: null,
   prefetchedPickup: null,
+  defaultPaymentMethod: 'cash',
   promoCode: '',
   promoResult: null,
   signupPromo: null,
@@ -342,7 +367,18 @@ export const useRideStore = create<RideState>((set, get) => ({
     }),
 
   setPaymentMethod: (paymentMethod) =>
-    set((s) => ({ draft: { ...s.draft, paymentMethod } })),
+    set((s) => ({ draft: { ...s.draft, paymentMethod, paymentMethodChosen: true } })),
+
+  // QA R2-11: Settings saved the default and nothing read it back, so every
+  // trip started in cash. A company-paid trip keeps 'corporate'.
+  applyDefaultPaymentMethod: (method) =>
+    set((s) => {
+      const defaultPaymentMethod = toDefaultPaymentMethod(method);
+      const keepDraft = s.draft.paymentMethodChosen || !!s.draft.corporateAccountId;
+      return keepDraft
+        ? { defaultPaymentMethod }
+        : { defaultPaymentMethod, draft: { ...s.draft, paymentMethod: defaultPaymentMethod } };
+    }),
 
   setScheduledAt: (scheduledAt) =>
     set((s) => ({ draft: { ...s.draft, scheduledAt } })),
@@ -416,9 +452,9 @@ export const useRideStore = create<RideState>((set, get) => ({
       // Sticky-serviceType fix: also reset the draft so a canceled mensajería
       // order doesn't leave serviceType='mensajeria' stuck on the next
       // passenger trip. Preserve prefetchedPickup (GPS auto-fill on home).
-      set({
+      set((s) => ({
         flowStep: 'idle',
-        draft: { ...defaultDraft },
+        draft: freshDraft(s.defaultPaymentMethod),
         fareEstimate: null,
         fareEstimatedAt: null,
         allFareEstimates: null,
@@ -430,7 +466,7 @@ export const useRideStore = create<RideState>((set, get) => ({
         activeRide: null,
         rideWithDriver: null,
         error: null,
-      });
+      }));
     }
   },
 
@@ -452,12 +488,12 @@ export const useRideStore = create<RideState>((set, get) => ({
       // Bug 23: Save previous payment method before switching to corporate so we can restore it on deselect
       if (corporateAccountId) {
         return {
-          _prevPaymentMethod: s.draft.paymentMethod !== 'corporate' ? s.draft.paymentMethod : (s as any)._prevPaymentMethod ?? 'cash',
+          _prevPaymentMethod: s.draft.paymentMethod !== 'corporate' ? s.draft.paymentMethod : (s as any)._prevPaymentMethod ?? s.defaultPaymentMethod,
           draft: { ...s.draft, corporateAccountId, paymentMethod: 'corporate' as PaymentMethod },
         };
       }
       // Deselecting: restore previous payment method instead of defaulting to cash
-      const restored: PaymentMethod = (s as any)._prevPaymentMethod ?? 'cash';
+      const restored: PaymentMethod = (s as any)._prevPaymentMethod ?? s.defaultPaymentMethod;
       return {
         draft: { ...s.draft, corporateAccountId: null, paymentMethod: s.draft.paymentMethod === 'corporate' ? restored : s.draft.paymentMethod },
       };
@@ -564,7 +600,7 @@ export const useRideStore = create<RideState>((set, get) => ({
   // driver stopped receiving them mid-session with nothing to indicate it.
   resetDraft: () =>
     set((s) => ({
-      draft: { ...defaultDraft, ridePreferences: s.draft.ridePreferences },
+      draft: { ...freshDraft(s.defaultPaymentMethod), ridePreferences: s.draft.ridePreferences },
       fareEstimate: null,
       fareEstimatedAt: null,
       allFareEstimates: null,
@@ -584,9 +620,9 @@ export const useRideStore = create<RideState>((set, get) => ({
     }
     // F009: Clear pending review on reset
     AsyncStorage.removeItem('@tricigo/pending_review_ride_id').catch(() => {});
-    set({
+    set((s) => ({
       flowStep: 'idle',
-      draft: { ...defaultDraft },
+      draft: freshDraft(s.defaultPaymentMethod),
       fareEstimate: null,
       fareEstimatedAt: null,
       allFareEstimates: null,
@@ -606,6 +642,6 @@ export const useRideStore = create<RideState>((set, get) => ({
       acceptedDriverBroadcast: null,
       isAcceptAnimating: false,
       ratingReminderId: null,
-    });
+    }));
   },
 }));

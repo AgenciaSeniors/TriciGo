@@ -116,6 +116,7 @@
   "processing": "Procesando…",
 
   "wallet": {
+    "recharge_other_amount": "Otro monto",
     "title": "Créditos de viaje",
     "balance": "Saldo disponible",
     "held": "Retenido",
