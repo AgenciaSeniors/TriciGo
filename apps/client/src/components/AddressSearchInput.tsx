@@ -1,9 +1,10 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { View, TextInput, Pressable, ActivityIndicator, ScrollView, Animated } from 'react-native';
+import { View, TextInput, Pressable, ActivityIndicator, ScrollView, Animated, Keyboard } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { scheduleAutoFocus } from '../lib/autoFocusInput';
 import { Text } from '@tricigo/ui/Text';
 import { searchAddress, reverseGeocode, HAVANA_PRESETS, ALL_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, parseCornerQuery, bareStreetName, isZoneLevelResult, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchResultA11yLabel, searchAddressUnified, newSessionToken, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap, findNearestPreset, historyMatchesQuery, tokenOverlapRatio, isProviderStreetResult, filterProviderStreetsByLocalAnchor, resolveFixedPlaces } from '@tricigo/utils';
 import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
@@ -129,11 +130,12 @@ function AddressSearchInputInner({
   const inputRef = useRef<TextInput>(null);
   // focus() after mount, not the TextInput autoFocus prop: when the field
   // mounts in the same frame as the sheet that holds it, Android often skips
-  // opening the keyboard for autoFocus (QA R3-03: mInputShown=false).
+  // opening the keyboard for autoFocus (QA R3-03: mInputShown=false). The
+  // add-stop search still lost it on the first try, so it retries while the
+  // field is focused but the keyboard is not up (scheduleAutoFocus).
   useEffect(() => {
     if (!autoFocus) return;
-    const id = setTimeout(() => inputRef.current?.focus(), 150);
-    return () => clearTimeout(id);
+    return scheduleAutoFocus(() => inputRef.current, () => Keyboard.isVisible());
   }, [autoFocus]);
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
   const isDark = resolvedScheme === 'dark';
