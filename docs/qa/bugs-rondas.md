@@ -34,15 +34,22 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 | R2-12 | Pasajero | Inicio | Con la app en inglés, el inicio sigue casi todo en español | verificado (ronda 3) |
 | R2-13 | Pasajero | Ajustes | Tocar "Idioma preferido" cambia el idioma al instante, sin mostrar opciones | verificado (ronda 3) |
 | R2-14 | Pasajero | Calificar y chat | Lector de pantalla: estrellas sin número y remitente del chat genérico | verificado (ronda 3) |
-| R3-01 | Pasajero | Inicio → "Tu último viaje" | "Volver a [destino]" termina en "Ubicación inválida" y no deja pedir el viaje | arreglado (#1224) |
-| R3-02 | Pasajero | Elegir servicio | Con la app en inglés, el selector de servicio sigue casi todo en español | arreglado (#1224) |
-| R3-03 | Pasajero | Buscar destino y parada | El campo de búsqueda no toma el foco al abrirse: hay que tocarlo | arreglado (#1224) |
-| R3-04 | Pasajero | Buscar destino | Las direcciones de Google llegan en inglés ("Vedado, Havana, Cuba") | arreglado (#1224) |
-| R3-05 | Pasajero | Buscar destino | Elegir una zona de Google ("Vedado") ya no pide confirmar el punto en el mapa | arreglado (#1224) |
-| R3-06 | Pasajero y conductor | Notificaciones | Abrir la app o volver al inicio borra todas sus notificaciones del teléfono | arreglado (#1224) |
-| R3-07 | Pasajero | Notificaciones | Si el permiso se da durante la sesión, las notificaciones del viaje caen en el canal "Miscellaneous" | arreglado (#1224) |
-| R3-08 | Pasajero | Accesibilidad | "Back" en inglés, y "Copiado" en un botón que todavía no copió | arreglado (#1224) |
-| R3-09 | Pasajero | Buscar destino | "23 y 12" sugiere "12 e/ Calle 12" | arreglado (#1224) |
+| R3-01 | Pasajero | Inicio → "Tu último viaje" | "Volver a [destino]" termina en "Ubicación inválida" y no deja pedir el viaje | verificado (ronda 4) |
+| R3-02 | Pasajero | Elegir servicio | Con la app en inglés, el selector de servicio sigue casi todo en español | verificado (ronda 4) |
+| R3-03 | Pasajero | Buscar destino y parada | El campo de búsqueda no toma el foco al abrirse: hay que tocarlo | abierto (el de parada sigue fallando, ronda 4) |
+| R3-04 | Pasajero | Buscar destino | Las direcciones de Google llegan en inglés ("Vedado, Havana, Cuba") | verificado (ronda 4) |
+| R3-05 | Pasajero | Buscar destino | Elegir una zona de Google ("Vedado") ya no pide confirmar el punto en el mapa | verificado (ronda 4) |
+| R3-06 | Pasajero y conductor | Notificaciones | Abrir la app o volver al inicio borra todas sus notificaciones del teléfono | verificado (ronda 4) |
+| R3-07 | Pasajero | Notificaciones | Si el permiso se da durante la sesión, las notificaciones del viaje caen en el canal "Miscellaneous" | verificado en parte (ronda 4) |
+| R3-08 | Pasajero | Accesibilidad | "Back" en inglés, y "Copiado" en un botón que todavía no copió | verificado (ronda 4) |
+| R3-09 | Pasajero | Buscar destino | "23 y 12" sugiere "12 e/ Calle 12" | verificado (ronda 4) |
+| R4-01 | Pasajero | Buscar destino | Lugares con "Havana" como municipio ("Reparto Bahia · Havana, La Habana"): el sync semanal pisa el municipio que corrigió 00580 | abierto |
+| R4-02 | Pasajero | Confirmar el pin de una zona | Confirmar sin mover el pin deja el barrio ("Cayo Hueso, La Habana") como dirección, aunque la pantalla mostraba la dirección exacta | abierto |
+| R4-03 | Pasajero | Pantallas claras | La hora y la batería de la barra de estado salen en blanco sobre el fondo crema (a confirmar fuera del dev client) | abierto |
+| R4-04 | Pasajero | Buscar destino y parada | "BUSCAR CERCA" sale en filas de 6 y 2, con las etiquetas pegadas ("HospitalesFarmaciasRestaurantes") | abierto |
+| R4-05 | Pasajero | Inicio → "Recientes" | La fila sale apilada: el punto, el nombre, "Hace 5h" y la flecha uno debajo del otro | abierto |
+| R4-06 | Pasajero | Centro de Seguridad | "Reportar Problema de Seguridad" lleva a la Ayuda, y la Ayuda dice que se reporta desde el Centro de Seguridad | abierto |
+| R4-07 | Pasajero | Elegir servicio | El subtítulo de Mensajería es "Delivery" en español, y repite el nombre en inglés y portugués | abierto |
 
 ## Fichas
 
@@ -245,6 +252,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** el destino del último viaje con sus coordenadas, y los precios en pantalla.
 - **Volver a probar:** con un viaje completado, abrir el inicio, tocar la tarjeta "TU ÚLTIMO VIAJE" y hacer `dump`: tienen que aparecer los precios y "Solicitar viaje …".
 - **Arreglo (#1224):** `getRideHistoryFiltered` y `getRideHistory` pasan cada fila por `transformRideCoordinates`, así que el historial devuelve `{ latitude, longitude }`. Arregla también el respaldo de `useDestinationPredictions`. El aviso "Ubicación inválida" de `useRide` ahora está traducido.
+- **Verificado (ronda 4, 2026-11-20):** "¿Volver a Hotel Nacional de Cuba…?" abre el trayecto con los precios y "Solicitar viaje Triciclo · 2,153 TRC".
 
 ### R3-02 · Con la app en inglés, el selector de servicio sigue en español
 
@@ -253,6 +261,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** la pantalla entera en el idioma elegido, también en portugués.
 - **Volver a probar:** poner la app en English (con la app cerrada, `sqlite3 /data/data/app.tricigo.client/databases/RKStorage "UPDATE catalystLocalStorage SET value='en' WHERE key='tricigo_language';"`), elegir un destino y hacer `dump`. Después volver a `es`.
 - **Arreglo (#1224):** la tarjeta usa `service_type.*` (el mismo nombre que el botón; en español, "Envío" pasa a "Mensajería"), y el subtítulo `service_desc.*`. Se agregaron `ride.trip_minutes`, `ride.add_stop_counter` y `ride.cup_per_km`, y 15 claves del selector que solo tenían `defaultValue` en español (compartir viaje, código promocional, pasajeros, "Selecciona recogida y destino", mal tiempo…), en es, en y pt. Los métodos de pago usan `payment.*` ("Cash", "Mixed"). "N asientos libres" ahora tiene singular.
+- **Verificado (ronda 4, 2026-11-20):** con la app en English, "Tricycle · Budget", "Motorcycle · Fast", "Passengers", "ADD STOP · 0/3", "Estimated fare", "593 CUP per km", "Bad weather ×1.3", "Cash" y "Mixed", "Promo code" y "Share ride". Queda el subtítulo de Mensajería (R4-07).
 
 ### R3-03 · El buscador no toma el foco al abrirse
 
@@ -262,6 +271,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **A confirmar:** en un teléfono real, por si en el emulador es un tema de tiempos.
 - **Volver a probar:** abrir cada buscador y mirar `adb shell dumpsys input_method | grep mInputShown` sin tocar nada.
 - **Arreglo (#1224):** `AddressSearchInput` tiene `autoFocus`, que llama a `focus()` 150 ms después de montarse (con el `autoFocus` de `TextInput`, Android a veces no abre el teclado). Lo usan el buscador del inicio (destino, recogida y parada) y el de agregar parada durante el viaje. La etiqueta del campo para el lector de pantalla ya no está fija en "Buscar dirección": es el texto del campo.
+- **Vuelve a pasar (ronda 4, 2026-11-20), solo en el buscador de parada.** El de destino abre el teclado unos 4 s después (el emulador estaba cargado). El de "AGREGAR PARADA", en elegir servicio, queda con el foco pero sin teclado: `mInputShown=false` 30 s después, en dos intentos. logcat muestra `ImeTracker … onRequestShow at ORIGIN_CLIENT_SHOW_SOFT_INPUT` y enseguida `onFailed at PHASE_CLIENT_VIEW_SERVED`: el `focus()` de los 150 ms llega antes de que Android conecte el campo con el teclado. En el de destino, y en "Agregar parada" durante un viaje en curso, el mismo pedido termina en `onShown`. Para verlo: `adb logcat -d | grep ImeTracker` después de abrir cada buscador.
 
 ### R3-04 · Las direcciones de Google llegan en inglés
 
@@ -271,6 +281,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Ojo:** `google_places_cache` guarda cada respuesta 30 días por consulta y zona. Después del arreglo, las consultas ya guardadas siguen en inglés hasta que venzan o se borren.
 - **Volver a probar:** buscar un barrio con una consulta que no esté en `google_places_cache` y leer la dirección.
 - **Arreglo (#1224):** la llamada de detalles del lugar pide `languageCode=es` y `regionCode=CU`. La clave del caché pasó a `v2`, así que las respuestas guardadas en inglés dejan de usarse sin borrar nada. **Desplegado el 2026-11-20 (versión 21).** En el caché de los 30 días anteriores, el 19 % de las direcciones decía "Havana" sin "La Habana", casi todas de lugares sin calle ("4JVC+8MH, Havana, Cuba"). Después del despliegue, esos lugares llegan con "La Habana", y "Cayo Hueso" también. **Queda:** el barrio Vedado sigue llegando como "Vedado, Havana", aun pidiendo español: es el dato de Google. Para cambiarlo haría falta reescribir "Havana" en las direcciones, y eso queda para decidir.
+- **Verificado (ronda 4, 2026-11-20):** "reparto kohly", una consulta que no estaba en el caché, devolvió "2809 La Av. 41, La Habana" y "4H5R+V62, La Habana". El "Havana" de filas como "Reparto Bahia · Havana, La Habana" o "Cayo Cruz · Havana, La Habana" no viene de Google sino de `cuba_pois`: es R4-01.
 
 ### R3-05 · Elegir "Vedado" ya no pide confirmar el punto
 
@@ -280,6 +291,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** cualquier barrio, municipio o ciudad pide confirmar el punto.
 - **Volver a probar:** buscar "Vedado" y elegir el resultado de Google: tiene que abrir el mapa para confirmar el punto.
 - **Arreglo (#1224):** la función guarda el tipo de zona más específico de todos los que da Google (`pickMatchedCategory`), no solo el primero. Para Vedado queda `sublocality` aunque Google ponga `geocode` primero. Mismo despliegue que R3-04. **Desplegado el 2026-11-20 (versión 21):** buscando "cayo hueso", Google devolvió el barrio como `neighborhood`, y al elegirlo la app pidió "Es una zona amplia — ajusta el pin al lugar exacto". Una zona se ordena debajo de los lugares concretos (#989), así que con "vedado" no entra entre los 6 primeros.
+- **Verificado (ronda 4, 2026-11-20):** "cayo hueso" muestra el barrio con "Zona amplia — te pediremos ajustar el pin", y al elegirlo aparece "Es una zona amplia — ajusta el pin al lugar exacto". Lo que pasa al confirmar sin mover el pin es R4-02.
 
 ### R3-06 · Abrir la app o volver al inicio borra todas sus notificaciones
 
@@ -289,6 +301,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** a decidir. Limpiar el número del ícono no debería borrar notificaciones que la persona no vio. El inicio podría mirar el permiso con `getForegroundPermissionsAsync` antes de pedirlo.
 - **Volver a probar:** con el permiso de notificaciones dado, mandar la app a segundo plano, recibir una notificación, abrir la app y mirar `numRemovedByApp` en `adb shell dumpsys notification --noredact | grep -A12 "key='app.tricigo.client'"`.
 - **Arreglo (#1224):** en Android ya no se llama a `setBadgeCountAsync(0)` (`clearAppBadge`, en las dos apps): ahí el número del ícono sale de las notificaciones mismas. En iOS 16+ se sigue limpiando, porque allá solo borra el número. El inicio mira el permiso de ubicación antes de pedirlo (`ensureForegroundLocationPermission`). Cuándo borrar una oferta vieja del conductor queda para otra decisión.
+- **Verificado (ronda 4, 2026-11-20):** push de prueba solo al token del emulador (API de Expo, canal `rides`) con la app en segundo plano. Después de traerla al frente dos veces, la notificación seguía (`numRemovedByApp=0`) y no apareció la pantalla de permisos.
 
 ### R3-07 · Las notificaciones del viaje caen en "Miscellaneous"
 
@@ -298,6 +311,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** el canal creado apenas hay permiso, o siempre al arrancar (crear un canal no necesita permiso).
 - **Volver a probar:** con una instalación nueva, dar el permiso desde la app, provocar una notificación del viaje y buscar `Channel 'rides'` en logcat.
 - **Arreglo (#1224):** el canal `rides` se crea en cada arranque, antes del chequeo de permiso y de `Device.isDevice`, y también al registrar el token después de dar el permiso. El nombre que muestra Android en Ajustes pasó de "Ride updates" a "Viajes".
+- **Verificado en parte (ronda 4, 2026-11-20):** el canal `rides` existe ("Viajes", importancia 4, con vibración) y la notificación de prueba cayó en él. No se probó en una instalación nueva: borrar los datos de la app cierra la sesión de María, y solo Eduardo puede volver a entrar con ella.
 
 ### R3-08 · "Back" en inglés y "Copiado" antes de copiar
 
@@ -306,6 +320,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** "Volver" traducido, y "Copiar ID del viaje" en el botón.
 - **Volver a probar:** `dump` en el chat y en el detalle de un viaje.
 - **Arreglo (#1224):** `ScreenHeader` y `ProfileScreenHeader` leen `common:back` ("Volver"). El botón de copiar dice "Copiar ID del viaje" (`common:copy_ride_id`).
+- **Verificado (ronda 4, 2026-11-20):** en el detalle del viaje, "Volver" y "Copiar ID del viaje"; la etiqueta no cambia al tocarlo.
 
 ### R3-09 · "23 y 12" sugiere "12 e/ Calle 12"
 
@@ -314,6 +329,69 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** sin el resultado que se nombra a sí mismo.
 - **Volver a probar:** buscar "23 y 12" y hacer `dump`.
 - **Arreglo (#1224):** `searchStreetsSupabase` descarta las filas en que una calle se cruza consigo misma (`isSelfIntersectionLabel`: compara los nombres sin "Calle", "Avenida" y otros prefijos, y con el alias entre paréntesis). Los datos de `street_intersections` no se tocaron. El lector de pantalla lee una sola vez un resultado cuyo nombre y dirección son iguales (`searchResultA11yLabel`).
+- **Verificado (ronda 4, 2026-11-20):** "23 y 12" ya no trae "12 e/ Calle 12", y la esquina se lee una sola vez.
+
+### R4-01 · Lugares con "Havana" como municipio
+
+- **Ronda 4, 2026-11-20.** Buscar "reparto kohly" o "cayo hueso": "Reparto Bahia · Havana, La Habana" y "Cayo Cruz · Havana, La Habana".
+- **Qué pasa:** el municipio de esas filas es "Havana", que no es un municipio. Medido en prod: 792 lugares activos tienen "Havana" o una variante ("Havana, Cuba", "Old Havana", "Centro Havana"…) y 7.106 de 19.702 tienen un municipio distinto del de su polígono (`_poi_admin_area`). Hay 637 municipios distintos; 00580 los había dejado en 212.
+- **Causa:** el sync semanal (`bulk_upsert_pois`) hace `municipality = COALESCE(s.municipality, p.municipality)` con el municipio que trae la fuente (Overture dice "Havana"), y reescribe `location` con el mismo punto. El trigger de 00580 (`tg_cuba_pois_admin_area`) sale enseguida si la ubicación no cambió (`IF TG_OP = 'UPDATE' AND NEW.location::text = OLD.location::text THEN RETURN NEW`), así que el municipio de la fuente queda. Las filas afectadas se actualizaron entre el 2026-09-14 y el 2026-11-16, después de 00580.
+- **Esperado:** el municipio y la provincia salen siempre del polígono cuando el punto cae en uno, también después del sync.
+- **Volver a probar:**
+  ```sql
+  WITH a AS (SELECT p.municipality, (public._poi_admin_area(p.location)).municipality AS m6
+             FROM cuba_pois p WHERE p.is_active AND p.merged_into IS NULL)
+  SELECT count(*) FILTER (WHERE m6 IS NOT NULL AND municipality IS DISTINCT FROM m6) AS drift FROM a;
+  ```
+  Tiene que dar 0 después del arreglo y seguir en 0 después del sync semanal siguiente. En la app, buscar "cayo hueso" y mirar la fila de "Cayo Cruz".
+
+### R4-02 · Confirmar el pin de una zona deja el barrio como dirección
+
+- **Ronda 4, 2026-11-20.** Buscar "cayo hueso" → elegir el barrio → "Confirmar ubicación" sin mover el pin.
+- **Qué pasa:** la pantalla del mapa muestra la dirección exacta del pin ("Casa Rooms Victoria · Zanja e/ Soledad y Castillejo, Centro Habana", con "Dirección exacta"), pero el destino queda como "Cayo Hueso, La Habana". Al conductor le llega el nombre del barrio, que es lo que la confirmación quería evitar (#989).
+- **Causa:** `index.tsx:4048` abre el mapa con `keepAddress: true` también para las zonas, y `ConfirmLocationScreen.tsx:295` conserva el texto elegido si el pin se movió menos de 20 m. Para una calle eso está bien (el texto elegido es más rico que la geocodificación inversa); para una zona es al revés.
+- **Esperado:** con una zona, al confirmar se usa la dirección exacta del pin.
+- **Volver a probar:** los pasos de arriba y leer el destino con `dump` en elegir servicio.
+
+### R4-03 · La barra de estado sale en blanco sobre fondo claro
+
+- **Ronda 4, 2026-11-20.** Inicio, buscadores y "Agregar parada" recién abierta la app, en tema claro.
+- **Qué pasa:** la hora, el Wi-Fi y la batería salen en blanco sobre el crema `#FFFBF5` y casi no se ven. `adb shell dumpsys window | grep mLastAppearance` da `LIGHT_NAVIGATION_BARS`, sin `LIGHT_STATUS_BARS`. Después de pasar por la pantalla del viaje, que usa `Screen`, el inicio queda bien (`LIGHT_STATUS_BARS LIGHT_NAVIGATION_BARS`, íconos oscuros).
+- **Causa probable:** el inicio no usa `Screen` (que pone `dark-content` en tema claro) ni monta otro `StatusBar`, así que hereda lo que haya antes: la pantalla de arranque oscura (`#0F0F23`) o el lanzador del dev client.
+- **A confirmar:** en un teléfono con la app de la tienda, recién abierta. Si allí se ve bien, es del montaje y se descarta.
+- **Volver a probar:** abrir la app en frío en tema claro, `dumpsys window | grep mLastAppearance`, y una captura de la parte de arriba del inicio.
+
+### R4-04 · "BUSCAR CERCA" en filas de 6 y 2, con las etiquetas pegadas
+
+- **Ronda 4, 2026-11-20.** Buscador de destino y de parada, pantalla de 360 dp.
+- **Qué pasa:** las 8 categorías salen 6 en la primera fila y 2 en la segunda, y las etiquetas se tocan: "HospitalesFarmaciasRestaurantesHoteles". Los centros quedan en x = 84, 188, 305, 418, 514 y 617 px: cada botón ocupa solo lo que mide su texto.
+- **Causa probable:** el `width: '25%'` está dentro de una función-estilo de `Pressable` (`apps/client/src/components/AddressSearchInput.tsx:1359`), el caso de CLAUDE.md § "Una función-estilo de `Pressable` PUEDE descartar su bloque de layout". Confirmarlo con el A/B de esa sección antes de cambiarlo.
+- **Esperado:** dos filas de 4, con aire entre etiquetas.
+- **Volver a probar:** abrir "¿A dónde vas?" y `dump`: los centros de la primera fila tienen que quedar en 4 columnas iguales.
+
+### R4-05 · La fila de "Recientes" del inicio sale apilada
+
+- **Ronda 4, 2026-11-20.** Inicio, sección "RECIENTES".
+- **Qué pasa:** el punto naranja, el nombre, "Hace 5h" y la flecha "›" salen uno debajo del otro, todos alineados a la izquierda, en vez de una fila. En `dump`, el nombre, la hora y la flecha tienen el mismo centro horizontal (x = 360). El lector de pantalla además lee la flecha ("…, Hace 5h, ›").
+- **Causa probable:** `flexDirection: 'row'` está dentro de la función-estilo del `Pressable` (`packages/ui/src/RecentPlacesList.tsx:50`), el mismo caso que R4-04 y que el perfil del conductor de 2026-07-31.
+- **Esperado:** punto, texto y flecha en una sola fila, y la flecha fuera de la etiqueta de accesibilidad.
+- **Volver a probar:** `dump` del inicio: la flecha tiene que quedar a la derecha (x cerca de 680) y a la altura del nombre.
+
+### R4-06 · "Reportar Problema de Seguridad" lleva a la Ayuda
+
+- **Ronda 4, 2026-11-20.** Perfil → Centro de Seguridad → "Reportar Problema de Seguridad".
+- **Qué pasa:** se abre la Ayuda (preguntas frecuentes). La respuesta a "¿Cómo reporto un problema de seguridad?" dice "Desde el Centro de Seguridad puedes reportar cualquier incidente", que es de donde se vino. Fuera de un viaje en curso, no hay forma de crear un reporte de incidente: el único formulario es el de seguridad del viaje activo (`SafetySheet`). Queda "Crear ticket de soporte", al final de la Ayuda.
+- **Causa:** `apps/client/app/profile/safety.tsx:235` hace `router.push('/profile/help')`.
+- **Esperado:** a decidir. Un formulario para elegir el viaje y contar qué pasó, o un ticket de soporte con el tema de seguridad ya elegido. Como mínimo, que la respuesta de la Ayuda no mande de vuelta al mismo lugar.
+- **Volver a probar:** los pasos de arriba.
+
+### R4-07 · El subtítulo de Mensajería es "Delivery"
+
+- **Ronda 4, 2026-11-20.** Elegir servicio.
+- **Qué pasa:** en español la tarjeta dice "Mensajería · Delivery". En inglés, "Delivery · Delivery", y en portugués, "Entregas · Entregas".
+- **Causa:** `service_desc.mensajeria` en `rider.json` (#1224 copió el texto que había).
+- **Esperado:** un subtítulo que diga algo y no repita el nombre ("Envía paquetes", por ejemplo), en los tres idiomas.
+- **Volver a probar:** `dump` de elegir servicio en cada idioma.
 
 ## Notas de la ronda 3 (2026-11-20)
 
@@ -324,3 +402,19 @@ No son bugs todavía. Quedan anotadas para decidir.
 - **"Viajes recurrentes"** en Perfil lleva a "Coming soon": el flag `recurring_rides_enabled` no tiene fila y vale `false`.
 - **Mis viajes:** los viajes cancelados muestran la tarifa estimada, aunque no se cobraron.
 - **Entorno:** después de un `adb reboot`, con `-memory 2048`, la app dio "TriciGo no responde" (casi 1 GB en swap). `adb shell am kill-all` lo destrabó. No es de la app.
+
+## Notas de la ronda 4 (2026-11-20)
+
+No son bugs todavía. Quedan anotadas para decidir.
+
+- **Tasa de respaldo vieja:** si un viaje no tiene `exchange_rate_usd_cup`, Mis viajes y el detalle calculan los dólares con `DEFAULT_EXCHANGE_RATE = 520` (`packages/utils/src/currency.ts:13`), y la tasa real es 945. La misma tarifa de 5,456 TRC salió "≈ $5.77" en un viaje y "≈ $10.49" en otro. En 60 días solo 3 viajes no tienen tasa, y los 3 los sembraron sesiones de QA por SQL. `index.tsx:1568` usa 300 de respaldo.
+- **Moneda en el desglose:** el detalle de un viaje pagado con TriciCoin dice "Tarifa del viaje 5,456 CUP" y "Tarifa final 5,456 TRC". Se suma a la nota de "TC" y "TRC" de la ronda 3.
+- **Mayúsculas a la inglesa:** "Contactos de Confianza", "Centro de Seguridad", "Compartir Mi Viaje", "Reportar Problema de Seguridad", "Consejos de Seguridad", "Servicios de Emergencia", "Agregar Contacto". En español va solo la primera en mayúscula. "Recibirán automáticamente un link" podría ser "enlace".
+- **Botones repetidos:** con la lista vacía, "Lugares guardados" muestra dos "Agregar lugar" y "Contactos de Confianza" dos "Agregar Contacto".
+- **Emergencias:** el Centro de Seguridad ofrece solo "Llamar al 106" (policía). En Cuba la ambulancia es el 104 y los bomberos el 105.
+- **Lector de pantalla:** en una fila de zona, el aviso "Zona amplia — te pediremos ajustar el pin" no forma parte de la etiqueta de la fila.
+- **Un cierre de la app:** al abrirla en inglés, la app se cerró una vez con `SIGSEGV` en `facebook::react::MountingCoordinator::pullTransaction` (hilo `mqt_v_js`). No se repitió al volver a abrirla. Si aparece en Sentry de producción, es de React Native y no de esta pantalla.
+- **Entorno:**
+  - Otra sesión corría `pnpm list -r --depth Infinity` (2,8 GB) sobre `node_modules`, y el watcher de Metro no terminó de arrancar en 4 minutos dos veces seguidas ("Failed to start watch mode"). Se levantó con `CI=1` en el `.env` de la worktree, que apaga el watcher; para una ronda no hacen falta recargas.
+  - Otra sesión usó el mismo emulador para la app del conductor (Metro en 8082) y cambió el GPS a São Paulo: el clima del inicio pasó a "25° · São Paulo". Si dos sesiones prueban a la vez, conviene repartirse el emulador. La app del conductor quedó "no responde" en segundo plano (`Input dispatching timed out`).
+  - `type` sin un campo con foco abrió otra vez Ajustes por el atajo del dev client. Esperar `mInputShown=true` antes de escribir.
