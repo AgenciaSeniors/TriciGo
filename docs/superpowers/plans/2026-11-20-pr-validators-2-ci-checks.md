@@ -30,7 +30,7 @@ updated in the same commit as this plan.
 | Spec said | Measured | Plan does |
 |---|---|---|
 | Rehearsals on the `supabase/postgres` image | 89 of the 90 `supabase/tests/*/run.sh` connect as a superuser `pgtest` on `127.0.0.1:${PGPORT:-5433}` and create `postgres`, `anon`, `authenticated`, `service_role` themselves; several assert that `postgres` is **not** a superuser. The Supabase image ships its own `postgres` and would break those checks. Production is Postgres **17.6** with PostGIS 3.3.7. | A plain `postgis/postgis:17-3.5` container pinned by digest, user `pgtest`, `max_connections=60`, `superuser_reserved_connections=3` (what 00690 needs). The contract is the one the rehearsals already follow: `run.sh none` fails, `run.sh <migration>` passes. A copyable template adds the simple `scaffold.sql` + `tests.sql` + `_t_fail` form. |
-| `pnpm audit --prod --audit-level high` must pass | It reports **78** high or critical advisories on `master` today (`pnpm audit --prod --json`, 2026-11-20). One is critical and runs in production: Next 15.5.27, GHSA-2464-fhr4-w9xw, "Unauthenticated Remote Code Execution in Image Optimization API when SVG files are used", fixed in 15.5.28. | The check fails only on high or critical advisories **this PR adds** compared with `master`, plus a reviewed accept list. The Next upgrade is a separate PR (see "Out of scope"). |
+| `pnpm audit --prod --audit-level high` must pass | It reports **78** high or critical advisories on `master` today (`pnpm audit --prod --json`, 2026-11-20). One is critical and runs in production: Next 15.5.27, GHSA-2464-fhr4-w9xw, "Unauthenticated Remote Code Execution in Image Optimization API when SVG files are used", fixed in 15.5.28. 15.5.29 also fixes three moderate ones published on 2026-11-19, so both apps went to **15.5.29** in #1229 (merged and deployed 2026-11-20). | The check fails only on high or critical advisories **this PR adds** compared with `master`, plus a reviewed accept list. The Next upgrade went in its own PR, #1229 (see "Out of scope"). |
 | The area map is read from the base commit | A new service added by the PR is unknown to the base map, so the PR would escape every area. | Areas are the **union** of the base map and the head map: the PR can add areas, never remove them. The gate scripts themselves come from `master` (`git archive`). |
 | Label `needs-store-build` | Adding a label needs a write token. | The fingerprint job prints a warning and a job summary instead. |
 | — | Migration number collisions happened five times (CLAUDE.md "Pre-flight para elegir número de migración"). | The gate fails a new migration whose number is on `master` or in an older open PR. |
@@ -3315,10 +3315,12 @@ Commit it in its own small docs PR (docs-only: no cross-review needed).
 
 ## Out of scope (follow-ups)
 
-- **Upgrade Next to 15.5.28 in `apps/web` and `apps/admin`** (GHSA-2464-fhr4-w9xw, critical, and
-  GHSA-p3m5-59mp-jv5r). The web image optimizer downloads images from our public Storage
-  (`next.config.ts` `remotePatterns`), so the RCE "when SVG files are used" needs checking against
-  what the public buckets accept. Its own PR, with a deploy.
+- **Done: Next 15.5.29 in `apps/web` and `apps/admin`** (#1229, merged and deployed 2026-11-20).
+  15.5.28 fixes GHSA-2464-fhr4-w9xw (critical) and GHSA-p3m5-59mp-jv5r. 15.5.29 also fixes
+  GHSA-7qx7-33qx-rqx2 (the image optimizer can be made to process an SVG with
+  `dangerouslyAllowSVG: false`), GHSA-f3mh-rxg3-f5g2 and GHSA-pc58-hwjq-p385, all published on
+  2026-11-19. The check of what the public buckets accept is in the PR description. Production
+  already ran sharp 0.35.5 (#1149), which is the workaround GHSA-2464 gives.
 - Running the 89 older rehearsals in CI: they run when a PR touches their folder (GREEN only).
 - Part 3 sets `crossReview.required` to `true` in `docs/review/areas.json`.
 
