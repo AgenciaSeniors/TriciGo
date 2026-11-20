@@ -2,9 +2,87 @@ import { describe, it, expect } from 'vitest';
 import {
   riderChargedTotal,
   riderChargedTotalTrc,
+  riderExpectedFareCup,
+  riderExpectedFareTrc,
   TIP_PERCENT_OPTIONS,
   tipAmountForPercent,
 } from '../farePresentation';
+
+describe('riderExpectedFareCup', () => {
+  it('returns the estimate when there is no discount', () => {
+    expect(riderExpectedFareCup({ estimated_fare_cup: 6656 })).toBe(6656);
+    expect(riderExpectedFareCup({ estimated_fare_cup: 6656, discount_amount_cup: 0 })).toBe(6656);
+    expect(riderExpectedFareCup({ estimated_fare_cup: 6656, discount_amount_cup: null })).toBe(6656);
+  });
+
+  // Ride 278742d6 (2026-11-19): PERDON10 took 666 off a 6,656 CUP ride, and
+  // the searching card still said 6,656.
+  it('subtracts the discount before the ride is completed', () => {
+    expect(riderExpectedFareCup({ estimated_fare_cup: 6656, discount_amount_cup: 666 })).toBe(5990);
+  });
+
+  it('never goes below 0', () => {
+    expect(riderExpectedFareCup({ estimated_fare_cup: 500, discount_amount_cup: 900 })).toBe(0);
+  });
+
+  it('uses the final fare once there is one (it already has the discount)', () => {
+    expect(riderExpectedFareCup({
+      final_fare_cup: 5990,
+      estimated_fare_cup: 6656,
+      discount_amount_cup: 666,
+    })).toBe(5990);
+    expect(riderExpectedFareCup({ final_fare_cup: 0, estimated_fare_cup: 6656, discount_amount_cup: 666 })).toBe(0);
+  });
+
+  it('returns 0 when there is no fare at all', () => {
+    expect(riderExpectedFareCup({})).toBe(0);
+    expect(riderExpectedFareCup({ final_fare_cup: null, estimated_fare_cup: null, discount_amount_cup: 666 })).toBe(0);
+  });
+});
+
+describe('riderExpectedFareTrc', () => {
+  it('returns null when the ride has no TRC fare', () => {
+    expect(riderExpectedFareTrc({ estimated_fare_cup: 6656, discount_amount_cup: 666 })).toBe(null);
+    expect(riderExpectedFareTrc({ estimated_fare_trc: null, final_fare_trc: null })).toBe(null);
+  });
+
+  it('returns the estimate when there is no discount', () => {
+    expect(riderExpectedFareTrc({ estimated_fare_trc: 6656, estimated_fare_cup: 6656 })).toBe(6656);
+  });
+
+  it('applies the CUP discount (1 TRC = 1 CUP)', () => {
+    expect(riderExpectedFareTrc({
+      estimated_fare_trc: 6656,
+      estimated_fare_cup: 6656,
+      discount_amount_cup: 666,
+    })).toBe(5990);
+  });
+
+  it('scales the discount when an older ride kept TRC and CUP apart', () => {
+    expect(riderExpectedFareTrc({
+      estimated_fare_trc: 1000,
+      estimated_fare_cup: 2000,
+      discount_amount_cup: 500,
+    })).toBe(750);
+  });
+
+  it('never goes below 0', () => {
+    expect(riderExpectedFareTrc({
+      estimated_fare_trc: 500,
+      estimated_fare_cup: 500,
+      discount_amount_cup: 900,
+    })).toBe(0);
+  });
+
+  it('uses the final TRC fare once there is one', () => {
+    expect(riderExpectedFareTrc({
+      final_fare_trc: 5990,
+      estimated_fare_trc: 6656,
+      estimated_fare_cup: 6656,
+      discount_amount_cup: 666,
+    })).toBe(5990);
+  });
+});
 
 describe('riderChargedTotal', () => {
   it('returns final_fare_cup + tip_amount when both present', () => {
@@ -23,6 +101,23 @@ describe('riderChargedTotal', () => {
       estimated_fare_cup: 150,
       tip_amount: 10,
     })).toBe(160);
+  });
+
+  it('subtracts the discount while there is no final fare yet', () => {
+    expect(riderChargedTotal({
+      final_fare_cup: null,
+      estimated_fare_cup: 6656,
+      discount_amount_cup: 666,
+    })).toBe(5990);
+  });
+
+  it('does not subtract the discount again from the final fare', () => {
+    expect(riderChargedTotal({
+      final_fare_cup: 5990,
+      estimated_fare_cup: 6656,
+      discount_amount_cup: 666,
+      tip_amount: 10,
+    })).toBe(6000);
   });
 
   it('returns 0 when both fares are null', () => {
@@ -59,6 +154,15 @@ describe('riderChargedTotalTrc', () => {
       estimated_fare_trc: 100,
       tip_amount: 5,
     })).toBe(105);
+  });
+
+  it('subtracts the discount while there is no final fare yet', () => {
+    expect(riderChargedTotalTrc({
+      final_fare_trc: null,
+      estimated_fare_trc: 6656,
+      estimated_fare_cup: 6656,
+      discount_amount_cup: 666,
+    })).toBe(5990);
   });
 });
 

@@ -8,7 +8,7 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { StopsList } from '@tricigo/ui';
-import { formatTRC, formatCUP, haversineDistance, logger, formatArrivalTime, buildShareUrl, triggerHaptic } from '@tricigo/utils';
+import { formatTRC, formatCUP, haversineDistance, logger, formatArrivalTime, buildShareUrl, triggerHaptic, riderExpectedFareCup, riderExpectedFareTrc } from '@tricigo/utils';
 import { RIDE_CONFIG } from '@/config/ride';
 import { useTranslation } from '@tricigo/i18n';
 import Toast from 'react-native-toast-message';
@@ -1566,12 +1566,19 @@ export function RideActiveView() {
           pattern already in RideCompleteView (lines ~209-212). */}
       {(() => {
         const showTrc = activeRide.payment_method === 'tricicoin';
-        const fareTrc = activeRide.estimated_fare_trc;
-        const fareCup = activeRide.estimated_fare_cup;
+        // What the rider will pay: the discount (promo, apology coupon,
+        // shared ride) taken off, as the booking screen showed it, with the
+        // pre-discount fare struck through next to it.
+        const fareTrc = riderExpectedFareTrc(activeRide);
         const fareDisplay =
           showTrc && fareTrc != null
             ? formatTRC(fareTrc)
-            : formatCUP(fareCup ?? 0);
+            : formatCUP(riderExpectedFareCup(activeRide));
+        const fareOriginalDisplay = (activeRide.discount_amount_cup ?? 0) > 0
+          ? (showTrc && activeRide.estimated_fare_trc != null
+              ? formatTRC(activeRide.estimated_fare_trc)
+              : formatCUP(activeRide.estimated_fare_cup ?? 0))
+          : null;
         return (
           <View
             className="flex-row justify-between items-center mb-6 px-2"
@@ -1579,7 +1586,14 @@ export function RideActiveView() {
             accessibilityLabel={t('a11y.fare_amount', { ns: 'common', amount: fareDisplay })}
           >
             <Text variant="bodySmall" color="secondary">{t('ride.estimated_fare')}</Text>
-            <Text variant="h4" color="accent">{fareDisplay}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+              {fareOriginalDisplay ? (
+                <Text variant="caption" color="tertiary" style={{ textDecorationLine: 'line-through' }}>
+                  {fareOriginalDisplay}
+                </Text>
+              ) : null}
+              <Text variant="h4" color="accent">{fareDisplay}</Text>
+            </View>
           </View>
         );
       })()}

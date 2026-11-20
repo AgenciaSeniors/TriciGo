@@ -12,15 +12,74 @@
 // ============================================================
 
 /**
+ * Minimum DB shape needed to tell the rider what a ride costs them.
+ * Loose Pick<Ride, ...> typing so callers can pass partial rows.
+ */
+export interface RiderExpectedFareInput {
+  final_fare_cup?: number | null;
+  estimated_fare_cup?: number | null;
+  /**
+   * Promo, apology coupon, partner place and shared-ride discount, all in
+   * one number. `tg_rides_validate_promo_discount` sets it on the server
+   * and caps it at the estimate.
+   */
+  discount_amount_cup?: number | null;
+}
+
+/**
+ * What the rider pays for a ride, in CUP, before any tip.
+ *
+ * Once the ride is completed this is `final_fare_cup`, which
+ * `complete_ride_and_pay` writes with the discount already taken off.
+ * Before that it is the estimate minus the discount: `estimated_fare_cup`
+ * is the gross fare (the snapshot contract), and the discount comes off
+ * only when the ride is charged. Showing the estimate alone made the
+ * discount the rider saw while booking disappear once they asked for the
+ * ride (ride 278742d6, 2026-11-19: 6,656 shown, 5,990 charged).
+ *
+ * Wait time is added only at completion, so it is not here.
+ */
+export function riderExpectedFareCup(ride: RiderExpectedFareInput): number {
+  if (ride.final_fare_cup != null) return ride.final_fare_cup;
+  const estimate = ride.estimated_fare_cup ?? 0;
+  const discount = ride.discount_amount_cup ?? 0;
+  return Math.max(estimate - discount, 0);
+}
+
+export interface RiderExpectedFareTrcInput extends RiderExpectedFareInput {
+  final_fare_trc?: number | null;
+  estimated_fare_trc?: number | null;
+}
+
+/**
+ * TRC equivalent of `riderExpectedFareCup`, or null when the ride has no
+ * TRC fare (cash and corporate rides).
+ *
+ * The discount is in CUP. Since 00655 a ride's TRC fare equals its CUP
+ * fare, so this takes the same amount off; for an older row where the two
+ * differ, the discount is scaled by the TRC/CUP ratio of the estimate, as
+ * the booking screen does.
+ */
+export function riderExpectedFareTrc(ride: RiderExpectedFareTrcInput): number | null {
+  if (ride.final_fare_trc != null) return ride.final_fare_trc;
+  const estimateTrc = ride.estimated_fare_trc;
+  if (estimateTrc == null) return null;
+  const discount = ride.discount_amount_cup ?? 0;
+  if (discount <= 0) return estimateTrc;
+  const estimateCup = ride.estimated_fare_cup ?? 0;
+  if (estimateCup <= 0) return Math.max(estimateTrc - discount, 0);
+  const netCup = Math.max(estimateCup - discount, 0);
+  return Math.round(estimateTrc * (netCup / estimateCup));
+}
+
+/**
  * Minimum DB shape needed to compute the rider-side "total cobrado":
  * the fare the wallet was actually debited for, including tip.
  *
  * Loose Pick<Ride, ...> typing so callers can pass partial rows
  * (e.g. trips lists that don't select all columns).
  */
-export interface RiderChargedTotalInput {
-  final_fare_cup?: number | null;
-  estimated_fare_cup?: number | null;
+export interface RiderChargedTotalInput extends RiderExpectedFareInput {
   tip_amount?: number | null;
 }
 
@@ -44,9 +103,12 @@ export interface RiderChargedTotalInput {
  * Driver-side `tripNetEarnings()` already adds tip separately to the
  * driver's net (because the driver receives 100% of the tip on top
  * of their commission-net fare share), so this helper is rider-only.
+ *
+ * Before completion there is no `final_fare_cup`, and the fare falls back
+ * to `riderExpectedFareCup` (the estimate minus the discount).
  */
 export function riderChargedTotal(ride: RiderChargedTotalInput): number {
-  const fare = ride.final_fare_cup ?? ride.estimated_fare_cup ?? 0;
+  const fare = riderExpectedFareCup(ride);
   const tip = ride.tip_amount ?? 0;
   return fare + tip;
 }
@@ -58,15 +120,13 @@ export function riderChargedTotal(ride: RiderChargedTotalInput): number {
  * Mirrors `riderChargedTotal` so the wallet-debited TRC total matches
  * the CUP total shown.
  */
-export interface RiderChargedTotalTrcInput {
-  final_fare_trc?: number | null;
-  estimated_fare_trc?: number | null;
+export interface RiderChargedTotalTrcInput extends RiderExpectedFareTrcInput {
   /** Tip in CUP (1 TRC = 1 CUP peg, so no conversion needed). */
   tip_amount?: number | null;
 }
 
 export function riderChargedTotalTrc(ride: RiderChargedTotalTrcInput): number | null {
-  const fareTrc = ride.final_fare_trc ?? ride.estimated_fare_trc;
+  const fareTrc = riderExpectedFareTrc(ride);
   if (fareTrc == null) return null;
   const tip = ride.tip_amount ?? 0;
   return fareTrc + tip;
