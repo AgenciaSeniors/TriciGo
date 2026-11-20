@@ -36,6 +36,9 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # No cache here: on pull_request_target a cache keyed on the PR's package files would be saved
+      # in master's scope. setup-node v4 caches nothing unless asked; if it is ever bumped to a version
+      # that caches by default, set `package-manager-cache: false`.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:

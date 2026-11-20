@@ -1682,7 +1682,9 @@ git commit -m "ci: run the PR gate on every PR and its tests in CI"
 
 (As built: with `pull_request_target` the gate does not run on this PR. Open PR 2a with its filled
 description, merge it with Eduardo's OK, then run Steps 2-4 on a throwaway docs-only PR, and close
-it.)
+it. On that PR also confirm the check is reported on the PR head commit, which branch protection
+needs: `gh api repos/AgenciaSeniors/TriciGo/commits/<head sha>/check-runs --jq '.check_runs[] | [.name, .app.slug, .head_sha]'`
+must list `PR gate` with that sha.)
 
 - [ ] **Step 1: Ask Eduardo for the OK to push `ci/pr-gate` and open the PR as a draft with the blank template.**
 - [ ] **Step 2: Push and open the draft**
@@ -3277,6 +3279,15 @@ Write `$TEMP/protection.json`:
 
 `enforce_admins: true` because the agents work under the owner account. Zero approvals because there
 is one human account; the PR itself is still required.
+
+A required status check is matched by name. A PR could add its own workflow on `pull_request` with
+a job also called "PR gate" (found in the review of PR 2a; how branch protection weighs two runs
+with the same name was not verified). Before applying the payload, check whether the repository can
+use a ruleset with "Require workflows to pass before merging" pinned to `.github/workflows/pr-gate.yml`
+on `master` (`gh api repos/AgenciaSeniors/TriciGo/rulesets` and the repository settings). If it
+can, require the gate that way and keep the other checks in branch protection; if it cannot, say so
+to Eduardo and record it as an accepted risk (workflow files are in the access area, so such a PR
+still needs the cross-review, the Codex bot and his OK).
 
 - [ ] **Step 3: Apply it after the OK**
 
