@@ -2302,6 +2302,23 @@ Expected: passes with a warning "Needs a store build". Record the link.
 > directly. `scripts/sql/live-definitions.sql` names every object with its schema (`public.x`, and
 > `public.f(args)` for functions): run on prod, the first version printed `CREATE TABLE app_opens`
 > without `public.` because `regclass` drops the schema that is on the search path.
+>
+> After the code review of the branch:
+> - A file under `supabase/migrations/` not named `<number>_<name>.sql` is an error in the planner
+>   and in the PR gate (both skipped `00698-hyphen.sql`, `00700_fix.SQL`, `fix_rides.sql`).
+> - The planner reads renames: a pure rename (same blob) runs nothing, so renumbering a collision
+>   works. A changed migration with a runner runs GREEN.
+> - The runner streams each run, gives it 10 minutes, and refuses a `--head` that is not checked
+>   out. It now has CLI tests with fake `run.sh` files. In CI it comes from master (`git archive`),
+>   like the gate. The job pins `ubuntu-24.04`, because six old runners hard-code
+>   `/usr/lib/postgresql/16/bin`.
+> - The template keeps `_t_fail` in its own schema `rehearsal`, and a failed read of it stops the
+>   run instead of printing PASS.
+> - `live-definitions.sql` prints generated and identity columns, view options (`security_invoker`),
+>   materialized views, constraints, indexes and triggers. Aggregates are listed without failing the
+>   query.
+> - Production and CI sort text as `en_US.UTF-8`; the local `--no-locale` clusters do not
+>   (`supabase/tests/README.md`).
 
 Files:
 - Create `supabase/tests/_template/{run.sh,scaffold.sql,tests.sql,example-migration.sql}` and `supabase/tests/README.md`.
@@ -3289,7 +3306,10 @@ A required status check is matched by name. A PR could add its own workflow on `
 a job also called "PR gate" (found in the review of PR 2a). Measured on the probe PR #1228
 (2026-11-20): with two "PR gate" check runs on the same head commit, a failure and a later success,
 `gh pr checks` showed only the later one as the check's state. So a spoof job that finishes after
-the real gate would hide its failure. Before applying the payload, check whether the repository can
+the real gate would hide its failure. The same applies to every required workflow that runs on
+`pull_request` (Migration rehearsal, Build, Native fingerprint, Security): the PR can edit the
+workflow file itself, even when its scripts come from master. The ruleset below should require all
+of them from `master`, not only the PR gate. Before applying the payload, check whether the repository can
 use a ruleset with "Require workflows to pass before merging" pinned to `.github/workflows/pr-gate.yml`
 on `master` (`gh api repos/AgenciaSeniors/TriciGo/rulesets` and the repository settings). If it
 can, require the gate that way and keep the other checks in branch protection; if it cannot, say so
