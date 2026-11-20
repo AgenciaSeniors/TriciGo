@@ -216,6 +216,12 @@ describe('migrations', () => {
     assert.match(run([rename({ path: 'supabase/old/00651_b.sql' })])[0], /moves it out of supabase\/migrations/);
   });
 
+  test('a new file under supabase/migrations/ with a bad name fails', () => {
+    for (const path of ['supabase/migrations/00698-hyphen.sql', 'supabase/migrations/fix_rides.sql', 'supabase/migrations/2026/00700_x.sql']) {
+      assert.match(run([{ status: 'A', path }])[0] ?? '', /does not follow the name/, path);
+    }
+  });
+
   test('two new migrations of the PR may not share a number', () => {
     const errors = run([
       { status: 'A', path: 'supabase/migrations/00700_a.sql' },
