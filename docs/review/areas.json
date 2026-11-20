@@ -10,7 +10,8 @@
     "^apps/(client|driver)/src/services/[^/]+\\.ts$",
     "^apps/(client|driver)/src/hooks/[^/]+\\.ts$",
     "^apps/(client|driver)/src/stores/[^/]+\\.ts$",
-    "^apps/admin/src/lib/[^/]+\\.tsx?$"
+    "^apps/admin/src/lib/[^/]+\\.tsx?$",
+    "^apps/web/src/hooks/[^/]+\\.ts$"
   ],
   "notSensitive": [
     "packages/api/src/services/_driverDocRejectionPresets.ts",
@@ -85,8 +86,15 @@
     "apps/admin/src/lib/formatDate.ts",
     "apps/admin/src/lib/labels.ts",
     "apps/admin/src/lib/rideType.ts",
-    "apps/admin/src/lib/status-registry.ts"
+    "apps/admin/src/lib/status-registry.ts",
+    "apps/web/src/hooks/useDestinationPredictions.ts",
+    "apps/web/src/hooks/useGeolocation.ts",
+    "apps/web/src/hooks/useUnreadChatCount.ts"
   ],
+  "crossReview": {
+    "required": false,
+    "note": "Part 3 (cross-review skills) sets this to true. The PR gate reads it from master, never from the PR."
+  },
   "areas": {
     "money": {
       "title": "Money: wallet, payments, fares, promotions, gifts, bonuses and referrals",
@@ -149,11 +157,13 @@
         "^apps/(client|driver)/src/stores/auth\\.store\\.ts$",
         "^packages/utils/src/sentryPrivacy\\.ts$",
         "^docs/review/areas\\.json$",
-        "^scripts/(lib/)?review-areas\\.mjs$",
+        "^scripts/(review-areas|check-pr)\\.mjs$",
+        "^scripts/lib/(review-areas|git-read|pr-gate)\\.mjs$",
         "^docs/review/",
         "^AGENTS\\.md$",
         "^packages/api/src/services/(notification|support-shift)\\.service\\.ts$",
-        "^apps/driver/app/\\(tabs\\)/profile\\.tsx$"
+        "^apps/driver/app/\\(tabs\\)/profile\\.tsx$",
+        "^apps/web/src/hooks/(useChat|useRiderLocationSharing)\\.ts$"
       ],
       "migrationWords": [
         "rls", "grant", "grants", "revoke", "policy", "policies", "role", "roles", "auth",
@@ -200,7 +210,8 @@
         "^apps/(client|driver)/src/stores/ride\\.store\\.ts$",
         "^apps/driver/src/stores/(driver|location)\\.store\\.ts$",
         "^apps/admin/src/lib/(rideAssist|rideCancel)\\.ts$",
-        "^apps/driver/app/\\(tabs\\)/profile\\.tsx$"
+        "^apps/driver/app/\\(tabs\\)/profile\\.tsx$",
+        "^apps/web/src/hooks/(useDriverPosition|useSearchingDrivers|useSearchingRide|useTripProgress|useMotoDeportivaStatus)\\.ts$"
       ],
       "migrationWords": [
         "ride", "rides", "dispatch", "offer", "offers", "driver", "drivers", "matching", "match",
