@@ -1,0 +1,103 @@
+{
+  "ignore": [
+    "\\.md$",
+    "(^|/)__tests__/",
+    "\\.test\\.(ts|tsx|js|mjs)$"
+  ],
+  "areas": {
+    "money": {
+      "title": "Money: wallet, payments, fares, promotions, gifts, bonuses and referrals",
+      "checklist": "docs/review/money.md",
+      "paths": [
+        "^packages/api/src/services/(wallet|payment|promotion|referral|invoice|exchange-rate|corporate|quest|acquisition-code|fraud)\\.service\\.ts$",
+        "^packages/api/src/services/_corporate-balance\\.ts$",
+        "^packages/utils/src/(ledger|fareCalculator|farePresentation|fareSplit|currency|signupPromo|receipt-template|netopia-errors)\\.ts$",
+        "^supabase/functions/(create-netopia-payment-intent|create-netopia-recharge-intent|create-ride-payment-link|create-stripe-payment-intent|create-stripe-recharge-intent|process-netopia-webhook|process-stripe-webhook|generate-recharge-receipt|resolve-recharge-recipient|mint-netopia-proxy-credential|sync-exchange-rate)/",
+        "^apps/(client|driver)/app/(wallet|gift|promo|refer)/",
+        "^apps/web/src/app/(wallet|recargar|gift|promo|refer|refunds)/",
+        "^apps/admin/src/app/(wallet|earnings|promotions|referrals|quests|fraud)/"
+      ],
+      "migrationWords": [
+        "wallet", "wallets", "payment", "payments", "pay", "pays", "paid", "recharge", "recharges",
+        "refund", "refunds", "promo", "promos", "promotion", "promotions", "gift", "gifts", "bonus",
+        "bonuses", "coupon", "coupons", "fare", "fares", "price", "prices", "pricing", "payout",
+        "payouts", "cash", "cashout", "ledger", "money", "netopia", "stripe", "tropipay", "commission",
+        "commissions", "referral", "referrals", "reward", "rewards", "discount", "discounts", "invoice",
+        "invoices", "tip", "tips", "surge", "split", "splits", "balance", "earnings", "credit",
+        "credits", "charge", "charges", "billing", "exchange"
+      ]
+    },
+    "access": {
+      "title": "Access: auth, sessions, RLS, GRANTs, RPC exposure, roles, secrets and the paths to production",
+      "checklist": "docs/review/access.md",
+      "paths": [
+        "^packages/api/src/(authCallback|clockSafeAuth|client)\\.ts$",
+        "^packages/api/src/services/(auth|admin|team|block|device)\\.service\\.ts$",
+        "^packages/utils/src/(adminPanelAccess|authCallback|teamInvitation|htmlSafety)\\.ts$",
+        "^apps/admin/src/middleware\\.ts$",
+        "^apps/admin/src/app/(auth|login|equipo|invitacion|sin-acceso|settings|users|forgot-password|reset-password)/",
+        "^apps/(client|driver)/app/\\(auth\\)/",
+        "^apps/web/src/app/(auth|login|verify-phone|account)/",
+        "^supabase/functions/(auto-admin|confirm-email|delete-account|admin-delete-pending-account|link-phone|register-login-device|request-password-reset|send-login-email-link|send-sms-otp|set-password-after-otp|verify-otp|verify-whatsapp-otp|verify-selfie|add-email-with-verification|team-invitation-code|storage-upload|expo-proxy)/",
+        "^supabase/functions/_shared/",
+        "^supabase/config\\.toml$",
+        "^\\.github/workflows/",
+        "^ops/"
+      ],
+      "migrationWords": [
+        "rls", "grant", "grants", "revoke", "policy", "policies", "role", "roles", "auth", "permission",
+        "permissions", "lockdown", "ungated", "gated", "gate", "public", "rpc", "rpcs", "security",
+        "secure", "operator", "admin", "team", "anon", "privacy", "private", "guard", "guards",
+        "protect", "protected", "access", "block", "blocked", "otp", "login", "session", "sessions",
+        "password", "phone", "verification", "verify", "invitation", "invitations", "marketing",
+        "visibility", "deletion", "delete"
+      ]
+    },
+    "schema": {
+      "title": "Schema: every migration",
+      "checklist": "docs/review/schema.md",
+      "paths": [
+        "^supabase/migrations/"
+      ]
+    },
+    "dispatch": {
+      "title": "Dispatch: ride state, offers, matching, presence and the live trip",
+      "checklist": "docs/review/dispatch.md",
+      "paths": [
+        "^packages/api/src/services/(ride|matching|presence|location|nearby|recurring-ride|ride-assist|missed-ride|moto-deportiva|delivery)\\.service\\.ts$",
+        "^packages/api/src/services/_(realtime-status|ride-coordinates)\\.ts$",
+        "^packages/utils/src/(activeRidePoller|ride-config|sharedRequest|offlineQueue|motoDeportiva|missedRideOutreach|test-vehicles)\\.ts$",
+        "^apps/driver/src/tasks/",
+        "^apps/driver/src/hooks/useDriverRide",
+        "^apps/client/src/hooks/useRide",
+        "^apps/driver/app/trip/",
+        "^apps/client/app/ride/",
+        "^apps/web/src/app/(ride|rides|track|book)/",
+        "^apps/admin/src/app/(rides|live-map|missed-rides|cancellations|moto-deportiva)/",
+        "^supabase/functions/(cancel-stale-rides|send-push|demand-heatmap)/"
+      ],
+      "migrationWords": [
+        "ride", "rides", "dispatch", "offer", "offers", "driver", "drivers", "matching", "match", "trip",
+        "trips", "reclaim", "presence", "assign", "assigned", "cancel", "canceled", "cancellation",
+        "cancellations", "stuck", "scheduled", "recurring", "realtime", "release", "released",
+        "online", "offline", "queue", "heartbeat", "location", "pickup", "arrival", "arrived"
+      ]
+    },
+    "edge-functions": {
+      "title": "Edge Functions",
+      "checklist": "docs/review/edge-functions.md",
+      "paths": [
+        "^supabase/functions/",
+        "^supabase/config\\.toml$"
+      ]
+    },
+    "native": {
+      "title": "Native: app config, config plugins, native modules and app dependencies (store build vs OTA)",
+      "checklist": "docs/review/native.md",
+      "paths": [
+        "^apps/(client|driver)/(app\\.json|app\\.config\\.(js|ts)|eas\\.json|package\\.json|PrivacyInfo\\.xcprivacy|metro\\.config\\.js|babel\\.config\\.js)$",
+        "^apps/(client|driver)/(plugins|modules|build-config|android|ios)/"
+      ]
+    }
+  }
+}
