@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Switch, Alert } from 'react-native';
+import { View, Switch, Alert, Pressable } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
+import { BottomSheet } from '@tricigo/ui/BottomSheet';
+import { Text } from '@tricigo/ui/Text';
 import { ProfileSection } from '@/components/profile/ProfileSection';
 import { ProfileRow } from '@/components/profile/ProfileRow';
 import { useTokens } from '@/hooks/useTokens';
@@ -35,7 +38,13 @@ const NOTIF_CATEGORIES = [
   { key: 'promotions', icon: 'gift-outline' as const, labelKey: 'profile.notif_promos' },
 ] as const satisfies readonly { key: ServerNotifPref; icon: string; labelKey: string }[];
 
-const LANGUAGE_CYCLE: Language[] = ['es', 'en', 'pt'];
+// Each language is listed in its own name, so a rider who landed in the wrong
+// one by mistake can still find theirs.
+const LANGUAGE_OPTIONS: { code: Language; nativeName: string }[] = [
+  { code: 'es', nativeName: 'Español' },
+  { code: 'en', nativeName: 'English' },
+  { code: 'pt', nativeName: 'Português' },
+];
 const PAYMENT_CYCLE: PaymentMethod[] = ['cash', 'tricicoin', 'mixed'];
 
 export default function SettingsScreen() {
@@ -131,10 +140,14 @@ export default function SettingsScreen() {
   // (so a change from another device or admin sync shows without a restart).
   useRefreshOnFocus(loadSettings);
 
-  const toggleLanguage = async () => {
+  // QA R2-13: a tap used to switch straight to the next language, so a rider
+  // who only wanted to see the options was left in another language.
+  const [languageSheetVisible, setLanguageSheetVisible] = useState(false);
+
+  const selectLanguage = async (next: Language) => {
+    setLanguageSheetVisible(false);
+    if (next === currentLang) return;
     triggerHaptic('light');
-    const idx = LANGUAGE_CYCLE.indexOf(currentLang);
-    const next = LANGUAGE_CYCLE[(idx + 1) % LANGUAGE_CYCLE.length] ?? 'es';
     // Apply locally first so the UI reacts instantly even on slow networks.
     i18n.changeLanguage(next);
     // Persist locally so the choice survives an app restart — app-providers reads
@@ -274,7 +287,7 @@ export default function SettingsScreen() {
             tint="#3B82F6"
             label={t('profile.preferred_language')}
             value={languageLabel}
-            onPress={toggleLanguage}
+            onPress={() => setLanguageSheetVisible(true)}
           />
           <ProfileRow
             icon="card-outline"
@@ -449,6 +462,36 @@ export default function SettingsScreen() {
           />
         </ProfileSection>
       </View>
+
+      <BottomSheet visible={languageSheetVisible} onClose={() => setLanguageSheetVisible(false)}>
+        <Text variant="h4" className="mb-3">{t('profile.preferred_language')}</Text>
+        <View accessibilityRole="radiogroup">
+          {LANGUAGE_OPTIONS.map(({ code, nativeName }) => {
+            const selected = code === currentLang;
+            return (
+              <Pressable
+                key={code}
+                onPress={() => { void selectLanguage(code); }}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: selected }}
+                accessibilityLabel={nativeName}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  minHeight: 48,
+                  paddingHorizontal: 4,
+                  borderBottomWidth: code === 'pt' ? 0 : 1,
+                  borderBottomColor: tokens.line,
+                }}
+              >
+                <Text variant="body" style={{ fontWeight: selected ? '600' : '400' }}>{nativeName}</Text>
+                {selected && <Ionicons name="checkmark" size={20} color={tokens.accent.orange} />}
+              </Pressable>
+            );
+          })}
+        </View>
+      </BottomSheet>
     </Screen>
   );
 }

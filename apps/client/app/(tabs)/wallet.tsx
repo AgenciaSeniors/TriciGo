@@ -45,6 +45,7 @@ import { Platform, useColorScheme, Linking, AppState } from 'react-native';
 import { RIDE_CONFIG } from '@/config/ride';
 import { useNetopiaCheckout, PaymentLoadingOverlay } from '@/components/NetopiaCheckout';
 import { savePendingRecharge, loadPendingRecharge, clearPendingRecharge } from '@/lib/pendingRecharge';
+import { defaultRechargeAmountUsd } from '@/lib/rechargeAmount';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -62,6 +63,9 @@ import { Ionicons } from '@expo/vector-icons';
 // honored on tricigo.com (see app.json). If that linkage breaks, swap
 // to the custom scheme 'tricigo://wallet'.
 const RETURN_URL_BASE = 'https://tricigo.com/app/client/wallet';
+
+/** Recharge chips, in USD. */
+const RECHARGE_PRESETS_USD = [20, 50, 100, 200] as const;
 
 /**
  * BUG-280 — wallet filter set realigned with actual customer-side
@@ -878,7 +882,9 @@ function NativeWalletScreen() {
 
   // Recharge handlers
   const handleRecharge = () => {
-    setRechargeAmount('');
+    // Open with an amount chosen (QA R2-10): an empty field with a grey "20"
+    // placeholder looked chosen while "Pagar con tarjeta" stayed disabled.
+    setRechargeAmount(defaultRechargeAmountUsd(RECHARGE_PRESETS_USD, MIN_RECHARGE_USD));
     setRechargeSheetVisible(true);
   };
 
@@ -1649,7 +1655,7 @@ function NativeWalletScreen() {
           </Text>
           {/* Recharge preset amounts — USD denominated */}
           <View className="flex-row justify-between mb-3">
-            {[20, 50, 100, 200].map((amount) => (
+            {RECHARGE_PRESETS_USD.map((amount) => (
               <Pressable
                 key={amount}
                 onPress={() => setRechargeAmount(String(amount))}
@@ -1666,7 +1672,7 @@ function NativeWalletScreen() {
             ))}
           </View>
           <Input
-            placeholder="20"
+            placeholder={t('wallet.recharge_other_amount', { defaultValue: 'Otro monto' })}
             value={rechargeAmount}
             onChangeText={setRechargeAmount}
             keyboardType="numeric"

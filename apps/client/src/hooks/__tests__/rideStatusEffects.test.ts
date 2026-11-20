@@ -142,6 +142,27 @@ describe('fireRideStatusEffects — cancellation wording', () => {
     expect(lastToast()?.text1).toBe('rider:ride.trip_interrupted_title');
   });
 
+  // R2-05 (QA round 2026-11-17): the toast was right in every case, but the
+  // phone notification right after it always said "Tu conductor canceló el
+  // viaje" — also when support canceled a ride that never had a driver.
+  it.each([
+    ['searching', { driver_id: null }],
+    ['accepted', { driver_id: 'drv-1' }],
+    ['in_progress', { driver_id: 'drv-1' }],
+  ] as const)('notifies the phone with the same words as the notice (from %s)', (prev, over) => {
+    fireRideStatusEffects(prev, makeRide({ status: 'canceled', ...over }));
+
+    const toast = lastToast();
+    expect(scheduleLocalNotification).toHaveBeenCalledWith(toast?.text1, toast?.text2);
+  });
+
+  it('never tells a rider whose ride had no driver that the driver canceled', () => {
+    fireRideStatusEffects('searching', makeRide({ status: 'canceled', driver_id: null }));
+    const texts = scheduleLocalNotification.mock.calls.flat() as unknown[];
+    expect(texts).not.toContain('ride.driver_canceled_notif');
+    expect(texts).not.toContain('rider:ride.driver_canceled_msg');
+  });
+
   // The watcher polls every 3s and would otherwise race the rider's own
   // cancel, announcing "your trip was cancelled" for something they just did.
   it('says nothing while the rider is cancelling the trip themselves', () => {

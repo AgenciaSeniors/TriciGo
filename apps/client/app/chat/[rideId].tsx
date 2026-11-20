@@ -4,7 +4,6 @@ import {
   FlatList,
   TextInput,
   Pressable,
-  KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   Alert,
@@ -20,6 +19,8 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useChatStore } from '@/stores/chat.store';
 import { useRideStore } from '@/stores/ride.store';
 import { useChatInit, useChatActions } from '@/hooks/useChat';
+import { chatSenderName } from '@/lib/chatSender';
+import { KeyboardAwareView } from '@/components/KeyboardAwareView';
 import type { ChatMessage } from '@tricigo/types';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { IconButton } from '@tricigo/ui/IconButton';
@@ -106,7 +107,11 @@ export default function ChatScreen() {
         accessibilityLabel={
           isOwn
             ? t('a11y.message_from_you', { ns: 'common', message: item.body })
-            : t('a11y.message_from_other', { ns: 'common', sender: t('chat.chat_driver'), message: item.body })
+            : t('a11y.message_from_other', {
+                ns: 'common',
+                sender: chatSenderName(rideWithDriver?.driver_name, t('chat.sender_driver', { defaultValue: 'El conductor' })),
+                message: item.body,
+              })
         }
       >
         <View
@@ -234,11 +239,9 @@ export default function ChatScreen() {
 
   return (
     <Screen bg="cuban">
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={0}
-      >
+      {/* Not KeyboardAvoidingView: on Android with edge-to-edge it left the
+           input and Send under the keyboard (QA R2-07). */}
+      <KeyboardAwareView>
         {/* Header — UX: a generic "Chat del conductor" gave no context for
              who the rider is actually talking to. If we have the driver's
              name + plate (we always do during an active ride) show them
@@ -411,7 +414,7 @@ export default function ChatScreen() {
             </Text>
           )}
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardAwareView>
     </Screen>
   );
 }

@@ -16,6 +16,8 @@ export interface WeatherChipProps {
   conditionCode: number;
   city: string | null;
   mode?: 'light' | 'dark';
+  /** What a screen reader says, in the app's language. Defaults to Spanish. */
+  accessibilityLabel?: string;
 }
 
 function getIconName(code: number): keyof typeof Ionicons.glyphMap {
@@ -30,7 +32,7 @@ function getIconName(code: number): keyof typeof Ionicons.glyphMap {
   return 'sunny';
 }
 
-export function WeatherChip({ tempC, conditionCode, city, mode = 'light' }: WeatherChipProps) {
+export function WeatherChip({ tempC, conditionCode, city, mode = 'light', accessibilityLabel }: WeatherChipProps) {
   const tokens = mode === 'dark' ? cubanDark : cubanLight;
   const iconName = getIconName(conditionCode);
 
@@ -47,7 +49,7 @@ export function WeatherChip({ tempC, conditionCode, city, mode = 'light' }: Weat
         borderWidth: 1,
         borderColor: tokens.line,
       }}
-      accessibilityLabel={`${Math.round(tempC)} grados${city ? `, ${city}` : ''}`}
+      accessibilityLabel={accessibilityLabel ?? `${Math.round(tempC)} grados${city ? `, ${city}` : ''}`}
     >
       <Ionicons name={iconName} size={14} color={tokens.accent.warm} />
       <RNText
