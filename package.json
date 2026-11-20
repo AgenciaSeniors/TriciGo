@@ -20,6 +20,8 @@
     "check:netopia-sync": "node scripts/check-netopia-checkout-sync.mjs",
     "check:migration-grants": "node scripts/check-migration-grants.mjs",
     "test:migration-grants": "node --test scripts/check-migration-grants.test.mjs",
+    "review:areas": "node scripts/review-areas.mjs",
+    "test:review-areas": "node --test scripts/review-areas.test.mjs",
     "clean": "turbo run clean",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\""
   },
