@@ -15,25 +15,34 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 
 | ID | App | Dónde | Qué pasa | Estado |
 |---|---|---|---|---|
-| R1-01 | Pasajero | Viaje completado | "★ 5.0 · 1 viajes": falta el singular | arreglado (#1215) |
-| R1-02 | Pasajero | Tarjeta del conductor | La etiqueta de accesibilidad dice "plate" en inglés | arreglado (#1215) |
-| R1-03 | Pasajero | Perfil | Con el teléfono en inglés, mezcla inglés y español | arreglado (#1215) |
-| R1-04 | Pasajero | Elegir servicio | Atrás de Android cierra la app | arreglado (#1215) |
-| R1-05 | Pasajero | Inicio → elegir servicio | Si se toca un destino antes de que la app tenga la ubicación, el origen queda vacío para siempre | arreglado (#1215) |
-| R2-01 | Pasajero | Buscando conductor | En un teléfono de 360×800 dp, "Cancelar viaje" queda debajo del borde y la parte de arriba queda vacía | arreglado (#1219) |
-| R2-02 | Pasajero | Buscando conductor | El diálogo de cancelar avisa de una "tarifa de cancelación" que ya no existe, y no está traducido | arreglado (#1219) |
-| R2-03 | Pasajero | Buscando conductor | El primer paso del indicador sale cortado: "Buscando cond…" | arreglado (#1219) |
-| R2-04 | Pasajero | Hoja de cancelar | "Sin penalización (primera cancelación del día)" también sale cuando el motivo es otro | arreglado (#1219) |
-| R2-05 | Pasajero | Viaje cancelado por otro | La notificación del teléfono dice siempre "Tu conductor canceló el viaje" | arreglado (#1219) |
+| R1-01 | Pasajero | Viaje completado | "★ 5.0 · 1 viajes": falta el singular | verificado (ronda 3) |
+| R1-02 | Pasajero | Tarjeta del conductor | La etiqueta de accesibilidad dice "plate" en inglés | verificado (ronda 3) |
+| R1-03 | Pasajero | Perfil | Con el teléfono en inglés, mezcla inglés y español | verificado (ronda 3) |
+| R1-04 | Pasajero | Elegir servicio | Atrás de Android cierra la app | verificado (ronda 3) |
+| R1-05 | Pasajero | Inicio → elegir servicio | Si se toca un destino antes de que la app tenga la ubicación, el origen queda vacío para siempre | verificado (ronda 3) |
+| R2-01 | Pasajero | Buscando conductor | En un teléfono de 360×800 dp, "Cancelar viaje" queda debajo del borde y la parte de arriba queda vacía | verificado (ronda 3) |
+| R2-02 | Pasajero | Buscando conductor | El diálogo de cancelar avisa de una "tarifa de cancelación" que ya no existe, y no está traducido | verificado (ronda 3) |
+| R2-03 | Pasajero | Buscando conductor | El primer paso del indicador sale cortado: "Buscando cond…" | verificado (ronda 3) |
+| R2-04 | Pasajero | Hoja de cancelar | "Sin penalización (primera cancelación del día)" también sale cuando el motivo es otro | verificado (ronda 3) |
+| R2-05 | Pasajero | Viaje cancelado por otro | La notificación del teléfono dice siempre "Tu conductor canceló el viaje" | verificado (ronda 3) |
 | R2-06 | Pasajero | Viaje con chofer | Muestra "Viaje compartido · Dejar de compartir" aunque la persona no compartió nada | abierto |
-| R2-07 | Pasajero y conductor | Chat del viaje | En Android, el teclado tapa los mensajes, el campo de texto y el botón Enviar | arreglado (#1219) |
+| R2-07 | Pasajero y conductor | Chat del viaje | En Android, el teclado tapa los mensajes, el campo de texto y el botón Enviar | verificado (ronda 3) |
 | R2-08 | Pasajero | Viaje en curso | Con Wi-Fi pero sin internet no aparece ningún aviso de "sin conexión" | abierto |
 | R2-09 | Pasajero | Inicio y billetera | El mismo saldo vale $60.18 en el inicio y ≈ $60.51 en la billetera | abierto |
-| R2-10 | Pasajero | Recargar | El monto muestra "20" pero "Pagar con tarjeta" sigue deshabilitado | arreglado (#1219) |
-| R2-11 | Pasajero | Ajustes → elegir servicio | El método de pago predeterminado no se usa: los viajes salen en efectivo | arreglado (#1219) |
-| R2-12 | Pasajero | Inicio | Con la app en inglés, el inicio sigue casi todo en español | arreglado (#1219) |
-| R2-13 | Pasajero | Ajustes | Tocar "Idioma preferido" cambia el idioma al instante, sin mostrar opciones | arreglado (#1219) |
-| R2-14 | Pasajero | Calificar y chat | Lector de pantalla: estrellas sin número y remitente del chat genérico | arreglado (#1219) |
+| R2-10 | Pasajero | Recargar | El monto muestra "20" pero "Pagar con tarjeta" sigue deshabilitado | verificado (ronda 3) |
+| R2-11 | Pasajero | Ajustes → elegir servicio | El método de pago predeterminado no se usa: los viajes salen en efectivo | verificado (ronda 3) |
+| R2-12 | Pasajero | Inicio | Con la app en inglés, el inicio sigue casi todo en español | verificado (ronda 3) |
+| R2-13 | Pasajero | Ajustes | Tocar "Idioma preferido" cambia el idioma al instante, sin mostrar opciones | verificado (ronda 3) |
+| R2-14 | Pasajero | Calificar y chat | Lector de pantalla: estrellas sin número y remitente del chat genérico | verificado (ronda 3) |
+| R3-01 | Pasajero | Inicio → "Tu último viaje" | "Volver a [destino]" termina en "Ubicación inválida" y no deja pedir el viaje | abierto |
+| R3-02 | Pasajero | Elegir servicio | Con la app en inglés, el selector de servicio sigue casi todo en español | abierto |
+| R3-03 | Pasajero | Buscar destino y parada | El campo de búsqueda no toma el foco al abrirse: hay que tocarlo | abierto |
+| R3-04 | Pasajero | Buscar destino | Las direcciones de Google llegan en inglés ("Vedado, Havana, Cuba") | abierto |
+| R3-05 | Pasajero | Buscar destino | Elegir una zona de Google ("Vedado") ya no pide confirmar el punto en el mapa | abierto |
+| R3-06 | Pasajero y conductor | Notificaciones | Abrir la app o volver al inicio borra todas sus notificaciones del teléfono | abierto |
+| R3-07 | Pasajero | Notificaciones | Si el permiso se da durante la sesión, las notificaciones del viaje caen en el canal "Miscellaneous" | abierto |
+| R3-08 | Pasajero | Accesibilidad | "Back" en inglés, y "Copiado" en un botón que todavía no copió | abierto |
+| R3-09 | Pasajero | Buscar destino | "23 y 12" sugiere "12 e/ Calle 12" | abierto |
 
 ## Fichas
 
@@ -44,6 +53,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** "1 viaje" en singular, en es, en y pt.
 - **Volver a probar:** completar un viaje con un chofer QA que tenga exactamente 1 viaje completado (QA Auto y QA Confort tenían 0 el 2026-11-17) y leer la tarjeta con `python scripts/qa/adb_ui.py find viaje`. Mirar también la tarjeta del conductor durante el viaje.
 - **Arreglado en #1215:** `ride.driver_rides_count` y `ride.driver_profile_trips` tienen singular y plural en es, en y pt. Vale para la tarjeta durante el viaje, "Viaje completado", el perfil del conductor y la versión web del viaje activo.
+- **Verificado (ronda 3, 2026-11-20):** en "Viaje completado" de un viaje con QA Auto, que quedó con 1 viaje: "★ 5.0 · 1 viaje". Durante el viaje, la tarjeta abierta con "Ver más" muestra "★ 5.0" sin la cantidad (QA Auto tenía 0 viajes).
 
 ### R1-02 · "plate" en inglés en la etiqueta de accesibilidad
 
@@ -52,6 +62,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** "placa" (o la palabra del idioma de la app).
 - **Volver a probar:** con un viaje aceptado, `python scripts/qa/adb_ui.py find QA-01` y leer el `desc=`.
 - **Arreglado en #1215:** la palabra sale de `ride.plate_label` ("Placa QA-0141" con la app en español).
+- **Verificado (ronda 3, 2026-11-20):** "Placa QA-0141" (QA Moto) y "Placa QA-0142" (QA Auto) en "Viaje completado".
 
 ### R1-03 · Perfil mezcla idiomas con el teléfono en inglés
 
@@ -67,6 +78,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
   - No cambiar el idioma desde Ajustes: también escribe `preferred_language` en la fila de la cuenta (`apps/client/app/profile/settings.tsx`), y en las rondas la cuenta es la de María.
   - Poner el emulador en `en-US` no alcanza: la app usa el idioma que tiene guardado y solo mira el del teléfono si no hay ninguno.
 - **Arreglado en #1215:** se agregaron las seis claves que faltaban en los tres idiomas (`profile.section_safety`, `section_activity`, `section_more`, `corporate`, `blog` y `dark_mode`). El inicio en inglés es otro caso (R2-12).
+- **Verificado (ronda 3, 2026-11-20):** con la app en inglés, Perfil sale entero en inglés. El selector de servicio todavía no (R3-02).
 
 ### R1-04 · Atrás de Android cierra la app al elegir el servicio
 
@@ -75,6 +87,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** volver al inicio.
 - **Volver a probar:** poner un destino, llegar a la lista de servicios y `python scripts/qa/adb_ui.py key BACK`. La app tiene que seguir en primer plano (`dump` muestra `foreground: app.tricigo.client/...`).
 - **Arreglado en #1215:** Atrás hace lo mismo que la ✕: vuelve al inicio y descarta el pedido. Con la búsqueda abierta, cierra solo la búsqueda; en "Elegir en el mapa", cierra el selector y vuelve a la búsqueda.
+- **Verificado (ronda 3, 2026-11-20):** Atrás en la pantalla de elegir servicio vuelve al inicio.
 
 ### R1-05 · Si se toca un destino antes de tener la ubicación, el origen queda vacío
 
@@ -99,6 +112,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
   4. Mandar la posición: `adb shell cmd location providers set-test-provider-location gps --location 23.1352,-82.3597`, y lo mismo con `network`. En unos segundos el origen tiene que llenarse solo, con el trayecto y los precios.
   5. Al terminar: `adb shell cmd location providers remove-test-provider gps` (y `network`), `adb shell appops set --uid 0 MOCK_LOCATION default` y `adb emu geo fix -82.3597 23.1352`.
 - **Arreglado en #1215:** la pantalla de elegir el servicio sigue buscando la ubicación mientras el origen está vacío o en "Detectando dirección...", y lo llena cuando llega, sin pisar un origen que la persona eligió. Con un solo punto en el mapa, el encuadre ya no va al zoom 25,5. "Centrar en mi ubicación" sigue sin llenar el origen.
+- **Verificado (ronda 3, 2026-11-20):** con el emulador recién reiniciado y los proveedores de prueba sin posición, se tocó un reciente apenas apareció el inicio. El origen quedó en "Punto de recogida" y el mapa no se puso gris. Al mandar la posición, el origen, el trayecto y los precios aparecieron en menos de 3 s.
 
 ### R2-01 · "Cancelar viaje" queda fuera de la pantalla mientras busca
 
@@ -107,6 +121,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** el botón de cancelar a la vista sin deslizar.
 - **Volver a probar:** pedir un viaje sin choferes de prueba conectados y sacar una captura (`adb_ui.py screenshot`): `dump` no sirve en esta pantalla porque la animación del radar no deja leerla.
 - **Arreglo (#1219):** "Cancelar viaje" quedó fijo abajo, fuera del scroll, y el mapa mide 150 dp en pantallas de menos de 860 dp de alto. Probado en el emulador de 360×800: el botón entero a la vista con "¿No aparece conductor? Pide ayuda" también visible. El espacio vacío de arriba es el mapa, que en el emulador no dibuja nada mientras busca (en el viaje con chofer sí); no se investigó.
+- **Verificado (ronda 3, 2026-11-20):** en el emulador de 360×800 dp, "Cancelar viaje" se ve entero mientras busca.
 
 ### R2-02 · El diálogo de cancelar la búsqueda habla de una tarifa que no existe
 
@@ -115,6 +130,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** el texto de la regla actual, traducido en es, en y pt.
 - **Volver a probar:** pedir un viaje, tocar "Cancelar viaje" y leer el diálogo con `adb_ui.py dump` (el diálogo sí se puede leer).
 - **Arreglo (#1219):** el diálogo dice "Todavía no hay conductor asignado, así que cancelar ahora no baja tu calificación.", con los botones "Seguir buscando" y "Cancelar búsqueda", en es, en y pt. Probado en el emulador con `dump`.
+- **Verificado (ronda 3, 2026-11-20):** con los pasos de la ficha.
 
 ### R2-03 · "Buscando cond…" cortado en el indicador de pasos
 
@@ -123,6 +139,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** una etiqueta que entre ("Buscando").
 - **Volver a probar:** captura de la pantalla de búsqueda.
 - **Arreglo (#1219):** el primer paso usa `ride.step_searching` ("Buscando", "Searching", "Buscando"). Probado en el emulador: entra entero.
+- **Verificado (ronda 3, 2026-11-20):** el primer paso dice "Buscando" entero.
 
 ### R2-04 · "Sin penalización (primera cancelación del día)" con el motivo equivocado
 
@@ -131,6 +148,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** el motivo verdadero, o solo "Sin penalización".
 - **Volver a probar:** con un viaje aceptado, abrir la hoja, elegir "Me siento inseguro/a" y leer el recuadro verde con `adb_ui.py dump`. Tocar "Volver" sin cancelar.
 - **Arreglo (#1219):** dice solo "Sin penalización", y con "Me siento inseguro/a" agrega "Cancelar por seguridad nunca baja tu calificación." (`lib/cancelPenaltyNotice.ts`, con pruebas). Probado en el emulador con un viaje aceptado de QA Moto, sin cancelar.
+- **Verificado (ronda 3, 2026-11-20):** viaje aceptado de QA Auto, motivo "Me siento inseguro/a": "Sin penalización" y "Cancelar por seguridad nunca baja tu calificación.". Se tocó "Volver" sin cancelar.
 
 ### R2-05 · "Tu conductor canceló el viaje" aunque no lo canceló el conductor
 
@@ -139,6 +157,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** la notificación con el mismo texto que el aviso de cada caso.
 - **Volver a probar:** pedir un viaje sin choferes conectados, cancelarlo desde el panel (`admin_cancel_ride`) y mirar la notificación del emulador (`adb shell dumpsys notification --noredact | grep -A3 tricigo`).
 - **Arreglo (#1219):** la notificación del teléfono usa el mismo título y texto que el aviso de cada caso, y las claves están en los tres idiomas. Lo cubre `rideStatusEffects.test.ts`. No se probó en el emulador: hace falta que un admin cancele un viaje sin chofer.
+- **Verificado (ronda 3, 2026-11-20):** se cancelaron desde el panel viajes de María sin chofer. Con la app abierta sale el aviso "Viaje cancelado · Tu viaje fue cancelado. Puedes pedir otro cuando quieras.". Con la app en segundo plano llega el push del servidor "Viaje cancelado · Tu viaje fue cancelado", y al volver a la app salen el aviso y la notificación del teléfono con el texto de arriba. Para leer la notificación hay que dar el permiso de notificaciones al dev client y mandar la app a segundo plano antes de cancelar: con la app al frente, la notificación se borra en menos de un segundo (R3-06). En la primera prueba el aviso salió tres veces para una sola cancelación; en tres intentos más salió una vez.
 
 ### R2-06 · "Viaje compartido · Dejar de compartir" sin haber compartido
 
@@ -146,6 +165,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Qué pasa:** el servidor crea el enlace de seguimiento en todo viaje aceptado (para los SMS a contactos de confianza), y la app muestra "Viaje compartido · Dejar de compartir" siempre que existe ese enlace. María no tiene contactos de confianza y no compartió nada (`share_access_log` vacío para ese enlace), y la app le dice que el viaje está compartido.
 - **Esperado:** el indicador solo cuando la persona compartió el viaje o tiene contactos de confianza que reciben el enlace.
 - **Volver a probar:** con un viaje aceptado de María, deslizar hasta "Compartir viaje" y ver si aparece "Viaje compartido".
+- **Sigue pasando (ronda 3, 2026-11-20):** viaje aceptado de QA Auto, "Viaje compartido · Dejar de compartir".
 
 ### R2-07 · En Android, el teclado tapa el chat
 
@@ -155,6 +175,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** el campo y el botón Enviar arriba del teclado, como en las demás pantallas.
 - **Volver a probar:** con un viaje aceptado, tocar "Mensaje", tocar el campo de texto y sacar una captura. Se tienen que ver el campo y el botón Enviar arriba del teclado.
 - **Arreglo (#1219):** `'height'` no alcanzaba. En el emulador el teclado medía 275 dp (screenY 501), pero `KeyboardAvoidingView` tomaba como alto inicial 800 (antes de los márgenes seguros; el real es 712) y comparaba una posición relativa con una absoluta. Los dos chats usan `KeyboardAwareView`: en Android baja el contenido con un relleno igual al alto del teclado que informa el sistema. Probado en el emulador: mensajes, respuestas rápidas, campo y Enviar quedan arriba del teclado, Enviar funciona con el teclado abierto y todo vuelve a su lugar al cerrarlo. Las demás pantallas con `KeyboardAvoidingView` (login, verificar teléfono, ticket de soporte) no se revisaron.
+- **Verificado (ronda 3, 2026-11-20):** con el teclado abierto se ven el mensaje del chofer, las respuestas rápidas, el campo y Enviar. Enviar mandó el mensaje con el teclado abierto.
 
 ### R2-08 · Con Wi-Fi pero sin internet, ningún aviso
 
@@ -178,6 +199,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** un monto elegido de entrada (y el chip marcado), o el campo vacío.
 - **Volver a probar:** abrir Recargar y leer con `dump` si el botón está `disabled`. No pagar.
 - **Arreglo (#1219):** la hoja abre con $20 elegido (el menor monto que permite el mínimo), la vista previa del cobro visible y "Pagar con tarjeta" habilitado; el campo dice "Otro monto" cuando está vacío. Probado en el emulador sin pagar.
+- **Verificado (ronda 3, 2026-11-20):** con los pasos de la ficha.
 
 ### R2-11 · El método de pago predeterminado no se usa
 
@@ -186,6 +208,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** el viaje arranca con el método elegido en Ajustes.
 - **Volver a probar:** con TriciCoin como predeterminado, pedir un viaje y mirar `rides.payment_method` (y en la pantalla final, cómo se pagó).
 - **Arreglo (#1219):** al elegir el servicio, el viaje toma `default_payment_method` del perfil; lo que la persona elija en ese viaje vale solo para ese viaje, y el siguiente vuelve al de Ajustes. El "último método usado" que había nunca se aplicaba y se quitó. Probado en el emulador: los precios salieron en TRC y el viaje quedó con `payment_method = tricicoin` (los dos anteriores, en efectivo).
+- **Verificado (ronda 3, 2026-11-20):** con TriciCoin como método predeterminado, el viaje se creó con `payment_method = tricicoin`.
 
 ### R2-12 · Con la app en inglés, el inicio sigue en español
 
@@ -194,6 +217,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** el inicio entero en el idioma elegido (también en portugués).
 - **Volver a probar:** poner la app en English, abrir Inicio y hacer `dump`.
 - **Arreglo (#1219):** se agregaron las 22 claves del inicio que no estaban en ningún idioma, y el clima se lee traducido ("23 degrees, La Habana"). Una prueba revisa que toda clave del inicio exista en es, en y pt. Probado en el emulador en inglés.
+- **Verificado (ronda 3, 2026-11-20):** con la app en inglés, el inicio sale en inglés. El selector de servicio todavía no (R3-02).
 
 ### R2-13 · "Idioma preferido" cambia el idioma con un toque
 
@@ -202,6 +226,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** una lista para elegir el idioma.
 - **Volver a probar:** tocar "Idioma preferido" una vez y ver si aparece una lista.
 - **Arreglo (#1219):** "Idioma preferido" abre una lista con cada idioma en su propio nombre y el actual marcado. Probado en el emulador: el toque no cambia el idioma; elegir English lo cambia. Ojo: elegir un idioma también escribe `preferred_language` en la cuenta (ver R1-03).
+- **Verificado (ronda 3, 2026-11-20):** con los pasos de la ficha.
 
 ### R2-14 · Lector de pantalla: estrellas sin número y remitente genérico en el chat
 
@@ -210,3 +235,83 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** "1 estrella" … "5 estrellas", y el nombre del chofer.
 - **Volver a probar:** `dump` en la pantalla final del viaje y en el chat, y leer los `desc=`.
 - **Arreglo (#1219):** cada estrella se lee "1 estrella" … "5 estrellas" y queda marcada al elegirla; los mensajes del chat nombran al chofer por su primer nombre. Probado en el emulador ("QA dijo: Estoy llegando"; QA Moto se llama "QA Moto").
+- **Verificado (ronda 3, 2026-11-20):** en "Viaje completado" las estrellas se leen "1 estrella" … "5 estrellas" y la elegida queda marcada. En el chat, "QA dijo: Estoy llegando, voy en un Lada blanco".
+
+### R3-01 · "Volver a [destino]" termina en "Ubicación inválida"
+
+- **Ronda 3, 2026-11-20.** Inicio de la app del pasajero, tarjeta "TU ÚLTIMO VIAJE" (`apps/client/app/(tabs)/index.tsx:2578`).
+- **Qué pasa:** al tocar "¿Volver a Hotel Nacional de Cuba…?" se abre la pantalla de elegir servicio sin precios ni trayecto, el botón queda en "Selecciona recogida y destino" deshabilitado y sale el aviso "Ubicación inválida · Selecciona la recogida y destino de nuevo". Desde "RECIENTES", el mismo destino funciona.
+- **Causa:** `rideService.getRideHistoryFiltered` (`packages/api/src/services/ride.service.ts:1474`) devuelve las filas de `rides` tal cual, y `pickup_location`/`dropoff_location` llegan como texto WKB, no como `{ latitude, longitude }`. La tarjeta guarda ese texto y lo pasa a `setDropoff`, y la validación de `requestEstimate` (`apps/client/src/hooks/useRide.ts:91`) ve `NaN`. Los demás servicios pasan las filas por `transformRideCoordinates` (`_ride-coordinates.ts`), que usa las columnas `dropoff_lat`/`dropoff_lng`. El respaldo de `useDestinationPredictions.ts:72` lee las mismas filas, aunque solo corre cuando falla la función del servidor.
+- **Esperado:** el destino del último viaje con sus coordenadas, y los precios en pantalla.
+- **Volver a probar:** con un viaje completado, abrir el inicio, tocar la tarjeta "TU ÚLTIMO VIAJE" y hacer `dump`: tienen que aparecer los precios y "Solicitar viaje …".
+
+### R3-02 · Con la app en inglés, el selector de servicio sigue en español
+
+- **Ronda 3, 2026-11-20.** Pantalla de elegir servicio con la app en English.
+- **Qué pasa:** siguen en español los subtítulos de cada servicio ("Económico", "Rápido", "Cómodo", "Exclusiva"), "~N min de viaje" (`index.tsx:4141`), "Envío", "Pasajeros", "AGREGAR PARADA · 0/3" (`index.tsx:4331`, escrito sin `t()`) y "CUP por km" (`index.tsx:4358`). La tarjeta dice "Triciclo" y el botón "Tricycle".
+- **Esperado:** la pantalla entera en el idioma elegido, también en portugués.
+- **Volver a probar:** poner la app en English (con la app cerrada, `sqlite3 /data/data/app.tricigo.client/databases/RKStorage "UPDATE catalystLocalStorage SET value='en' WHERE key='tricigo_language';"`), elegir un destino y hacer `dump`. Después volver a `es`.
+
+### R3-03 · El buscador no toma el foco al abrirse
+
+- **Ronda 3, 2026-11-20.** "¿A dónde vas?" en el inicio y "AGREGAR PARADA" en elegir servicio.
+- **Qué pasa:** se abre el buscador, pero el teclado no sale y el campo no tiene el foco (`dumpsys input_method` da `mInputShown=false`). Hay que tocar el campo para escribir. En la web, el campo de origen tiene `autoFocus`.
+- **Esperado:** el teclado abierto en el campo de búsqueda.
+- **A confirmar:** en un teléfono real, por si en el emulador es un tema de tiempos.
+- **Volver a probar:** abrir cada buscador y mirar `adb shell dumpsys input_method | grep mInputShown` sin tocar nada.
+
+### R3-04 · Las direcciones de Google llegan en inglés
+
+- **Ronda 3, 2026-11-20.** Buscar destino: "Vedado" da "Vedado, Havana, Cuba", y "capitolo" da "National Capitol of Cuba" primero.
+- **Causa:** la búsqueda de Google pide `languageCode: 'es'` (`supabase/functions/search-places-google/_shared/google.ts:73`), pero la segunda llamada, la de los detalles del lugar (`google.ts:186`), no lo pide, y la dirección (`formattedAddress`) sale de esa. El nombre "National Capitol of Cuba" viene de la búsqueda: falta ver si Google lo da así también en español.
+- **Esperado:** direcciones y nombres en español.
+- **Ojo:** `google_places_cache` guarda cada respuesta 30 días por consulta y zona. Después del arreglo, las consultas ya guardadas siguen en inglés hasta que venzan o se borren.
+- **Volver a probar:** buscar un barrio con una consulta que no esté en `google_places_cache` y leer la dirección.
+
+### R3-05 · Elegir "Vedado" ya no pide confirmar el punto
+
+- **Ronda 3, 2026-11-20.** Buscar destino → "Vedado, Vedado, Havana, Cuba".
+- **Qué pasa:** el destino queda en "Vedado, Havana, Cuba", el centro del barrio, sin pasar por el mapa con "Es una zona amplia" (#989).
+- **Causa:** la función guarda solo el primer tipo que da Google (`matchedCategory: d.types[0]`, `google.ts:268`). Para Vedado, Google daba `political` el 2026-11-09 a las 00:24 y da `geocode` desde las 00:43 (`google_places_cache`). `isZoneLevelResult` (`packages/utils/src/addressSearch.ts:265`) dice que no es zona cuando la categoría no está en `ZONE_LEVEL_CATEGORIES`, y no prueba el nombre del barrio.
+- **Esperado:** cualquier barrio, municipio o ciudad pide confirmar el punto.
+- **Volver a probar:** buscar "Vedado" y elegir el resultado de Google: tiene que abrir el mapa para confirmar el punto.
+
+### R3-06 · Abrir la app o volver al inicio borra todas sus notificaciones
+
+- **Ronda 3, 2026-11-20.** Las dos apps.
+- **Qué pasa:** cada vez que la app vuelve al frente, desaparecen del teléfono todas sus notificaciones (chat, "tu conductor llegó", ofertas en la del conductor). Con la app abierta pasa también al volver al inicio: al cancelarse el viaje, la notificación "Viaje cancelado" se borró en menos de un segundo (`dumpsys notification`: 4 publicadas y 4 borradas por la misma app).
+- **Causa:** las dos apps llaman a `Notifications.setBadgeCountAsync(0)` al volver al frente (`apps/client/src/hooks/useNotifications.ts:475` y `:485`, `apps/driver/src/hooks/useNotifications.ts:433` y `:443`). En Android, expo-notifications 55.0.18 hace `NotificationManager.cancelAll()` cuando el número es 0 (`BadgeHelper.kt`). Además, el inicio del pasajero pide el permiso de ubicación cada vez que se monta (`index.tsx:2104`), aunque ya esté dado. Android abre y cierra su pantalla de permisos en medio segundo, y la app lo cuenta como salir y volver.
+- **Esperado:** a decidir. Limpiar el número del ícono no debería borrar notificaciones que la persona no vio. El inicio podría mirar el permiso con `getForegroundPermissionsAsync` antes de pedirlo.
+- **Volver a probar:** con el permiso de notificaciones dado, mandar la app a segundo plano, recibir una notificación, abrir la app y mirar `numRemovedByApp` en `adb shell dumpsys notification --noredact | grep -A12 "key='app.tricigo.client'"`.
+
+### R3-07 · Las notificaciones del viaje caen en "Miscellaneous"
+
+- **Ronda 3, 2026-11-20.** App del pasajero, permiso de notificaciones dado con la app abierta.
+- **Qué pasa:** logcat dice `Channel 'rides' doesn't exists. Fallback to 'expo_notifications_fallback_notification_channel'`. Las notificaciones locales del viaje salen en el canal genérico "Miscellaneous", sin la vibración del canal "rides".
+- **Causa:** el canal `rides` se crea solo en `registerForPushNotifications` (`apps/client/src/services/push.service.ts:60`), que `_layout.tsx:147` llama al arrancar y que corta antes si todavía no hay permiso. `registerPushTokenForUser`, que es lo que pide el permiso desde 2026-09-10, no crea el canal. Se crea recién en el próximo arranque en frío.
+- **Esperado:** el canal creado apenas hay permiso, o siempre al arrancar (crear un canal no necesita permiso).
+- **Volver a probar:** con una instalación nueva, dar el permiso desde la app, provocar una notificación del viaje y buscar `Channel 'rides'` en logcat.
+
+### R3-08 · "Back" en inglés y "Copiado" antes de copiar
+
+- **Ronda 3, 2026-11-20.** Lector de pantalla.
+- **Qué pasa:** el botón de volver se lee "Back" en el chat y en el detalle del viaje (`packages/ui/src/ScreenHeader.tsx:32` lo tiene fijo, y `ProfileScreenHeader.tsx:57` lo usa por defecto). En el detalle del viaje, el botón de copiar el ID se lee "Copiado" antes de tocarlo (`apps/client/app/ride/[id].tsx:221` usa `common:copied` como etiqueta).
+- **Esperado:** "Volver" traducido, y "Copiar ID del viaje" en el botón.
+- **Volver a probar:** `dump` en el chat y en el detalle de un viaje.
+
+### R3-09 · "23 y 12" sugiere "12 e/ Calle 12"
+
+- **Ronda 3, 2026-11-20.** Buscar "23 y 12".
+- **Qué pasa:** el primer resultado es la esquina correcta ("Calle 23 y Calle 12, Plaza de la Revolución"). El cuarto es "12 · 12 e/ Calle 12": una calle "entre" ella misma. El primero, además, se lee dos veces con el lector de pantalla, porque el nombre y la dirección son iguales.
+- **Esperado:** sin el resultado que se nombra a sí mismo.
+- **Volver a probar:** buscar "23 y 12" y hacer `dump`.
+
+## Notas de la ronda 3 (2026-11-20)
+
+No son bugs todavía. Quedan anotadas para decidir.
+
+- **"TC" y "TRC":** el saldo dice "54,649 TC" y las tarifas "5,456 TRC". Es la misma moneda.
+- **El número de no leídas** está en la pestaña Inicio ("47"), no en la campana. Las cancelaciones de prueba lo hicieron subir.
+- **"Viajes recurrentes"** en Perfil lleva a "Coming soon": el flag `recurring_rides_enabled` no tiene fila y vale `false`.
+- **Mis viajes:** los viajes cancelados muestran la tarifa estimada, aunque no se cobraron.
+- **Entorno:** después de un `adb reboot`, con `-memory 2048`, la app dio "TriciGo no responde" (casi 1 GB en swap). `adb shell am kill-all` lo destrabó. No es de la app.
