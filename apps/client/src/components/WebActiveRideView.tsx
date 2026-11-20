@@ -322,7 +322,7 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
                     <span>{rideWithDriver.driver_rating?.toFixed(1) ?? '—'}</span>
                     {rideWithDriver.driver_total_rides != null && (
                       <span style={{ marginLeft: 4, fontSize: 11, color: c.textSubtle }}>
-                        ({rideWithDriver.driver_total_rides} trips)
+                        ({t('ride.driver_rides_count', { count: rideWithDriver.driver_total_rides })})
                       </span>
                     )}
                   </div>

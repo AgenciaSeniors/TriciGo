@@ -37,6 +37,8 @@ import { RideCompleteView } from '@/components/RideCompleteView';
 import { RideMapView } from '@/components/RideMapView';
 import type { RideMapViewHandle } from '@/components/RideMapView';
 import { useLocateMe } from '@/hooks/useLocateMe';
+import { useAndroidBack } from '@/hooks/useAndroidBack';
+import { usePickupFromGps } from '@/hooks/usePickupFromGps';
 import { AddressSearchInput } from '@/components/AddressSearchInput';
 import { ConfirmLocationScreen } from '@/components/ConfirmLocationScreen';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
@@ -3523,6 +3525,19 @@ function SelectingView({ openPicker }: {
     latitude: number; longitude: number; address: string;
   } | null>(null);
 
+  // Android back does what the visible controls do: the search panel's arrow
+  // closes the panel, and the ✕ goes home discarding the draft. Without this
+  // the press reached nothing on the home tab and Android closed the app.
+  useAndroidBack(() => {
+    if (searchingField) {
+      setSearchingField(null);
+      return true;
+    }
+    resetDraft();
+    setFlowStep('idle');
+    return true;
+  });
+
   // Crowdsourcing — "Sugerir lugar" sheet visibility + snapshotted coords.
   // PR 3 of POI parity program. Coords default to user's location; we
   // could enhance later to use long-press on the map for "agregar aquí".
@@ -3697,6 +3712,11 @@ function SelectingView({ openPicker }: {
       setPickup(prefetchedPickup.address, prefetchedPickup.location);
     }
   }, [prefetchedPickup, setPickup]);
+
+  // When the home screen did not finish locating the rider (a quick tap, or
+  // no GPS fix yet), keep looking from here. Runs after the effect above, so
+  // a pickup it copied is left alone.
+  usePickupFromGps();
 
   // Auto-open destination search when entering selecting flow without dropoff
   useEffect(() => {

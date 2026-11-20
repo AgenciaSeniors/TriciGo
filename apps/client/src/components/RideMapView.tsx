@@ -9,6 +9,7 @@ import { StopMarker } from '@tricigo/ui';
 import { useThemeStore } from '@/stores/theme.store';
 import { getMapFallbackCoordLngLat } from '@/config/demo';
 import { getMapboxGL, ensureMapboxToken, toLngLat as toCoord } from '@/lib/mapbox';
+import { computeBounds } from '@/lib/mapBounds';
 import { useAnimatedVehicles } from '@/hooks/useAnimatedVehicles';
 import { WebMapView } from './WebMapView';
 import { mapLogger } from '@tricigo/utils';
@@ -129,26 +130,6 @@ const DASH_SEQUENCE: number[][] = [
   [0, 2, 3, 2], [0, 2.25, 3, 1.75], [0, 2.5, 3, 1.5], [0, 2.75, 3, 1.25],
   [0, 3, 3, 1], [0, 3.25, 3, 0.75], [0, 3.5, 3, 0.5], [0, 3.75, 3, 0.25],
 ];
-
-/** Compute bounding box from an array of [lng, lat] coordinates */
-function computeBounds(coords: [number, number][]): {
-  ne: [number, number];
-  sw: [number, number];
-} | null {
-  const validCoords = coords.filter(([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat));
-  if (validCoords.length === 0) return null;
-  let minLng = Infinity;
-  let maxLng = -Infinity;
-  let minLat = Infinity;
-  let maxLat = -Infinity;
-  for (const [lng, lat] of validCoords) {
-    if (lng < minLng) minLng = lng;
-    if (lng > maxLng) maxLng = lng;
-    if (lat < minLat) minLat = lat;
-    if (lat > maxLat) maxLat = lat;
-  }
-  return { ne: [maxLng, maxLat], sw: [minLng, minLat] };
-}
 
 /** Midpoint between two Mapbox [lng, lat] coords. Used for the `accepted`
  *  camera state where we want to frame both the rider's pickup and the

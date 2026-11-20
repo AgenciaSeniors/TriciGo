@@ -14,6 +14,7 @@
     "./Button": "./src/Button.tsx",
     "./Card": "./src/Card.tsx",
     "./DriverCard": "./src/DriverCard.tsx",
+    "./driverCardText": "./src/driverCardText.ts",
     "./ETABadge": "./src/ETABadge.tsx",
     "./EmptyState": "./src/EmptyState.tsx",
     "./ErrorBoundary": "./src/ErrorBoundary.tsx",

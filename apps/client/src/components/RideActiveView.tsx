@@ -1382,7 +1382,8 @@ export function RideActiveView() {
             vehiclePlate={rideWithDriver.vehicle_plate}
             vehiclePhotoUrl={rideWithDriver.vehicle_photo_url}
             vehicleYear={driverExpanded ? rideWithDriver.vehicle_year : null}
-            ridesLabel={t('ride.driver_rides_count', { count: rideWithDriver.driver_total_rides ?? 0, defaultValue: '{{count}} viajes' }).replace(/^\d+\s*/, '')}
+            ridesText={t('ride.driver_rides_count', { count: rideWithDriver.driver_total_rides ?? 0 })}
+            plateLabel={t('ride.plate_label')}
           />
           </Pressable>
           {/* I4.1: See more / See less toggle — min 44px touch target */}

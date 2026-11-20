@@ -23,6 +23,7 @@ import { getMapFallbackCoordLngLat, getMapFallbackLatLng } from '@/config/demo';
 import { getMapboxGL, ensureMapboxToken } from '@/lib/mapbox';
 import { useTwoStageUserCenter } from '@/lib/userLocation';
 import { useLocateMe } from '@/hooks/useLocateMe';
+import { useAndroidBack } from '@/hooks/useAndroidBack';
 
 // Token before any MapView mounts — see the note in lib/mapbox.ts.
 ensureMapboxToken();
@@ -89,6 +90,12 @@ export function ConfirmLocationScreen({
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
   const isDark = resolvedScheme === 'dark';
   const insets = useSafeAreaInsets();
+  // The picker is drawn in place of the screen that opened it, so Android back
+  // would skip it: it does what its arrow does instead.
+  useAndroidBack(() => {
+    onClose();
+    return true;
+  });
   // Two-line address display: line1 = POI name (when one sits within a few
   // meters), line2 = the street/locality address. line1 omitted → single line.
   const [display, setDisplay] = useState<{ line1?: string; line2: string } | null>(null);
