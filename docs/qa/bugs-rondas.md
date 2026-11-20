@@ -20,20 +20,20 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 | R1-03 | Pasajero | Perfil | Con el teléfono en inglés, mezcla inglés y español | arreglado (#1215) |
 | R1-04 | Pasajero | Elegir servicio | Atrás de Android cierra la app | arreglado (#1215) |
 | R1-05 | Pasajero | Inicio → elegir servicio | Si se toca un destino antes de que la app tenga la ubicación, el origen queda vacío para siempre | arreglado (#1215) |
-| R2-01 | Pasajero | Buscando conductor | En un teléfono de 360×800 dp, "Cancelar viaje" queda debajo del borde y la parte de arriba queda vacía | en arreglo (rama `fix/client-qa-round2`) |
-| R2-02 | Pasajero | Buscando conductor | El diálogo de cancelar avisa de una "tarifa de cancelación" que ya no existe, y no está traducido | en arreglo (rama `fix/client-qa-round2`) |
-| R2-03 | Pasajero | Buscando conductor | El primer paso del indicador sale cortado: "Buscando cond…" | en arreglo (rama `fix/client-qa-round2`) |
-| R2-04 | Pasajero | Hoja de cancelar | "Sin penalización (primera cancelación del día)" también sale cuando el motivo es otro | en arreglo (rama `fix/client-qa-round2`) |
-| R2-05 | Pasajero | Viaje cancelado por otro | La notificación del teléfono dice siempre "Tu conductor canceló el viaje" | en arreglo (rama `fix/client-qa-round2`) |
+| R2-01 | Pasajero | Buscando conductor | En un teléfono de 360×800 dp, "Cancelar viaje" queda debajo del borde y la parte de arriba queda vacía | en arreglo (#1219) |
+| R2-02 | Pasajero | Buscando conductor | El diálogo de cancelar avisa de una "tarifa de cancelación" que ya no existe, y no está traducido | en arreglo (#1219) |
+| R2-03 | Pasajero | Buscando conductor | El primer paso del indicador sale cortado: "Buscando cond…" | en arreglo (#1219) |
+| R2-04 | Pasajero | Hoja de cancelar | "Sin penalización (primera cancelación del día)" también sale cuando el motivo es otro | en arreglo (#1219) |
+| R2-05 | Pasajero | Viaje cancelado por otro | La notificación del teléfono dice siempre "Tu conductor canceló el viaje" | en arreglo (#1219) |
 | R2-06 | Pasajero | Viaje con chofer | Muestra "Viaje compartido · Dejar de compartir" aunque la persona no compartió nada | abierto |
-| R2-07 | Pasajero y conductor | Chat del viaje | En Android, el teclado tapa los mensajes, el campo de texto y el botón Enviar | en arreglo (rama `fix/client-qa-round2`) |
+| R2-07 | Pasajero y conductor | Chat del viaje | En Android, el teclado tapa los mensajes, el campo de texto y el botón Enviar | en arreglo (#1219) |
 | R2-08 | Pasajero | Viaje en curso | Con Wi-Fi pero sin internet no aparece ningún aviso de "sin conexión" | abierto |
 | R2-09 | Pasajero | Inicio y billetera | El mismo saldo vale $60.18 en el inicio y ≈ $60.51 en la billetera | abierto |
-| R2-10 | Pasajero | Recargar | El monto muestra "20" pero "Pagar con tarjeta" sigue deshabilitado | en arreglo (rama `fix/client-qa-round2`) |
-| R2-11 | Pasajero | Ajustes → elegir servicio | El método de pago predeterminado no se usa: los viajes salen en efectivo | en arreglo (rama `fix/client-qa-round2`) |
-| R2-12 | Pasajero | Inicio | Con la app en inglés, el inicio sigue casi todo en español | en arreglo (rama `fix/client-qa-round2`) |
-| R2-13 | Pasajero | Ajustes | Tocar "Idioma preferido" cambia el idioma al instante, sin mostrar opciones | en arreglo (rama `fix/client-qa-round2`) |
-| R2-14 | Pasajero | Calificar y chat | Lector de pantalla: estrellas sin número y remitente del chat genérico | en arreglo (rama `fix/client-qa-round2`) |
+| R2-10 | Pasajero | Recargar | El monto muestra "20" pero "Pagar con tarjeta" sigue deshabilitado | en arreglo (#1219) |
+| R2-11 | Pasajero | Ajustes → elegir servicio | El método de pago predeterminado no se usa: los viajes salen en efectivo | en arreglo (#1219) |
+| R2-12 | Pasajero | Inicio | Con la app en inglés, el inicio sigue casi todo en español | en arreglo (#1219) |
+| R2-13 | Pasajero | Ajustes | Tocar "Idioma preferido" cambia el idioma al instante, sin mostrar opciones | en arreglo (#1219) |
+| R2-14 | Pasajero | Calificar y chat | Lector de pantalla: estrellas sin número y remitente del chat genérico | en arreglo (#1219) |
 
 ## Fichas
 
@@ -106,7 +106,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Qué pasa:** la parte de arriba de la pantalla queda vacía y el botón "Cancelar viaje · 1:39" queda debajo del borde, apenas asomado. Hay que deslizar para encontrarlo. Lo único visible abajo es "¿No aparece conductor? Pide ayuda", que avisa a soporte.
 - **Esperado:** el botón de cancelar a la vista sin deslizar.
 - **Volver a probar:** pedir un viaje sin choferes de prueba conectados y sacar una captura (`adb_ui.py screenshot`): `dump` no sirve en esta pantalla porque la animación del radar no deja leerla.
-- **Arreglo (rama `fix/client-qa-round2`):** "Cancelar viaje" quedó fijo abajo, fuera del scroll, y el mapa mide 150 dp en pantallas de menos de 860 dp de alto. Probado en el emulador de 360×800: el botón entero a la vista con "¿No aparece conductor? Pide ayuda" también visible. El espacio vacío de arriba es el mapa, que en el emulador no dibuja nada mientras busca (en el viaje con chofer sí); no se investigó.
+- **Arreglo (#1219):** "Cancelar viaje" quedó fijo abajo, fuera del scroll, y el mapa mide 150 dp en pantallas de menos de 860 dp de alto. Probado en el emulador de 360×800: el botón entero a la vista con "¿No aparece conductor? Pide ayuda" también visible. El espacio vacío de arriba es el mapa, que en el emulador no dibuja nada mientras busca (en el viaje con chofer sí); no se investigó.
 
 ### R2-02 · El diálogo de cancelar la búsqueda habla de una tarifa que no existe
 
@@ -114,7 +114,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Qué pasa:** el diálogo dice "¿Cancelar la búsqueda?" y "Perderás el progreso de la búsqueda actual. Si un conductor ya aceptó, podría aplicar una tarifa de cancelación." Cancelar no cobra nada desde 00372–00374: lo que baja es la calificación. Además `ride.cancel_ride_title` y `ride.cancel_ride_msg` no están en `packages/i18n/src/locales/*/rider.json`, así que en inglés y portugués sale en español. El botón dice "Cancelar viaje" bajo un título que dice "la búsqueda".
 - **Esperado:** el texto de la regla actual, traducido en es, en y pt.
 - **Volver a probar:** pedir un viaje, tocar "Cancelar viaje" y leer el diálogo con `adb_ui.py dump` (el diálogo sí se puede leer).
-- **Arreglo (rama `fix/client-qa-round2`):** el diálogo dice "Todavía no hay conductor asignado, así que cancelar ahora no baja tu calificación.", con los botones "Seguir buscando" y "Cancelar búsqueda", en es, en y pt. Probado en el emulador con `dump`.
+- **Arreglo (#1219):** el diálogo dice "Todavía no hay conductor asignado, así que cancelar ahora no baja tu calificación.", con los botones "Seguir buscando" y "Cancelar búsqueda", en es, en y pt. Probado en el emulador con `dump`.
 
 ### R2-03 · "Buscando cond…" cortado en el indicador de pasos
 
@@ -122,7 +122,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Qué pasa:** el primer paso sale como "Buscando cond…"; los otros ("Aceptado", "En camino", "En viaje") entran.
 - **Esperado:** una etiqueta que entre ("Buscando").
 - **Volver a probar:** captura de la pantalla de búsqueda.
-- **Arreglo (rama `fix/client-qa-round2`):** el primer paso usa `ride.step_searching` ("Buscando", "Searching", "Buscando"). Probado en el emulador: entra entero.
+- **Arreglo (#1219):** el primer paso usa `ride.step_searching` ("Buscando", "Searching", "Buscando"). Probado en el emulador: entra entero.
 
 ### R2-04 · "Sin penalización (primera cancelación del día)" con el motivo equivocado
 
@@ -130,7 +130,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Qué pasa:** cuando no hay castigo, la hoja siempre dice "Sin penalización (primera cancelación del día)". Con "Me siento inseguro/a" (que nunca castiga) dice lo mismo. Por el código, también sale dentro de los 2 minutos gratis después de que el chofer acepta. El paréntesis es falso en esos casos, y la ventana es de 24 horas, no "del día".
 - **Esperado:** el motivo verdadero, o solo "Sin penalización".
 - **Volver a probar:** con un viaje aceptado, abrir la hoja, elegir "Me siento inseguro/a" y leer el recuadro verde con `adb_ui.py dump`. Tocar "Volver" sin cancelar.
-- **Arreglo (rama `fix/client-qa-round2`):** dice solo "Sin penalización", y con "Me siento inseguro/a" agrega "Cancelar por seguridad nunca baja tu calificación." (`lib/cancelPenaltyNotice.ts`, con pruebas). Probado en el emulador con un viaje aceptado de QA Moto, sin cancelar.
+- **Arreglo (#1219):** dice solo "Sin penalización", y con "Me siento inseguro/a" agrega "Cancelar por seguridad nunca baja tu calificación." (`lib/cancelPenaltyNotice.ts`, con pruebas). Probado en el emulador con un viaje aceptado de QA Moto, sin cancelar.
 
 ### R2-05 · "Tu conductor canceló el viaje" aunque no lo canceló el conductor
 
@@ -138,7 +138,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Qué pasa:** el aviso en pantalla distingue bien tres casos (viaje interrumpido, cancelado sin chofer, cancelado por el chofer), pero después la línea 187 manda siempre la misma notificación al teléfono: "Tu conductor canceló el viaje". Si soporte cancela un viaje que nunca tuvo chofer, el aviso dice lo correcto y la notificación culpa a un conductor que no existió. Además `ride.driver_canceled_title` y `ride.driver_canceled_msg` no están en los JSON de idiomas.
 - **Esperado:** la notificación con el mismo texto que el aviso de cada caso.
 - **Volver a probar:** pedir un viaje sin choferes conectados, cancelarlo desde el panel (`admin_cancel_ride`) y mirar la notificación del emulador (`adb shell dumpsys notification --noredact | grep -A3 tricigo`).
-- **Arreglo (rama `fix/client-qa-round2`):** la notificación del teléfono usa el mismo título y texto que el aviso de cada caso, y las claves están en los tres idiomas. Lo cubre `rideStatusEffects.test.ts`. No se probó en el emulador: hace falta que un admin cancele un viaje sin chofer.
+- **Arreglo (#1219):** la notificación del teléfono usa el mismo título y texto que el aviso de cada caso, y las claves están en los tres idiomas. Lo cubre `rideStatusEffects.test.ts`. No se probó en el emulador: hace falta que un admin cancele un viaje sin chofer.
 
 ### R2-06 · "Viaje compartido · Dejar de compartir" sin haber compartido
 
@@ -154,7 +154,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Causa probable:** el chat usa `behavior={Platform.OS === 'ios' ? 'padding' : undefined}` en `KeyboardAvoidingView`. Las otras pantallas con teclado (login, verificar teléfono, completar perfil, ticket de soporte) usan `'height'` en Android. Con edge-to-edge (Expo 55), Android ya no achica la ventana solo.
 - **Esperado:** el campo y el botón Enviar arriba del teclado, como en las demás pantallas.
 - **Volver a probar:** con un viaje aceptado, tocar "Mensaje", tocar el campo de texto y sacar una captura. Se tienen que ver el campo y el botón Enviar arriba del teclado.
-- **Arreglo (rama `fix/client-qa-round2`):** `'height'` no alcanzaba. En el emulador el teclado medía 275 dp (screenY 501), pero `KeyboardAvoidingView` tomaba como alto inicial 800 (antes de los márgenes seguros; el real es 712) y comparaba una posición relativa con una absoluta. Los dos chats usan `KeyboardAwareView`: en Android baja el contenido con un relleno igual al alto del teclado que informa el sistema. Probado en el emulador: mensajes, respuestas rápidas, campo y Enviar quedan arriba del teclado, Enviar funciona con el teclado abierto y todo vuelve a su lugar al cerrarlo. Las demás pantallas con `KeyboardAvoidingView` (login, verificar teléfono, ticket de soporte) no se revisaron.
+- **Arreglo (#1219):** `'height'` no alcanzaba. En el emulador el teclado medía 275 dp (screenY 501), pero `KeyboardAvoidingView` tomaba como alto inicial 800 (antes de los márgenes seguros; el real es 712) y comparaba una posición relativa con una absoluta. Los dos chats usan `KeyboardAwareView`: en Android baja el contenido con un relleno igual al alto del teclado que informa el sistema. Probado en el emulador: mensajes, respuestas rápidas, campo y Enviar quedan arriba del teclado, Enviar funciona con el teclado abierto y todo vuelve a su lugar al cerrarlo. Las demás pantallas con `KeyboardAvoidingView` (login, verificar teléfono, ticket de soporte) no se revisaron.
 
 ### R2-08 · Con Wi-Fi pero sin internet, ningún aviso
 
@@ -177,7 +177,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Qué pasa:** el campo de monto muestra "20" y "Pagar con tarjeta" está deshabilitado. El 20 es solo un texto de ejemplo; el botón se habilita recién al tocar "$20". Parece que hay un monto y el botón no responde.
 - **Esperado:** un monto elegido de entrada (y el chip marcado), o el campo vacío.
 - **Volver a probar:** abrir Recargar y leer con `dump` si el botón está `disabled`. No pagar.
-- **Arreglo (rama `fix/client-qa-round2`):** la hoja abre con $20 elegido (el menor monto que permite el mínimo), la vista previa del cobro visible y "Pagar con tarjeta" habilitado; el campo dice "Otro monto" cuando está vacío. Probado en el emulador sin pagar.
+- **Arreglo (#1219):** la hoja abre con $20 elegido (el menor monto que permite el mínimo), la vista previa del cobro visible y "Pagar con tarjeta" habilitado; el campo dice "Otro monto" cuando está vacío. Probado en el emulador sin pagar.
 
 ### R2-11 · El método de pago predeterminado no se usa
 
@@ -185,7 +185,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Causa:** `customer_profiles.default_payment_method` solo lo usa `apps/client/app/profile/settings.tsx`; el viaje arranca siempre con `paymentMethod: 'cash'` (`apps/client/src/stores/ride.store.ts:115`) y nada lo cambia con la preferencia.
 - **Esperado:** el viaje arranca con el método elegido en Ajustes.
 - **Volver a probar:** con TriciCoin como predeterminado, pedir un viaje y mirar `rides.payment_method` (y en la pantalla final, cómo se pagó).
-- **Arreglo (rama `fix/client-qa-round2`):** al elegir el servicio, el viaje toma `default_payment_method` del perfil; lo que la persona elija en ese viaje vale solo para ese viaje, y el siguiente vuelve al de Ajustes. El "último método usado" que había nunca se aplicaba y se quitó. Probado en el emulador: los precios salieron en TRC y el viaje quedó con `payment_method = tricicoin` (los dos anteriores, en efectivo).
+- **Arreglo (#1219):** al elegir el servicio, el viaje toma `default_payment_method` del perfil; lo que la persona elija en ese viaje vale solo para ese viaje, y el siguiente vuelve al de Ajustes. El "último método usado" que había nunca se aplicaba y se quitó. Probado en el emulador: los precios salieron en TRC y el viaje quedó con `payment_method = tricicoin` (los dos anteriores, en efectivo).
 
 ### R2-12 · Con la app en inglés, el inicio sigue en español
 
@@ -193,7 +193,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Qué pasa:** siguen en español "29 grados, La Habana", "Cambiar tema", "SALDO DISPONIBLE", "¿A dónde vamos hoy?", "Buscar dirección o lugar…", "RECIENTES", "Hace un rato", "TU ÚLTIMO VIAJE" y "¿Volver a …?". Solo "Where to?", "Notifications" y las pestañas salen en inglés. Es un caso aparte de R1-03, que es del Perfil.
 - **Esperado:** el inicio entero en el idioma elegido (también en portugués).
 - **Volver a probar:** poner la app en English, abrir Inicio y hacer `dump`.
-- **Arreglo (rama `fix/client-qa-round2`):** se agregaron las 22 claves del inicio que no estaban en ningún idioma, y el clima se lee traducido ("23 degrees, La Habana"). Una prueba revisa que toda clave del inicio exista en es, en y pt. Probado en el emulador en inglés.
+- **Arreglo (#1219):** se agregaron las 22 claves del inicio que no estaban en ningún idioma, y el clima se lee traducido ("23 degrees, La Habana"). Una prueba revisa que toda clave del inicio exista en es, en y pt. Probado en el emulador en inglés.
 
 ### R2-13 · "Idioma preferido" cambia el idioma con un toque
 
@@ -201,7 +201,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Qué pasa:** cada toque en "Idioma preferido" pasa al idioma siguiente (Español → English → Português → Español) sin mostrar la lista. Quien toca para ver las opciones queda con la app en otro idioma.
 - **Esperado:** una lista para elegir el idioma.
 - **Volver a probar:** tocar "Idioma preferido" una vez y ver si aparece una lista.
-- **Arreglo (rama `fix/client-qa-round2`):** "Idioma preferido" abre una lista con cada idioma en su propio nombre y el actual marcado. Probado en el emulador: el toque no cambia el idioma; elegir English lo cambia. Ojo: elegir un idioma también escribe `preferred_language` en la cuenta (ver R1-03).
+- **Arreglo (#1219):** "Idioma preferido" abre una lista con cada idioma en su propio nombre y el actual marcado. Probado en el emulador: el toque no cambia el idioma; elegir English lo cambia. Ojo: elegir un idioma también escribe `preferred_language` en la cuenta (ver R1-03).
 
 ### R2-14 · Lector de pantalla: estrellas sin número y remitente genérico en el chat
 
@@ -209,4 +209,4 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Qué pasa:** en "Viaje completado", cada estrella de la calificación se anuncia solo como "★", sin decir cuántas. En el chat, los mensajes del chofer se anuncian como "Chat con conductor dijo: …", no con su nombre.
 - **Esperado:** "1 estrella" … "5 estrellas", y el nombre del chofer.
 - **Volver a probar:** `dump` en la pantalla final del viaje y en el chat, y leer los `desc=`.
-- **Arreglo (rama `fix/client-qa-round2`):** cada estrella se lee "1 estrella" … "5 estrellas" y queda marcada al elegirla; los mensajes del chat nombran al chofer por su primer nombre. Probado en el emulador ("QA dijo: Estoy llegando"; QA Moto se llama "QA Moto").
+- **Arreglo (#1219):** cada estrella se lee "1 estrella" … "5 estrellas" y queda marcada al elegirla; los mensajes del chat nombran al chofer por su primer nombre. Probado en el emulador ("QA dijo: Estoy llegando"; QA Moto se llama "QA Moto").
