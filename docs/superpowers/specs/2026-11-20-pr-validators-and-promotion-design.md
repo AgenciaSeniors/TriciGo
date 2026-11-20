@@ -94,12 +94,12 @@ Existing steps stay. New ones:
 |---|---|---|
 | Build web and admin | Build errors that today appear only at deploy | `next build` of both with the production public env values, then start the standalone server and expect 200 on a short list of routes |
 | Bundle the apps | Metro bundling errors, missing assets | `expo export` for `apps/client` and `apps/driver` |
-| Native change vs version | An OTA that would break installed apps | Compute the Expo native fingerprint (`@expo/fingerprint`) of each app on the base and the head. Changed fingerprint with unchanged `expo.version`: fail. Changed and version bumped: pass, label `needs-store-build` |
+| Native change vs version | An OTA that would break installed apps | Compute the Expo native fingerprint (`@expo/fingerprint`) of each app on the base and the head. Changed fingerprint with unchanged `expo.version`: fail. Changed and version bumped: pass with a warning in the job summary (a label would need a write token) |
 | Migration rehearsal | SQL that fails, is not idempotent, breaks access or does not do what it claims | See 1.1 |
 | Applied migrations are immutable | Editing a migration already on `master` | A PR that modifies or deletes an existing file under `supabase/migrations/` fails |
 | Tests come with the change | Code without tests | See 1.2 |
 | Secrets | Keys in a public repo (a service-role key leaked before) | `gitleaks` on the PR commits, pinned by SHA, with an allowlist for the known public values (anon key, publishable keys, public Mapbox token) |
-| Production dependencies | Known high vulnerabilities | `pnpm audit --prod --audit-level high` |
+| Production dependencies | Known high vulnerabilities | `pnpm audit --prod` of the PR compared with master's: fail on a high or critical advisory the PR adds, unless it is in a reviewed accept list with an end date. Master carried 78 on 2026-11-20 (one critical in Next 15.5.27, fixed separately), so failing on all of them was not possible |
 | Web lint | Web is skipped by `pnpm lint` today | Add the `lint` script to `apps/web` with the shared config |
 | PR description | Missing evidence, missing cross-review | See 1.3 |
 
@@ -120,10 +120,14 @@ The format already used by the 90 rehearsals becomes mandatory and runs in CI:
   same script runs in CI and against a local Docker Postgres. It creates a fresh database, loads
   the scaffold, applies the migration twice (idempotency), runs `tests.sql`, and fails when
   `_t_fail` is not empty.
-- CI runs it for every migration the PR adds, on a Postgres service using the `supabase/postgres`
-  image pinned by digest, which brings the Supabase roles (`anon`, `authenticated`,
-  `service_role`) and extensions such as PostGIS. Whatever the migration needs from `auth` beyond
-  what the image provides comes from the scaffold.
+- CI runs it for every migration the PR adds, on a plain `postgis/postgis:17-3.5` container pinned
+  by digest (production is Postgres 17.6), user `pgtest`. Not the `supabase/postgres` image: the
+  existing rehearsals create the Supabase roles themselves, and several check that `postgres` is
+  not a superuser, which that image's own `postgres` would break (measured 2026-11-20). The
+  contract is the one the 89 existing runners already follow: `run.sh none` must fail (exit 1 with
+  a line starting with `FAIL`) and `run.sh <migration>` must pass. A template in
+  `supabase/tests/_template/` adds the simple `scaffold.sql` + `tests.sql` + `_t_fail` form, and CI
+  runs that template on every PR as its own positive and negative control.
 - A migration without a rehearsal fails unless its first line is
   `-- rehearsal-exempt: <reason>`. The reviewers judge the reason.
 - The old rehearsals keep their own `run.sh`; they are ported only when touched.
@@ -158,8 +162,14 @@ A check reads the description on `opened`, `edited`, `synchronize` and `ready_fo
   `APPROVED_WITH_RESERVATIONS` or `FIX_CONFIRMED`;
 - the reviewed `<sha>` must be an ancestor of the PR head, and no file of a sensitive area may
   change after it. A fix after the review needs the round-2 verdict line;
-- the area map is read from the **base** commit, not from the PR head, so a PR cannot weaken the
-  map it is judged by (the map, its library and its CLI are themselves in the access area);
+- the gate scripts and the area map come from `master` (`git archive`), not from the PR head, so a
+  PR cannot weaken the gate it is judged by; the areas are the union of `master`'s map and the
+  PR's map, so a PR can add areas (a new service) but never remove them (the map, its library and
+  its CLI are themselves in the access area). Whether the cross-review is required is read from
+  `master`'s map only (`crossReview.required`, false until part 3);
+- a new migration may not take a number used on `master` or by an older open PR, and a migration
+  already on `master` may not be edited or deleted unless the description carries
+  `Migration edit: <path> <reason>` (a rename with identical content is allowed);
 - `pnpm test:review-areas` runs as its own CI step, so a renamed folder or an unclassified new
   service fails the PR instead of slipping out of every area;
 - a file also enters the areas of every API service it names (`walletService`, `adminService`…),
@@ -312,8 +322,10 @@ made from). Its stale header about the driver's `fingerprint` policy is correcte
 1. **Review text and governance:** PR template, `docs/review/` checklists and `areas.json`, root
    `AGENTS.md` with review guidelines, CLAUDE.md method section. Owner actions: enable the Codex
    bot.
-2. **CI checks** (1.1 to 1.3, the table above), each with its negative control. Then the owner
-   action: branch protection with the checks required.
+2. **CI checks** (1.1 to 1.3, the table above), each with its negative control, in five PRs that
+   each add their own workflow file: 2a PR gate, 2b builds and web lint, 2c native fingerprint,
+   2d migration rehearsal, 2e secrets and audit. Then the owner action: branch protection with the
+   checks required. Plan: `docs/superpowers/plans/2026-11-20-pr-validators-2-ci-checks.md`.
 3. **Skills and reviewer agents** (2.2, 2.3), exercised end to end on one real PR.
 4. **Promotion** (3.1 to 3.5): migration registry reconciliation, `release-build`, `promote.yml`,
    runner gate update, first real promotion, removal of the old deploy triggers, runbook.
