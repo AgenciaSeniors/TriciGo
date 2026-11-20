@@ -79,6 +79,24 @@ Running commands: all commands below are for Git Bash from the worktree root, wi
 
 # PR 2a — PR gate
 
+> **As built (2026-11-20), after the code review of the branch:** the code below is what the plan
+> started from; `master` has the reviewed version. Six findings changed it:
+> 1. `pr-gate.yml` runs on **`pull_request_target`** with `persist-credentials: false` and no
+>    fallback to the PR's copy: with `pull_request` GitHub runs the PR's own workflow file, so a PR
+>    could turn the gate into `exit 0`. Consequence: the gate does not run on the PR that adds it;
+>    Task 8's red/green proof is done on a throwaway PR after the merge.
+> 2. `readBlobs` throws on a path with a line break (it would shift every answer of
+>    `cat-file --batch`).
+> 3. `changedFiles` uses `--raw --no-abbrev` and returns `oldBlob`/`newBlob`; a pure rename needs
+>    equal blobs (git scores a file whose lines were only reordered as R100).
+> 4. A rename out of `supabase/migrations/` counts as a delete.
+> 5. Migration numbers are checked against `master` as it is now (`masterMigrations`), not the merge
+>    base; two new migrations of one PR may not share a number.
+> 6. The reviewed sha must be an ancestor of the head and not of `master` (the merge base is not
+>    used), and only files the PR itself changes count as "changed after the review", so merging
+>    `master` into the PR keeps a verdict valid. Also: a deleted test does not count as a test, and
+>    the open-PR list reads every file of every open PR (`gh api --paginate …/files`).
+
 The gate reads the PR description and the diff. Files:
 
 - Create `scripts/lib/git-read.mjs`: git plumbing shared by the two CLIs.
@@ -1641,7 +1659,8 @@ description is edited. The script and the map come from `master`; the areas are 
 Locally: `node scripts/check-pr.mjs --base origin/master --head HEAD --body-file <description.md>`.
 ```
 
-In `CLAUDE.md`, section "## Método de trabajo y revisión de PRs", after step 5, add:
+In `CLAUDE.md`, section "## Método de trabajo y revisión de PRs", after the numbered list (before
+the `apply_migration` paragraph, so the list keeps its numbering), add:
 
 ```markdown
 **El PR gate** (`.github/workflows/pr-gate.yml`) revisa la descripción y el diff de cada PR, y vuelve a correr cuando se edita la descripción. Falla si una sección de la plantilla quedó vacía, si el PR toca código sin ninguna prueba y sin `No tests because: <motivo>`, si edita o borra una migración que ya está en `master` sin `Migration edit: <archivo> <motivo>`, o si una migración nueva usa un número de `master` o el de un PR abierto más viejo. Si el PR toca un área de revisión, pide la línea `Cross-review: <veredicto> <id> <sha>`; hasta la parte 3 eso solo avisa. Las reglas y el mapa salen de `master`, así que un PR no puede aflojar el chequeo que lo juzga. Detalle: `docs/review/README.md` § "The PR gate".
@@ -1660,6 +1679,12 @@ git commit -m "ci: run the PR gate on every PR and its tests in CI"
 ```
 
 ### Task 8: open PR 2a and prove the gate fails before it passes
+
+(As built: with `pull_request_target` the gate does not run on this PR. Open PR 2a with its filled
+description, merge it with Eduardo's OK, then run Steps 2-4 on a throwaway docs-only PR, and close
+it. On that PR also confirm the check is reported on the PR head commit, which branch protection
+needs: `gh api repos/AgenciaSeniors/TriciGo/commits/<head sha>/check-runs --jq '.check_runs[] | [.name, .app.slug, .head_sha]'`
+must list `PR gate` with that sha.)
 
 - [ ] **Step 1: Ask Eduardo for the OK to push `ci/pr-gate` and open the PR as a draft with the blank template.**
 - [ ] **Step 2: Push and open the draft**
@@ -3254,6 +3279,15 @@ Write `$TEMP/protection.json`:
 
 `enforce_admins: true` because the agents work under the owner account. Zero approvals because there
 is one human account; the PR itself is still required.
+
+A required status check is matched by name. A PR could add its own workflow on `pull_request` with
+a job also called "PR gate" (found in the review of PR 2a; how branch protection weighs two runs
+with the same name was not verified). Before applying the payload, check whether the repository can
+use a ruleset with "Require workflows to pass before merging" pinned to `.github/workflows/pr-gate.yml`
+on `master` (`gh api repos/AgenciaSeniors/TriciGo/rulesets` and the repository settings). If it
+can, require the gate that way and keep the other checks in branch protection; if it cannot, say so
+to Eduardo and record it as an accepted risk (workflow files are in the access area, so such a PR
+still needs the cross-review, the Codex bot and his OK).
 
 - [ ] **Step 3: Apply it after the OK**
 

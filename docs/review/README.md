@@ -53,3 +53,30 @@ section or PR that tells the story.
   a change without tests that needed them).
 - **P2**: should be fixed, does not block.
 - **P3**: minor improvement.
+
+## The PR gate
+
+`.github/workflows/pr-gate.yml` runs `scripts/check-pr.mjs` on every PR, and again when its
+description is edited. It runs on `pull_request_target`, so GitHub uses the workflow as it is on
+`master`, and the script and the map are taken from `master` too: a PR cannot edit the gate that
+judges it. A PR that changes the gate is judged by the old one; its rules apply from the next PR.
+The areas are the union of `master`'s map and the PR's map, so a PR can add areas but never remove
+them. It fails when:
+
+- a template section is empty (HTML comments and empty code fences do not count), "Native and OTA"
+  has not exactly one box ticked, or "Final check" has a box unticked;
+- the PR changes source and adds or changes no test (deleting one does not count), without a line
+  `No tests because: <reason>`;
+- it edits, deletes or moves out of `supabase/migrations/` a migration already on `master` without
+  `Migration edit: <path> <reason>` (a rename with the very same blob is fine);
+- a new migration takes a number used on `master` as it is now, by an older open PR, or by another
+  new migration of the same PR;
+- it touches an area and the description has no `Cross-review: <verdict> <work-id> <sha>` line, the
+  sha is not a commit of the PR, or a file the PR changes in an area changed after it (merging
+  `master` into the PR does not count). While `crossReview.required` is `false` in `areas.json`
+  this rule only warns.
+
+A file name with a line break stops the gate (exit 2): `git cat-file --batch` reads one name per
+line, so such a name could hide the files after it.
+
+Locally: `node scripts/check-pr.mjs --base origin/master --head HEAD --body-file <description.md>`.

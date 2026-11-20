@@ -162,8 +162,9 @@ A check reads the description on `opened`, `edited`, `synchronize` and `ready_fo
   `APPROVED_WITH_RESERVATIONS` or `FIX_CONFIRMED`;
 - the reviewed `<sha>` must be an ancestor of the PR head, and no file of a sensitive area may
   change after it. A fix after the review needs the round-2 verdict line;
-- the gate scripts and the area map come from `master` (`git archive`), not from the PR head, so a
-  PR cannot weaken the gate it is judged by; the areas are the union of `master`'s map and the
+- the gate workflow runs on `pull_request_target` (GitHub uses its copy on `master`) and its
+  scripts and the area map come from `master` (`git archive`), not from the PR head, so a PR cannot
+  weaken the gate it is judged by; the PR head is only read with git, never run; the areas are the union of `master`'s map and the
   PR's map, so a PR can add areas (a new service) but never remove them (the map, its library and
   its CLI are themselves in the access area). Whether the cross-review is required is read from
   `master`'s map only (`crossReview.required`, false until part 3);

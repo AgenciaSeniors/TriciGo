@@ -45,7 +45,8 @@ plus the reservations accepted. Otherwise: Not required, no review area touched.
 ## Migrations
 
 <!-- For each migration: applied in production or not yet, and how the code behaves until it is.
-Otherwise: None. -->
+Otherwise: None. Editing a migration already on master needs a line
+Migration edit: <path> <reason> -->
 
 ## Final check
 

@@ -22,6 +22,7 @@
     "test:migration-grants": "node --test scripts/check-migration-grants.test.mjs",
     "review:areas": "node scripts/review-areas.mjs",
     "test:review-areas": "node --test scripts/review-areas.test.mjs",
+    "test:pr-gate": "node --test scripts/check-pr.test.mjs",
     "clean": "turbo run clean",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\""
   },
