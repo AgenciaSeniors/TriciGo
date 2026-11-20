@@ -9,14 +9,18 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  apiImportsIn,
   areasForChange,
   areasForPaths,
   compileAreas,
+  helperExportsIn,
+  helperIndex,
   loadAreas,
   migrationWords,
   normalizePath,
   serviceCallsIn,
   servicePathFor,
+  unionAreas,
 } from './lib/review-areas.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -170,6 +174,75 @@ describe('helpers', () => {
     assert.deepEqual(result, [
       { id: 'alpha', title: 'A', checklist: 'a.md', files: ['supabase/migrations/00001_wallet_x.sql'] },
       { id: 'zeta', title: 'Z', checklist: 'z.md', files: ['src/z/a.ts', 'src/z/b.ts'] },
+    ]);
+  });
+});
+
+describe('helper inheritance', () => {
+  const storage = ['packages/api/src/services/_storage-upload.ts', 'export async function uploadFileFromUri() {}\n'];
+
+  test('apiImportsIn reads names imported from the API package, across lines, with type and as', () => {
+    const text = [
+      "import { walletService, uploadFileFromUri as upload } from '@tricigo/api';",
+      'import {',
+      '  type FleetRequest,',
+      '  createFleetRequestSubmission,',
+      "} from '@tricigo/api/services/fleetRequestSubmission';",
+      "import { useState } from 'react';",
+      "import Default, { readCorporateBalance } from '../services/_corporate-balance';",
+    ].join('\n');
+    assert.deepEqual(apiImportsIn(text), [
+      'FleetRequest',
+      'createFleetRequestSubmission',
+      'readCorporateBalance',
+      'uploadFileFromUri',
+      'walletService',
+    ]);
+  });
+
+  test('helperExportsIn lists exported functions and constants that are not *Service', () => {
+    const text = 'export async function uploadFileFromUri() {}\nexport const MAX = 1;\nexport const walletService = {};\nfunction hidden() {}\n';
+    assert.deepEqual(helperExportsIn(text), ['MAX', 'uploadFileFromUri']);
+  });
+
+  test('helperIndex keeps only files directly under services/', () => {
+    const index = helperIndex([
+      storage,
+      ['packages/api/src/services/__tests__/x.test.ts', 'export function fake() {}'],
+      ['packages/api/src/index.ts', 'export function other() {}'],
+    ]);
+    assert.deepEqual([...index], [['uploadFileFromUri', ['packages/api/src/services/_storage-upload.ts']]]);
+  });
+
+  test('a file that imports a helper inherits the areas of the file that exports it (real map)', () => {
+    const text = "import { uploadFileFromUri } from '@tricigo/api';\nawait uploadFileFromUri(uri);\n";
+    const areas = areasForChange(['apps/client/src/zz-test/Upload.tsx'], real, () => text, helperIndex([storage]));
+    const access = areas.find((a) => a.id === 'access');
+    assert.ok(access, JSON.stringify(areas));
+    assert.deepEqual(access.via, { 'apps/client/src/zz-test/Upload.tsx': ['uploadFileFromUri'] });
+  });
+
+  test('a bare mention of a helper name, without the import, does not count', () => {
+    assert.deepEqual(
+      areasForChange(['apps/client/src/zz-test/Upload.tsx'], real, () => '// uploadFileFromUri\n', helperIndex([storage])),
+      [],
+    );
+  });
+
+  test('readText may return the head and the merge-base text: a removed call still counts', () => {
+    const areas = areasForChange(['apps/client/src/zz-test/Pay.tsx'], real, () => ['export {};\n', 'walletService.pay();\n']);
+    assert.ok(areas.some((a) => a.id === 'money'), JSON.stringify(areas));
+  });
+
+  test('unionAreas keeps every area of every list and merges their files', () => {
+    const a = [{ id: 'money', title: 'M', checklist: 'm.md', files: ['x.ts'] }];
+    const b = [
+      { id: 'money', title: 'M', checklist: 'm.md', files: ['y.ts'], via: { 'y.ts': ['walletService'] } },
+      { id: 'access', title: 'A', checklist: 'a.md', files: ['z.ts'] },
+    ];
+    assert.deepEqual(unionAreas(a, b), [
+      { id: 'access', title: 'A', checklist: 'a.md', files: ['z.ts'] },
+      { id: 'money', title: 'M', checklist: 'm.md', files: ['x.ts', 'y.ts'], via: { 'y.ts': ['walletService'] } },
     ]);
   });
 });

@@ -90,10 +90,56 @@ export function servicePathFor(identifier) {
   return `packages/api/src/services/${kebab}.service.ts`;
 }
 
-// Like areasForPaths, plus the areas inherited from the services each file calls.
-// `readText(path)` returns the file content, or null when it cannot be read (deleted file).
-// Areas that gained files by inheritance carry `via: { file: [service, ...] }`.
-export function areasForChange(paths, map, readText) {
+// ---- Helper inheritance ------------------------------------------------------------------
+// Some service-layer files export plain functions instead of a `*Service` object
+// (`uploadFileFromUri` in _storage-upload.ts, `createFleetRequestSubmission`). A file that
+// IMPORTS one of those names from the API package inherits the areas of the file that exports
+// it. A bare mention does not count: names such as `unavailable` are too common.
+
+export const SERVICES_DIR = 'packages/api/src/services';
+const SERVICES_FILE = /^packages\/api\/src\/services\/[^/]+\.ts$/;
+const IMPORT_BLOCK = /import\s+(?:type\s+)?(?:[A-Za-z_$][\w$]*\s*,\s*)?\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g;
+const API_SOURCE = /^@tricigo\/api(?:\/|$)|(?:^|\/)services\//;
+const HELPER_EXPORT = /^export\s+(?:async\s+)?(?:function\s*\*?\s*|const\s+|let\s+|class\s+)([A-Za-z_$][\w$]*)/gm;
+
+export function apiImportsIn(text) {
+  const names = new Set();
+  for (const [, list, source] of text.matchAll(IMPORT_BLOCK)) {
+    if (!API_SOURCE.test(source)) continue;
+    for (const part of list.split(',')) {
+      const name = part.trim().replace(/^type\s+/, '').split(/\s+as\s+/)[0].trim();
+      if (/^[A-Za-z_$][\w$]*$/.test(name)) names.add(name);
+    }
+  }
+  return [...names].sort();
+}
+
+export function helperExportsIn(text) {
+  const names = [...text.matchAll(HELPER_EXPORT)].map((m) => m[1]);
+  return [...new Set(names.filter((name) => !/Service$/.test(name)))].sort();
+}
+
+// files: iterable of [path, text]. Returns Map(name -> sorted paths of the services files that
+// export it), for names that are not `*Service`.
+export function helperIndex(files) {
+  const index = new Map();
+  for (const [path, text] of files) {
+    if (!SERVICES_FILE.test(path) || typeof text !== 'string') continue;
+    for (const name of helperExportsIn(text)) {
+      const paths = index.get(name) ?? [];
+      if (!paths.includes(path)) paths.push(path);
+      index.set(name, paths.sort());
+    }
+  }
+  return index;
+}
+
+// Like areasForPaths, plus the areas inherited from the services each file calls or imports.
+// `readText(path)` returns the file content, an array of contents (the file at the head and at
+// the merge base, so a call the PR removes counts too), or null when it cannot be read.
+// `helpers` is helperIndex(...) of the services files; without it only `*Service` names count.
+// Areas that gained files by inheritance carry `via: { file: [identifier, ...] }`.
+export function areasForChange(paths, map, readText, helpers = new Map()) {
   const byPath = areasForPaths(paths, map);
   const found = new Map(
     byPath.map((area) => [area.id, { ...area, files: new Set(area.files), via: {} }]),
@@ -104,29 +150,62 @@ export function areasForChange(paths, map, readText) {
     const path = normalizePath(raw);
     if (!path || seen.has(path) || !CODE_FILE.test(path) || map.ignore.some((re) => re.test(path))) continue;
     seen.add(path);
-    const text = readText(path);
-    if (typeof text !== 'string') continue;
-    for (const identifier of serviceCallsIn(text)) {
-      const servicePath = servicePathFor(identifier);
-      if (servicePath === path) continue;
-      for (const inherited of areasForPaths([servicePath], map)) {
-        if (!found.has(inherited.id)) {
-          found.set(inherited.id, {
-            id: inherited.id,
-            title: inherited.title,
-            checklist: inherited.checklist,
-            files: new Set(),
-            via: {},
-          });
+    const texts = [].concat(readText(path) ?? []).filter((text) => typeof text === 'string');
+    if (texts.length === 0) continue;
+    const sources = new Map();
+    for (const text of texts) {
+      for (const identifier of serviceCallsIn(text)) sources.set(identifier, [servicePathFor(identifier)]);
+      for (const name of apiImportsIn(text)) if (helpers.has(name)) sources.set(name, helpers.get(name));
+    }
+    for (const identifier of [...sources.keys()].sort()) {
+      for (const servicePath of sources.get(identifier)) {
+        if (servicePath === path) continue;
+        for (const inherited of areasForPaths([servicePath], map)) {
+          if (!found.has(inherited.id)) {
+            found.set(inherited.id, {
+              id: inherited.id,
+              title: inherited.title,
+              checklist: inherited.checklist,
+              files: new Set(),
+              via: {},
+            });
+          }
+          const area = found.get(inherited.id);
+          if (area.files.has(path)) continue;
+          area.files.add(path);
+          (area.via[path] ??= []).push(identifier);
         }
-        const area = found.get(inherited.id);
-        if (area.files.has(path)) continue;
-        area.files.add(path);
-        (area.via[path] ??= []).push(identifier);
       }
     }
   }
 
+  return finish(found);
+}
+
+// Merges area lists computed with different maps (the base map and the head map): an area is
+// touched when either list says so, with the union of its files and of its `via`.
+export function unionAreas(...lists) {
+  const found = new Map();
+  for (const list of lists) {
+    for (const area of list) {
+      const entry = found.get(area.id) ?? {
+        id: area.id,
+        title: area.title,
+        checklist: area.checklist,
+        files: new Set(),
+        via: {},
+      };
+      for (const file of area.files) entry.files.add(file);
+      for (const [file, identifiers] of Object.entries(area.via ?? {})) {
+        entry.via[file] = [...new Set([...(entry.via[file] ?? []), ...identifiers])].sort();
+      }
+      found.set(area.id, entry);
+    }
+  }
+  return finish(found);
+}
+
+function finish(found) {
   return [...found.values()]
     .map(({ via, files, ...area }) => ({
       ...area,
