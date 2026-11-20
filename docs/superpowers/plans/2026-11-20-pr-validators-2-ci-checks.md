@@ -2298,6 +2298,11 @@ Expected: passes with a warning "Needs a store build". Record the link.
 
 # PR 2d — Migration rehearsal in CI
 
+> **As built:** `scripts/lib/git-read.mjs` was already on master (PR 2a), so the runner imports it
+> directly. `scripts/sql/live-definitions.sql` names every object with its schema (`public.x`, and
+> `public.f(args)` for functions): run on prod, the first version printed `CREATE TABLE app_opens`
+> without `public.` because `regclass` drops the schema that is on the search path.
+
 Files:
 - Create `supabase/tests/_template/{run.sh,scaffold.sql,tests.sql,example-migration.sql}` and `supabase/tests/README.md`.
 - Create `scripts/ci/lib/rehearsal-plan.mjs`, `scripts/ci/rehearsal-plan.test.mjs`, `scripts/ci/rehearse-changed-migrations.mjs`.
@@ -3281,8 +3286,10 @@ Write `$TEMP/protection.json`:
 is one human account; the PR itself is still required.
 
 A required status check is matched by name. A PR could add its own workflow on `pull_request` with
-a job also called "PR gate" (found in the review of PR 2a; how branch protection weighs two runs
-with the same name was not verified). Before applying the payload, check whether the repository can
+a job also called "PR gate" (found in the review of PR 2a). Measured on the probe PR #1228
+(2026-11-20): with two "PR gate" check runs on the same head commit, a failure and a later success,
+`gh pr checks` showed only the later one as the check's state. So a spoof job that finishes after
+the real gate would hide its failure. Before applying the payload, check whether the repository can
 use a ruleset with "Require workflows to pass before merging" pinned to `.github/workflows/pr-gate.yml`
 on `master` (`gh api repos/AgenciaSeniors/TriciGo/rulesets` and the repository settings). If it
 can, require the gate that way and keep the other checks in branch protection; if it cannot, say so

@@ -163,7 +163,9 @@
         "^AGENTS\\.md$",
         "^packages/api/src/services/(notification|support-shift)\\.service\\.ts$",
         "^apps/driver/app/\\(tabs\\)/profile\\.tsx$",
-        "^apps/web/src/hooks/(useChat|useRiderLocationSharing)\\.ts$"
+        "^apps/web/src/hooks/(useChat|useRiderLocationSharing)\\.ts$",
+        "^scripts/ci/",
+        "^scripts/sql/"
       ],
       "migrationWords": [
         "rls", "grant", "grants", "revoke", "policy", "policies", "role", "roles", "auth",
@@ -181,7 +183,8 @@
       "title": "Schema: every migration",
       "checklist": "docs/review/schema.md",
       "paths": [
-        "^supabase/migrations/"
+        "^supabase/migrations/",
+        "^supabase/tests/_template/"
       ]
     },
     "dispatch": {

@@ -8,8 +8,9 @@
   production. (CLAUDE.md: "Cadenas de `CREATE OR REPLACE FUNCTION`")
 - [ ] **Idempotent.** Running it twice gives the same result (`IF NOT EXISTS`, `CREATE OR REPLACE`,
   guarded `INSERT`). The rehearsal applies it twice.
-- [ ] **Rehearsed.** `supabase/tests/<number>/` has a scaffold and assertions that fail without
-  the migration.
+- [ ] **Rehearsed.** `supabase/tests/<number>/run.sh` has a scaffold and assertions that fail
+  without the migration, and CI's "Migration rehearsal" ran it: `run.sh none` failed (exit 1 with a
+  `FAIL` line) and `run.sh <migration>` passed. Contract and template: `supabase/tests/README.md`.
 - [ ] **plpgsql traps avoided:** `RAISE EXCEPTION 'text' USING MESSAGE`, `make_interval` with a
   NUMERIC, a RECORD variable shadowing an alias, `COALESCE(<enum>, 'text')`, `RETURNING ... INTO`
   with two or more rows. (CLAUDE.md: the five "Trampa plpgsql" sections)

@@ -1,0 +1,58 @@
+name: Migration rehearsal
+
+# Runs the rehearsal of every migration a PR adds, on Postgres 17 + PostGIS as in production
+# (supabase/tests/README.md). A plain image, not supabase/postgres: the rehearsals create the
+# Supabase roles themselves and several check that postgres is not a superuser.
+
+on:
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: migration-rehearsal-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  rehearsal:
+    name: Migration rehearsal
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PGPORT: '5433'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Planner tests
+        run: node --test scripts/ci/rehearsal-plan.test.mjs
+      - name: Postgres client
+        run: |
+          bin=$(ls -d /usr/lib/postgresql/*/bin 2>/dev/null | sort -V | tail -1)
+          if [ -z "$bin" ] || [ ! -x "$bin/psql" ]; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+            bin=$(ls -d /usr/lib/postgresql/*/bin | sort -V | tail -1)
+          fi
+          "$bin/psql" --version
+          echo "PGBIN=$bin" >> "$GITHUB_ENV"
+      - name: Postgres 17 with PostGIS (production is 17.6)
+        run: |
+          docker run -d --name pg -p 5433:5432 -e POSTGRES_USER=pgtest -e POSTGRES_HOST_AUTH_METHOD=trust \
+            postgis/postgis:17-3.5@sha256:01a6a70e41e6c4467c8f55f6063555ed72db2d6662cd0d571040d42eadaeb6f6 \
+            -c max_connections=60 -c superuser_reserved_connections=3
+          for _ in $(seq 1 90); do "$PGBIN/pg_isready" -q -h 127.0.0.1 -p 5433 -U pgtest && break; sleep 1; done
+          "$PGBIN/psql" -h 127.0.0.1 -p 5433 -U pgtest -d postgres -Atc "select version()"
+      - name: The template fails without its migration and passes with it
+        run: |
+          set +e
+          out=$(bash supabase/tests/_template/run.sh none); code=$?
+          echo "$out"
+          if [ "$code" != 1 ] || ! echo "$out" | grep -q '^FAIL'; then echo "::error::the template's RED run did not fail as it must (exit $code)"; exit 1; fi
+          bash supabase/tests/_template/run.sh supabase/tests/_template/example-migration.sql || { echo "::error::the template's GREEN run failed"; exit 1; }
+      - name: Rehearse the migrations of this PR
+        run: node scripts/ci/rehearse-changed-migrations.mjs --base origin/master --head HEAD
