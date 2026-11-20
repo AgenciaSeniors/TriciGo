@@ -953,6 +953,8 @@ export default function TrackRidePage() {
           {ride.status === 'searching' && userId === ride.customer_id && (
             <SupportHelpCard
               rideId={ride.id}
+              pickupAddress={ride.pickup_address ?? null}
+              dropoffAddress={ride.dropoff_address ?? null}
               startedAtMs={Math.max(
                 new Date(ride.created_at).getTime(),
                 ride.scheduled_at ? new Date(ride.scheduled_at).getTime() : 0,
