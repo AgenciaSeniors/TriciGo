@@ -53,3 +53,21 @@ section or PR that tells the story.
   a change without tests that needed them).
 - **P2**: should be fixed, does not block.
 - **P3**: minor improvement.
+
+## The PR gate
+
+`.github/workflows/pr-gate.yml` runs `scripts/check-pr.mjs` on every PR, and again when its
+description is edited. The script and the map come from `master`; the areas are the union of
+`master`'s map and the PR's map, so a PR can add areas but never remove them. It fails when:
+
+- a template section is empty (HTML comments and empty code fences do not count), "Native and OTA"
+  has not exactly one box ticked, or "Final check" has a box unticked;
+- the PR changes source and no test, without a line `No tests because: <reason>`;
+- it edits or deletes a migration already on `master` without `Migration edit: <path> <reason>`
+  (a rename with the same content is fine), or a new migration takes a number of `master` or of an
+  older open PR;
+- it touches an area and the description has no `Cross-review: <verdict> <work-id> <sha>` line, the
+  sha is not a commit of the PR, or a file of an area changed after it. While
+  `crossReview.required` is `false` in `areas.json` this rule only warns.
+
+Locally: `node scripts/check-pr.mjs --base origin/master --head HEAD --body-file <description.md>`.

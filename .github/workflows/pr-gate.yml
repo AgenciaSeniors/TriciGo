@@ -1,0 +1,61 @@
+name: PR gate
+
+# Reads the PR description and the diff (scripts/check-pr.mjs). Runs again when the description is
+# edited. The gate scripts and the area map come from master: a PR cannot weaken the gate that
+# judges it. The rules are documented in CLAUDE.md, "PR gate".
+
+on:
+  pull_request:
+    branches: [master]
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: pr-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  gate:
+    name: PR gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout the PR head with full history
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Take the gate from master
+        run: |
+          mkdir -p "$RUNNER_TEMP/gate"
+          if git cat-file -e origin/master:scripts/check-pr.mjs 2>/dev/null; then
+            src=origin/master
+          else
+            src=HEAD
+            echo "::warning::scripts/check-pr.mjs is not on master yet: this PR is judged by its own copy of the gate."
+          fi
+          git archive "$src" scripts/check-pr.mjs scripts/lib docs/review/areas.json | tar -x -C "$RUNNER_TEMP/gate"
+
+      - name: List the open PRs (migration numbers)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr list --state open --limit 200 --json number,files > "$RUNNER_TEMP/open-prs.json"
+
+      - name: Check the PR
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          printf '%s' "$PR_BODY" > "$RUNNER_TEMP/body.md"
+          node "$RUNNER_TEMP/gate/scripts/check-pr.mjs" --base origin/master --head "$HEAD_SHA" \
+            --body-file "$RUNNER_TEMP/body.md" --pr "$PR_NUMBER" --open-prs "$RUNNER_TEMP/open-prs.json"

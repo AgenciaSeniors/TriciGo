@@ -110,6 +110,8 @@ Diseño completo y entregas pendientes: `docs/superpowers/specs/2026-11-20-pr-va
 6. **Bot de Codex en GitHub:** revisa cada PR. Un hilo suyo **no se resuelve sin arreglo** o sin el OK explícito de Eduardo para ese hilo.
 7. **Merge con OK por PR** (ver "Merges a `master` requieren autorización explícita por PR").
 
+**El PR gate** (`.github/workflows/pr-gate.yml`) revisa la descripción y el diff de cada PR, y vuelve a correr cuando se edita la descripción. Falla si una sección de la plantilla quedó vacía, si el PR toca código sin ninguna prueba y sin `No tests because: <motivo>`, si edita o borra una migración que ya está en `master` sin `Migration edit: <archivo> <motivo>`, o si una migración nueva usa un número de `master` o el de un PR abierto más viejo. Si el PR toca un área de revisión, pide la línea `Cross-review: <veredicto> <id> <sha>`; hasta la parte 3 eso solo avisa. Las reglas y el mapa salen de `master`, así que un PR no puede aflojar el chequeo que lo juzga. Detalle: `docs/review/README.md` § "The PR gate".
+
 **`apply_migration` usa como nombre el nombre del archivo sin `.sql`** (por ejemplo `00691_driver_approval_bonus`). Así el registro de producción coincide con los archivos y se puede saber qué falta aplicar. Al 2026-11-20, 11 archivos desde la `00600` no tienen entrada con su número en el registro (`00617`, `00618`, `00620`, `00623`, `00626`, `00637`, `00648`, `00653`, `00654`, `00664`, `00666`): se aplicaron por otra vía o no se aplicaron, y se concilian antes de la promoción manual.
 
 ## Contexto cubano

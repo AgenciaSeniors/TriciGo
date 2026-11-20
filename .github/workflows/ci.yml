@@ -90,6 +90,14 @@ jobs:
           pnpm test:migration-grants
           pnpm check:migration-grants
 
+      # The review map must classify every sensitive file of this tree (a renamed folder or an
+      # unclassified service fails here), and the PR gate's rules have their own tests. The gate
+      # itself runs in pr-gate.yml.
+      - name: Review map and PR gate tests
+        run: |
+          pnpm test:review-areas
+          pnpm test:pr-gate
+
       - name: Type check
         run: pnpm check-types
 

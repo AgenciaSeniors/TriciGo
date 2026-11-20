@@ -1641,7 +1641,8 @@ description is edited. The script and the map come from `master`; the areas are 
 Locally: `node scripts/check-pr.mjs --base origin/master --head HEAD --body-file <description.md>`.
 ```
 
-In `CLAUDE.md`, section "## Método de trabajo y revisión de PRs", after step 5, add:
+In `CLAUDE.md`, section "## Método de trabajo y revisión de PRs", after the numbered list (before
+the `apply_migration` paragraph, so the list keeps its numbering), add:
 
 ```markdown
 **El PR gate** (`.github/workflows/pr-gate.yml`) revisa la descripción y el diff de cada PR, y vuelve a correr cuando se edita la descripción. Falla si una sección de la plantilla quedó vacía, si el PR toca código sin ninguna prueba y sin `No tests because: <motivo>`, si edita o borra una migración que ya está en `master` sin `Migration edit: <archivo> <motivo>`, o si una migración nueva usa un número de `master` o el de un PR abierto más viejo. Si el PR toca un área de revisión, pide la línea `Cross-review: <veredicto> <id> <sha>`; hasta la parte 3 eso solo avisa. Las reglas y el mapa salen de `master`, así que un PR no puede aflojar el chequeo que lo juzga. Detalle: `docs/review/README.md` § "The PR gate".
