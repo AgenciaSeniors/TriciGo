@@ -8,12 +8,12 @@ TriciGo es una plataforma de movilidad urbana para **Cuba**. Cobertura nacional 
 
 ## Stack
 
-- **Framework:** Next.js 14 (App Router)
+- **Framework:** Next.js (App Router) en `apps/web` y `apps/admin`; Expo / React Native en `apps/client` y `apps/driver`
 - **Lenguaje:** TypeScript (strict mode)
 - **Base de datos:** Supabase (PostgreSQL + Auth + Storage + Realtime)
 - **Estilos:** Tailwind CSS
 - **UI:** React 18+ con Server Components donde sea posible
-- **Deploy:** Vercel
+- **Deploy:** web y admin en el VPS (PM2, por el runner self-hosted, ver "Operación: deploys, migraciones y merges"); apps por EAS (tiendas y OTA)
 - **Monorepo:** Turborepo (si aplica)
 - **CI:** GitHub Actions
 
@@ -97,6 +97,20 @@ src/
   - `fix: resolve localStorage validation on SSR`
   - `chore: update Supabase types`
 - NUNCA digas "listo" sin haber verificado con evidencia (tests pasando, build exitoso, screenshot)
+
+## Método de trabajo y revisión de PRs
+
+Diseño completo y entregas pendientes: `docs/superpowers/specs/2026-11-20-pr-validators-and-promotion-design.md`.
+
+1. **Rama y worktree propios** desde `origin/master`, nunca sobre el checkout principal.
+2. **Plan antes de código** en `docs/superpowers/plans/` cuando la tarea no es trivial.
+3. **Pruebas con cada cambio:** una prueba que falla sin el cambio y pasa con él. Una migración trae su ensayo en `supabase/tests/<número>/`. Sin pruebas solo con una línea `No tests because: <motivo>` en el PR, y el motivo lo juzgan los revisores.
+4. **Zonas sensibles:** `pnpm review:areas` dice qué zonas toca la rama; leer `docs/review/general.md` y la lista de cada zona antes de abrir el PR, y comprobar cada punto con su prueba.
+5. **PR con la plantilla completa** (`.github/pull_request_template.md`): cómo se validó con la salida, pruebas, zonas, impacto nativo/OTA y estado de las migraciones.
+6. **Bot de Codex en GitHub:** revisa cada PR. Un hilo suyo **no se resuelve sin arreglo** o sin el OK explícito de Eduardo para ese hilo.
+7. **Merge con OK por PR** (ver "Merges a `master` requieren autorización explícita por PR").
+
+**`apply_migration` usa como nombre el nombre del archivo sin `.sql`** (por ejemplo `00691_driver_approval_bonus`). Así el registro de producción coincide con los archivos y se puede saber qué falta aplicar. Al 2026-11-20, 11 archivos desde la `00600` no tienen entrada con su número en el registro (`00617`, `00618`, `00620`, `00623`, `00626`, `00637`, `00648`, `00653`, `00654`, `00664`, `00666`): se aplicaron por otra vía o no se aplicaron, y se concilian antes de la promoción manual.
 
 ## Contexto cubano
 
