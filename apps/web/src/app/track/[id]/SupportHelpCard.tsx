@@ -2,18 +2,29 @@
 
 // Support-assisted matching (00628), the web side of the rider app's SearchingView: while the
 // ride is searching, the vehicle-type change support proposed (Aceptar / Rechazar), and from
-// 45 s the "Pedir ayuda" link, which alerts support and opens WhatsApp with the ride code.
-// Without 00628 both stay quiet: getPendingProposal answers null and requestHelp never throws,
-// so the WhatsApp link still works.
+// 45 s the "Pedir ayuda" link, which alerts support and opens WhatsApp with the ride code, the
+// pickup and the destination. Without 00628 both stay quiet: getPendingProposal answers null and
+// requestHelp never throws, so the WhatsApp link still works.
 
 import { useCallback, useEffect, useState, type MouseEvent } from 'react';
 import { useTranslation } from '@tricigo/i18n';
 import { isProposalGone, rideAssistService, useSupportPhones, type ServiceProposal } from '@tricigo/api';
-import { formatCUP, formatSupportPhone, rideShortCode, searchHelpAvailable, supportHelpPhone, waMeLink } from '@tricigo/utils';
+import {
+  formatCUP,
+  formatSupportPhone,
+  rideShortCode,
+  searchHelpAvailable,
+  supportHelpPhone,
+  supportHelpWhatsAppText,
+  waMeLink,
+} from '@tricigo/utils';
 import { useSupportPhone } from '@/lib/useSupportPhone';
 
 interface Props {
   rideId: string;
+  /** Written on WhatsApp under the ride code. */
+  pickupAddress: string | null;
+  dropoffAddress: string | null;
   /** When the search started, in ms: created_at, or scheduled_at for a scheduled ride. */
   startedAtMs: number;
   sharedRide: boolean;
@@ -37,7 +48,7 @@ function secondsLeft(proposal: ServiceProposal, nowMs: number): number {
   return Math.floor((new Date(proposal.expires_at).getTime() - nowMs) / 1000);
 }
 
-export function SupportHelpCard({ rideId, startedAtMs, sharedRide, onChanged }: Props) {
+export function SupportHelpCard({ rideId, pickupAddress, dropoffAddress, startedAtMs, sharedRide, onChanged }: Props) {
   const { t } = useTranslation('web');
   const { phone: contactPhone } = useSupportPhone();
   const configPhones = useSupportPhones();
@@ -94,7 +105,11 @@ export function SupportHelpCard({ rideId, startedAtMs, sharedRide, onChanged }: 
   const left = proposal ? secondsLeft(proposal, now) : 0;
   const shown = proposal && proposal.id !== answeredId && left > 0 ? proposal : null;
   const showHelp = searchHelpAvailable(Math.floor((now - startedAtMs) / 1000));
-  const helpText = t('track.support_help_whatsapp_text', { code: rideShortCode(rideId) });
+  const helpText = supportHelpWhatsAppText((line, vars) => t(`track.support_help_whatsapp_${line}`, vars), {
+    id: rideId,
+    pickup_address: pickupAddress,
+    dropoff_address: dropoffAddress,
+  });
   // The link's own target (the operator on shift, else the first number set in platform_config,
   // 00682); on click the ride owner's number replaces it when the server names one.
   const helpUrl = waMeLink(supportHelpPhone(null, contactPhone, configPhones), helpText);

@@ -5767,7 +5767,7 @@ function SearchingView() {
             </View>
           </View>
 
-          {activeRide && <SupportHelpButton rideId={activeRide.id} elapsedSeconds={elapsedSeconds} />}
+          {activeRide && <SupportHelpButton ride={activeRide} elapsedSeconds={elapsedSeconds} />}
 
           {error && (
             <Text variant="bodySmall" color="error" className="mb-4 text-center">

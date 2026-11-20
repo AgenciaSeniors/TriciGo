@@ -182,3 +182,36 @@ export function searchingDriverCount(input: SearchingDriverCountInput): number {
 export function rideShortCode(rideId: string): string {
   return rideId.slice(0, 8).toUpperCase();
 }
+
+/** A line of the "Pide ayuda" text: support_help_whatsapp_text, _pickup or _dropoff. */
+export type SupportHelpLine = 'text' | 'pickup' | 'dropoff';
+
+export interface SupportHelpRide {
+  id: string;
+  pickup_address?: string | null;
+  dropoff_address?: string | null;
+}
+
+/** An address on one line, or null when there is none. */
+function oneLineAddress(address: string | null | undefined): string | null {
+  const text = (address ?? '').replace(/\s+/g, ' ').trim();
+  return text === '' ? null : text;
+}
+
+/**
+ * What "Pide ayuda" types into WhatsApp: the ride code, then the pickup and the destination
+ * on their own lines, so support knows where the rider is and where they go before opening
+ * the panel. `translate` turns a line key into the screen's text (code or address in `vars`);
+ * an address the ride does not have leaves its line out.
+ */
+export function supportHelpWhatsAppText(
+  translate: (line: SupportHelpLine, vars: Record<string, string>) => string,
+  ride: SupportHelpRide,
+): string {
+  const lines = [translate('text', { code: rideShortCode(ride.id) })];
+  const pickup = oneLineAddress(ride.pickup_address);
+  if (pickup) lines.push(translate('pickup', { address: pickup }));
+  const dropoff = oneLineAddress(ride.dropoff_address);
+  if (dropoff) lines.push(translate('dropoff', { address: dropoff }));
+  return lines.join('\n');
+}

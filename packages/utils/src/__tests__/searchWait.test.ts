@@ -7,6 +7,7 @@ import {
   searchHelpAvailable,
   searchingDriverCount,
   rideShortCode,
+  supportHelpWhatsAppText,
 } from '../searchWait';
 
 describe('searchWaitStage — what to tell a rider who is still waiting', () => {
@@ -164,5 +165,39 @@ describe('searchingDriverCount — one number for the card and the status line',
 describe('rideShortCode — the code the rider writes to support on WhatsApp', () => {
   it('is the first 8 characters of the id, upper case, as the server makes it (_ride_short_code)', () => {
     expect(rideShortCode('f1a2b3c4-0000-4000-8000-000000000001')).toBe('F1A2B3C4');
+  });
+});
+
+describe('supportHelpWhatsAppText — what "Pide ayuda" types into WhatsApp', () => {
+  // A stand-in for t(): the line key and its variables, so the test reads what reached i18n.
+  const translate = (line: string, vars: Record<string, string>) =>
+    line === 'text' ? `Viaje: ${vars.code}` : `${line}=${vars.address}`;
+  const id = 'f1a2b3c4-0000-4000-8000-000000000001';
+
+  it('puts the pickup and the destination under the ride code, one per line', () => {
+    expect(
+      supportHelpWhatsAppText(translate, {
+        id,
+        pickup_address: 'Calle 23 e/ L y M, Vedado',
+        dropoff_address: 'Hotel Nacional de Cuba',
+      }),
+    ).toBe(['Viaje: F1A2B3C4', 'pickup=Calle 23 e/ L y M, Vedado', 'dropoff=Hotel Nacional de Cuba'].join('\n'));
+  });
+
+  it('leaves out an address the ride does not have', () => {
+    expect(supportHelpWhatsAppText(translate, { id, pickup_address: '  ', dropoff_address: 'Coppelia' })).toBe(
+      ['Viaje: F1A2B3C4', 'dropoff=Coppelia'].join('\n'),
+    );
+    expect(supportHelpWhatsAppText(translate, { id, pickup_address: 'El Capitolio', dropoff_address: null })).toBe(
+      ['Viaje: F1A2B3C4', 'pickup=El Capitolio'].join('\n'),
+    );
+    expect(supportHelpWhatsAppText(translate, { id })).toBe('Viaje: F1A2B3C4');
+  });
+
+  it('keeps each address on its own line', () => {
+    const broken = [' Calle 23', ' e/ L y M '].join('\n');
+    expect(supportHelpWhatsAppText(translate, { id, pickup_address: broken, dropoff_address: 'Coppelia' })).toBe(
+      ['Viaje: F1A2B3C4', 'pickup=Calle 23 e/ L y M', 'dropoff=Coppelia'].join('\n'),
+    );
   });
 });
