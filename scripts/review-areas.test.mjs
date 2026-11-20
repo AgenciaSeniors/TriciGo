@@ -532,4 +532,49 @@ describe('CLI', () => {
       );
     });
   });
+  test('--stdin resolves paths from the repository root when run in a subfolder', () => {
+    const r = spawnSync(process.execPath, [join(ROOT, 'scripts/review-areas.mjs'), '--stdin', '--json'], {
+      cwd: join(ROOT, 'apps'),
+      input: 'apps/web/src/app/profile/corporate/page.tsx\n',
+      encoding: 'utf8',
+    });
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(JSON.parse(r.stdout).areas.some((a) => a.id === 'money'), r.stdout);
+  });
+
+  describe('git mode reads the merge base and the helpers', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'review-areas-base-'));
+    after(() => rmSync(repo, { recursive: true, force: true }));
+    const g = (...a) => execFileSync('git', a, { cwd: repo, encoding: 'utf8' });
+    const commit = (m) => {
+      g('add', '-A');
+      g('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', m);
+    };
+    const write = (path, text) => {
+      mkdirSync(dirname(join(repo, path)), { recursive: true });
+      writeFileSync(join(repo, path), text);
+    };
+
+    test('a screen that stops calling a service still counts in its areas', () => {
+      g('init', '-q');
+      write('apps/client/src/zz-test/Pay.tsx', 'walletService.pay();\n');
+      commit('base');
+      write('apps/client/src/zz-test/Pay.tsx', 'export {};\n');
+      commit('remove the call');
+      const r = cli(repo, '--base', 'HEAD~1', '--head', 'HEAD', '--json');
+      assert.equal(r.status, 0, r.stderr);
+      assert.ok(JSON.parse(r.stdout).areas.some((a) => a.id === 'money'), r.stdout);
+    });
+
+    test('a file that imports a helper of the services folder inherits its areas', () => {
+      write('packages/api/src/services/_storage-upload.ts', 'export async function uploadFileFromUri() {}\n');
+      commit('helper');
+      write('apps/client/src/zz-test/Upload.tsx', "import { uploadFileFromUri } from '@tricigo/api';\n");
+      commit('use it');
+      const r = cli(repo, '--base', 'HEAD~1', '--head', 'HEAD', '--json');
+      assert.equal(r.status, 0, r.stderr);
+      const access = JSON.parse(r.stdout).areas.find((a) => a.id === 'access');
+      assert.deepEqual(access?.via, { 'apps/client/src/zz-test/Upload.tsx': ['uploadFileFromUri'] });
+    });
+  });
 });

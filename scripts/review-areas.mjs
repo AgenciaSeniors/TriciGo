@@ -7,15 +7,20 @@
 //   git -c core.quotePath=false diff --name-only --no-renames -z A...B | node scripts/review-areas.mjs --stdin
 //   add --json for machine-readable output
 //
-// Git mode uses --no-renames: a renamed file counts under its old and its new path. A file that
-// calls an API service (walletService.x) also counts in the areas of that service. In git mode the
-// file content is read from <head>; with --stdin, from the working tree.
+// Git mode uses --no-renames: a renamed file counts under its old and its new path. A file also
+// counts in the areas of every API service it calls (walletService.x) or helper it imports
+// (uploadFileFromUri). In git mode each file is read at <head> and at the merge base, so a call
+// the change removes counts too. With --stdin, paths are relative to the repository root and the
+// files are read from the working tree.
 // Any error (bad argument, git failure, unreadable map) prints one line to stderr and exits 2,
 // so a check built on this script never passes by accident.
-import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { areasForChange, loadAreas } from './lib/review-areas.mjs';
+import { changedFiles, git, listTree, mergeBase, readBlobs } from './lib/git-read.mjs';
+import { SERVICES_DIR, areasForChange, helperIndex, loadAreas } from './lib/review-areas.mjs';
+
+const CODE_FILE = /\.(ts|tsx|js|mjs)$/;
 
 function fail(message) {
   console.error(`review-areas: ${message}`);
@@ -41,37 +46,43 @@ try {
 
   let paths;
   let readText;
+  let helpers;
   if (values.stdin) {
-    paths = readFileSync(0, 'utf8').split(/\r?\n|\0/);
-    readText = (path) => {
+    let root = process.cwd();
+    try {
+      root = git(['rev-parse', '--show-toplevel']).trim();
+    } catch {
+      // Not inside a repository: the paths are relative to the current folder.
+    }
+    const read = (path) => {
+      const full = join(root, path);
       try {
-        return existsSync(path) ? readFileSync(path, 'utf8') : null;
+        return existsSync(full) ? readFileSync(full, 'utf8') : null;
       } catch {
         return null;
       }
     };
+    paths = readFileSync(0, 'utf8').split(/\r?\n|\0/);
+    readText = read;
+    const dir = join(root, SERVICES_DIR);
+    const names = existsSync(dir) ? readdirSync(dir).filter((name) => name.endsWith('.ts')) : [];
+    helpers = helperIndex(names.map((name) => [`${SERVICES_DIR}/${name}`, read(`${SERVICES_DIR}/${name}`)]));
   } else {
     const base = refOption(values.base ?? 'origin/master', 'base');
     const head = refOption(values.head ?? 'HEAD', 'head');
-    paths = execFileSync(
-      'git',
-      ['-c', 'core.quotePath=false', 'diff', '--name-only', '--no-renames', '-z', `${base}...${head}`],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 },
-    ).split('\0');
-    readText = (path) => {
-      try {
-        return execFileSync('git', ['-c', 'core.quotePath=false', 'show', `${head}:${path}`], {
-          encoding: 'utf8',
-          stdio: ['ignore', 'pipe', 'ignore'],
-          maxBuffer: 64 * 1024 * 1024,
-        });
-      } catch {
-        return null;
-      }
-    };
+    const fork = mergeBase(base, head);
+    paths = changedFiles(fork, head, { renames: false }).map((change) => change.path);
+    const code = paths.filter((path) => CODE_FILE.test(path));
+    const atHead = readBlobs(head, code);
+    const atFork = readBlobs(fork, code);
+    readText = (path) => [atHead.get(path), atFork.get(path)];
+    helpers = helperIndex([
+      ...readBlobs(head, listTree(head, SERVICES_DIR)),
+      ...readBlobs(fork, listTree(fork, SERVICES_DIR)),
+    ]);
   }
 
-  const areas = areasForChange(paths, loadAreas(), readText);
+  const areas = areasForChange(paths, loadAreas(), readText, helpers);
 
   if (values.json) {
     process.stdout.write(`${JSON.stringify({ areas }, null, 2)}\n`);
