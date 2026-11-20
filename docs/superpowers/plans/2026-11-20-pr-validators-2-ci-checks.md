@@ -79,6 +79,24 @@ Running commands: all commands below are for Git Bash from the worktree root, wi
 
 # PR 2a — PR gate
 
+> **As built (2026-11-20), after the code review of the branch:** the code below is what the plan
+> started from; `master` has the reviewed version. Six findings changed it:
+> 1. `pr-gate.yml` runs on **`pull_request_target`** with `persist-credentials: false` and no
+>    fallback to the PR's copy: with `pull_request` GitHub runs the PR's own workflow file, so a PR
+>    could turn the gate into `exit 0`. Consequence: the gate does not run on the PR that adds it;
+>    Task 8's red/green proof is done on a throwaway PR after the merge.
+> 2. `readBlobs` throws on a path with a line break (it would shift every answer of
+>    `cat-file --batch`).
+> 3. `changedFiles` uses `--raw --no-abbrev` and returns `oldBlob`/`newBlob`; a pure rename needs
+>    equal blobs (git scores a file whose lines were only reordered as R100).
+> 4. A rename out of `supabase/migrations/` counts as a delete.
+> 5. Migration numbers are checked against `master` as it is now (`masterMigrations`), not the merge
+>    base; two new migrations of one PR may not share a number.
+> 6. The reviewed sha must be an ancestor of the head and not of `master` (the merge base is not
+>    used), and only files the PR itself changes count as "changed after the review", so merging
+>    `master` into the PR keeps a verdict valid. Also: a deleted test does not count as a test, and
+>    the open-PR list reads every file of every open PR (`gh api --paginate …/files`).
+
 The gate reads the PR description and the diff. Files:
 
 - Create `scripts/lib/git-read.mjs`: git plumbing shared by the two CLIs.
@@ -1661,6 +1679,10 @@ git commit -m "ci: run the PR gate on every PR and its tests in CI"
 ```
 
 ### Task 8: open PR 2a and prove the gate fails before it passes
+
+(As built: with `pull_request_target` the gate does not run on this PR. Open PR 2a with its filled
+description, merge it with Eduardo's OK, then run Steps 2-4 on a throwaway docs-only PR, and close
+it.)
 
 - [ ] **Step 1: Ask Eduardo for the OK to push `ci/pr-gate` and open the PR as a draft with the blank template.**
 - [ ] **Step 2: Push and open the draft**

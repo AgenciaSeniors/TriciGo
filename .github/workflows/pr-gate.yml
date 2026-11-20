@@ -1,11 +1,17 @@
 name: PR gate
 
 # Reads the PR description and the diff (scripts/check-pr.mjs). Runs again when the description is
-# edited. The gate scripts and the area map come from master: a PR cannot weaken the gate that
-# judges it. The rules are documented in CLAUDE.md, "PR gate".
+# edited. The rules are documented in CLAUDE.md, "PR gate", and docs/review/README.md.
+#
+# pull_request_target, not pull_request: GitHub then runs this file as it is on master, so a PR
+# cannot rewrite the gate that judges it (with pull_request a PR could change this file to
+# `exit 0`). That is safe here because no code of the PR runs: the PR head is checked out only to
+# be read with git plumbing, the scripts that run come from master (git archive), no secret is
+# used, and the token is read-only and not kept in the checkout. Keep it that way: never install,
+# build or run anything from the PR head in this workflow.
 
 on:
-  pull_request:
+  pull_request_target:
     branches: [master]
     types: [opened, edited, synchronize, reopened, ready_for_review]
 
@@ -21,13 +27,14 @@ jobs:
   gate:
     name: PR gate
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
-      - name: Checkout the PR head with full history
+      - name: Checkout the PR head with full history (read as data only)
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -37,18 +44,29 @@ jobs:
       - name: Take the gate from master
         run: |
           mkdir -p "$RUNNER_TEMP/gate"
-          if git cat-file -e origin/master:scripts/check-pr.mjs 2>/dev/null; then
-            src=origin/master
-          else
-            src=HEAD
-            echo "::warning::scripts/check-pr.mjs is not on master yet: this PR is judged by its own copy of the gate."
-          fi
-          git archive "$src" scripts/check-pr.mjs scripts/lib docs/review/areas.json | tar -x -C "$RUNNER_TEMP/gate"
+          git archive origin/master scripts/check-pr.mjs scripts/lib docs/review/areas.json | tar -x -C "$RUNNER_TEMP/gate"
 
-      - name: List the open PRs (migration numbers)
+      # Every file of every open PR (the files endpoint pages up to 3000 per PR), so a large PR
+      # still shows the migration numbers it holds.
+      - name: List the files of the open PRs (migration numbers)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh pr list --state open --limit 200 --json number,files > "$RUNNER_TEMP/open-prs.json"
+        run: |
+          gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 1000 --json number --jq '.[].number' > "$RUNNER_TEMP/open-numbers.txt"
+          node -e '
+            const { execFileSync } = require("node:child_process");
+            const fs = require("node:fs");
+            const [numbersFile, out] = process.argv.slice(1);
+            const repo = process.env.GITHUB_REPOSITORY;
+            const numbers = fs.readFileSync(numbersFile, "utf8").split(/\s+/).filter(Boolean).map(Number);
+            const prs = numbers.map((number) => ({
+              number,
+              files: execFileSync("gh", ["api", "--paginate", `repos/${repo}/pulls/${number}/files?per_page=100`, "--jq", ".[].filename"],
+                { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }).split("\n").filter(Boolean),
+            }));
+            fs.writeFileSync(out, JSON.stringify(prs));
+            console.log(`open PRs read: ${prs.length}`);
+          ' "$RUNNER_TEMP/open-numbers.txt" "$RUNNER_TEMP/open-prs.json"
 
       - name: Check the PR
         env:
