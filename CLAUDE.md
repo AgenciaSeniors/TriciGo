@@ -3242,6 +3242,8 @@ SELECT public.accept_ride_v2('<ride_id>', '<driver_profile_id>');
 - **Apagarlo:** si `adb emu kill` o `adb shell reboot -p` se cuelgan (pasó el 2026-11-17), cerrar los procesos `qemu-system-x86_64` y `emulator` (`Stop-Process`). No deja archivos: la carpeta `snapshots` no se crea con las opciones de arranque de arriba.
 - **Cortar internet sin cortar Metro:** `adb root` y `iptables -I OUTPUT -p tcp --dport 443 -j REJECT` (lo mismo con `ip6tables`); para devolverlo, lo mismo con `-D`. La red Wi-Fi sigue arriba, que es justo el caso común en Cuba (red sin internet).
 - **Apps instaladas:** los dev clients del 27/06 (`Downloads\tricigo-dev-apks`). Desde entonces el conductor solo sumó un módulo nativo, `expo-updates`, y el JS no lo importa.
+- **Con poco disco, `-memory 2048`** (verificado 2026-11-20). Ahorra disco, pero después de un `adb reboot` el emulador quedó con casi 1 GB en swap y la app dio "TriciGo no responde". `adb shell am kill-all` lo destrabó.
+- **Notificaciones:** el dev client del pasajero no tiene el permiso. Se da con `adb shell pm grant app.tricigo.client android.permission.POST_NOTIFICATIONS`. Con el permiso, la próxima vez que la app vuelve al frente registra un token de push para la cuenta abierta: una fila nueva en `user_devices` de prod. Para leer una notificación con `adb shell dumpsys notification --noredact`, mandar antes la app a segundo plano (`key HOME`): al frente, la app borra sus notificaciones (R3-06).
 
 **Metro en modo producción** (configs `client-android` y `driver-android` en `.claude/launch.json`, que no está en git: `expo start --dev-client --no-dev --minify`, puertos 8081 y 8082):
 - **Los `.env` de la worktree son copias para pruebas**, con tres diferencias:
@@ -3254,6 +3256,7 @@ SELECT public.accept_ride_v2('<ride_id>', '<driver_profile_id>');
 
 **`scripts/qa/adb_ui.py`** lee la pantalla como texto (`uiautomator dump`) y toca por texto, descripción o id, sin capturas. Tiene `open client|driver`, `dump`, `find`, `tap`, `type` (solo ASCII: el buscador ignora las tildes), `wait`, `key`, `swipe`, `logs` y `screenshot`. Ejemplo: `python scripts/qa/adb_ui.py tap "¿A dónde vas?"`.
 - **Con el teclado abierto, `tap` puede caer en el teclado:** `uiautomator` devuelve la posición del botón aunque el teclado lo tape (R2-07). Cerrar el teclado con `key BACK` antes de tocar un botón de abajo.
+- **`type` sin un campo con foco dispara los atajos del dev client.** La "p" abre el monitor de rendimiento, que manda a Ajustes → "Mostrar sobre otras apps". Los buscadores no toman el foco solos (R3-03): tocar el campo antes de `type` y confirmar con `adb shell dumpsys input_method | grep mInputShown` (tiene que dar `true`).
 
 **Los bugs que encuentran las rondas** se anotan en `docs/qa/bugs-rondas.md`, con estado y pasos para volver a probarlos. Cada ronda empieza volviendo a probar los que están en "arreglado".
 
