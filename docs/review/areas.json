@@ -1,6 +1,6 @@
 {
   "ignore": [
-    "\\.md$",
+    "^(?!docs/review/|AGENTS\\.md$).*\\.md$",
     "(^|/)__tests__/",
     "\\.test\\.(ts|tsx|js|mjs)$"
   ],
@@ -22,16 +22,13 @@
     "packages/api/src/services/cms.service.ts",
     "packages/api/src/services/launch-pulse.service.ts",
     "packages/api/src/services/marketing-stats.service.ts",
-    "packages/api/src/services/notification.service.ts",
     "packages/api/src/services/poi.service.ts",
     "packages/api/src/services/suggestions.service.ts",
     "packages/api/src/services/support-contact.service.ts",
-    "packages/api/src/services/support-shift.service.ts",
     "packages/api/src/services/validation.service.ts",
     "apps/client/app/(tabs)/_layout.tsx",
     "apps/client/app/(tabs)/profile.tsx",
     "apps/driver/app/(tabs)/_layout.tsx",
-    "apps/driver/app/(tabs)/profile.tsx",
     "apps/client/src/services/geocodeCache.ts",
     "apps/client/src/services/mapbox.service.ts",
     "apps/client/src/services/predictionCache.ts",
@@ -112,17 +109,19 @@
         "^apps/client/src/hooks/(useCorporateAccounts|useSignupPromotion)\\.ts$",
         "^apps/driver/src/hooks/(useEarningsData|useDriverEarningsByZone)\\.ts$",
         "^apps/client/src/stores/rideSplits\\.ts$",
-        "^apps/admin/src/lib/approvalBonus\\.ts$"
+        "^apps/admin/src/lib/approvalBonus\\.ts$",
+        "^packages/api/src/services/(admin|driver)\\.service\\.ts$"
       ],
       "migrationWords": [
         "wallet", "wallets", "payment", "payments", "pay", "pays", "paid", "recharge", "recharges",
-        "refund", "refunds", "promo", "promos", "promotion", "promotions", "gift", "gifts", "bonus",
-        "bonuses", "coupon", "coupons", "fare", "fares", "price", "prices", "pricing", "payout",
-        "payouts", "cash", "cashout", "ledger", "money", "netopia", "stripe", "tropipay", "commission",
-        "commissions", "referral", "referrals", "reward", "rewards", "discount", "discounts", "invoice",
-        "invoices", "tip", "tips", "surge", "split", "splits", "balance", "earnings", "credit", "credits",
-        "charge", "charges", "billing", "exchange", "corporate", "fraud", "snapshot", "completion",
-        "complete", "insurance", "surcharge", "wait", "anchor", "fx", "usd", "cup", "trc", "tricicoin"
+        "refund", "refunds", "promo", "promos", "promotion", "promotions", "gift", "gifts",
+        "bonus", "bonuses", "coupon", "coupons", "fare", "fares", "price", "prices", "pricing",
+        "payout", "payouts", "cash", "cashout", "ledger", "money", "netopia", "stripe", "tropipay",
+        "commission", "commissions", "referral", "referrals", "reward", "rewards", "discount",
+        "discounts", "invoice", "invoices", "tip", "tips", "surge", "split", "splits", "balance",
+        "earnings", "credit", "credits", "charge", "charges", "billing", "exchange", "corporate",
+        "fraud", "snapshot", "completion", "complete", "insurance", "surcharge", "wait", "anchor",
+        "fx", "usd", "cup", "trc", "tricicoin"
       ]
     },
     "access": {
@@ -150,16 +149,22 @@
         "^apps/(client|driver)/src/stores/auth\\.store\\.ts$",
         "^packages/utils/src/sentryPrivacy\\.ts$",
         "^docs/review/areas\\.json$",
-        "^scripts/(lib/)?review-areas\\.mjs$"
+        "^scripts/(lib/)?review-areas\\.mjs$",
+        "^docs/review/",
+        "^AGENTS\\.md$",
+        "^packages/api/src/services/(notification|support-shift)\\.service\\.ts$",
+        "^apps/driver/app/\\(tabs\\)/profile\\.tsx$"
       ],
       "migrationWords": [
-        "rls", "grant", "grants", "revoke", "policy", "policies", "role", "roles", "auth", "permission",
-        "permissions", "lockdown", "ungated", "gated", "gate", "public", "rpc", "rpcs", "security",
-        "secure", "operator", "admin", "team", "anon", "privacy", "private", "guard", "guards", "protect",
-        "protected", "access", "block", "blocked", "otp", "login", "session", "sessions", "password",
-        "phone", "verification", "verify", "invitation", "invitations", "marketing", "visibility",
-        "deletion", "delete", "authz", "secdef", "definer", "hardening", "storage", "bucket", "execute",
-        "lock", "revokes", "privileges", "jwt", "secret", "secrets", "vault", "cors", "fleet"
+        "rls", "grant", "grants", "revoke", "policy", "policies", "role", "roles", "auth",
+        "permission", "permissions", "lockdown", "ungated", "gated", "gate", "public", "rpc",
+        "rpcs", "security", "secure", "operator", "admin", "team", "anon", "privacy", "private",
+        "guard", "guards", "protect", "protected", "access", "block", "blocked", "otp", "login",
+        "session", "sessions", "password", "phone", "verification", "verify", "invitation",
+        "invitations", "marketing", "visibility", "deletion", "delete", "authz", "secdef",
+        "definer", "hardening", "storage", "bucket", "execute", "lock", "revokes", "privileges",
+        "jwt", "secret", "secrets", "vault", "cors", "fleet", "token", "tokens", "device",
+        "devices", "trusted", "contact", "contacts", "path"
       ]
     },
     "schema": {
@@ -194,14 +199,16 @@
         "^apps/driver/src/hooks/(useDriverLocation|useDriverProximityAlert|useLiveDriverRoute|useNearDropoffPulse|useRiderLocation|useTripAutoNavigation|useWaypointProximity|useSystemOfflineRecovery|useInAppNavigation|useDriverETA|useOverlayBubble)\\.ts$",
         "^apps/(client|driver)/src/stores/ride\\.store\\.ts$",
         "^apps/driver/src/stores/(driver|location)\\.store\\.ts$",
-        "^apps/admin/src/lib/(rideAssist|rideCancel)\\.ts$"
+        "^apps/admin/src/lib/(rideAssist|rideCancel)\\.ts$",
+        "^apps/driver/app/\\(tabs\\)/profile\\.tsx$"
       ],
       "migrationWords": [
-        "ride", "rides", "dispatch", "offer", "offers", "driver", "drivers", "matching", "match", "trip",
-        "trips", "reclaim", "presence", "assign", "assigned", "cancel", "canceled", "cancellation",
-        "cancellations", "stuck", "scheduled", "recurring", "realtime", "release", "released", "online",
-        "offline", "queue", "heartbeat", "location", "pickup", "arrival", "arrived", "delivery", "moto",
-        "deportiva", "waypoint", "waypoints", "stop", "stops", "proximity", "searching"
+        "ride", "rides", "dispatch", "offer", "offers", "driver", "drivers", "matching", "match",
+        "trip", "trips", "reclaim", "presence", "assign", "assigned", "cancel", "canceled",
+        "cancellation", "cancellations", "stuck", "scheduled", "recurring", "realtime", "release",
+        "released", "online", "offline", "queue", "heartbeat", "location", "pickup", "arrival",
+        "arrived", "delivery", "moto", "deportiva", "waypoint", "waypoints", "stop", "stops",
+        "proximity", "searching"
       ]
     },
     "edge-functions": {

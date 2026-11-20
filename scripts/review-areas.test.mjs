@@ -4,16 +4,19 @@
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  areasForChange,
   areasForPaths,
   compileAreas,
   loadAreas,
   migrationWords,
   normalizePath,
+  serviceCallsIn,
+  servicePathFor,
 } from './lib/review-areas.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -82,6 +85,69 @@ describe('helpers', () => {
       'wait',
       'charge',
     ]);
+  });
+
+  test('serviceCallsIn lists property accesses on *Service, sorted and unique', () => {
+    assert.deepEqual(
+      serviceCallsIn('a walletService.getBalance() b caseOpsService.x walletService.y; adminService'),
+      ['caseOpsService', 'walletService'],
+    );
+  });
+
+  test('servicePathFor turns camelCase into the kebab file name', () => {
+    assert.equal(servicePathFor('walletService'), 'packages/api/src/services/wallet.service.ts');
+    assert.equal(servicePathFor('exchangeRateService'), 'packages/api/src/services/exchange-rate.service.ts');
+    assert.equal(servicePathFor('caseOpsService'), 'packages/api/src/services/case-ops.service.ts');
+    assert.equal(servicePathFor('adminService'), 'packages/api/src/services/admin.service.ts');
+  });
+
+  test('areasForChange: callers inherit the areas of the services they call', () => {
+    const toy = compileAreas({
+      areas: {
+        money: { title: 'M', checklist: 'm.md', paths: ['^packages/api/src/services/wallet\.service\.ts$'] },
+        ui: { title: 'U', checklist: 'u.md', paths: ['^src/ui/'] },
+      },
+    });
+    const texts = {
+      'src/screen.tsx': 'await walletService.getBalance(); walletService.x(); // mentions otherService',
+      'src/ui/panel.tsx': 'walletService.pay()',
+      'packages/api/src/services/wallet.service.ts': 'walletService.helper()',
+      'src/gone.tsx': null,
+    };
+    const readText = (path) => (path in texts ? texts[path] : null);
+    const result = areasForChange(Object.keys(texts), toy, readText);
+    assert.deepEqual(result, [
+      {
+        id: 'money',
+        title: 'M',
+        checklist: 'm.md',
+        files: ['packages/api/src/services/wallet.service.ts', 'src/screen.tsx', 'src/ui/panel.tsx'],
+        via: { 'src/screen.tsx': ['walletService'], 'src/ui/panel.tsx': ['walletService'] },
+      },
+      { id: 'ui', title: 'U', checklist: 'u.md', files: ['src/ui/panel.tsx'] },
+    ]);
+  });
+
+  test('every service file exports the identifier its name maps to', () => {
+    const files = execFileSync('git', ['ls-files', 'packages/api/src/services'], { cwd: ROOT, encoding: 'utf8' })
+      .split('\n')
+      .filter((f) => /^packages\/api\/src\/services\/[^/]+\.service\.ts$/.test(f));
+    assert.ok(files.length > 10);
+    const config = JSON.parse(readFileSync(join(ROOT, 'docs/review/areas.json'), 'utf8'));
+    // validation.service.ts exports plain functions, nothing calls a validationService, and it is
+    // in notSensitive. An exemption may never hide a sensitive service (checked below).
+    const exempt = ['packages/api/src/services/validation.service.ts'];
+    for (const f of exempt) {
+      assert.ok(config.notSensitive.includes(f), `${f} is exempt from the naming guard but not in notSensitive`);
+    }
+    const bad = [];
+    for (const f of files.filter((x) => !exempt.includes(x))) {
+      const kebab = f.split('/').pop().replace(/\.service\.ts$/, '');
+      const id = kebab.replace(/-([a-z])/g, (_, c) => c.toUpperCase()) + 'Service';
+      if (servicePathFor(id) !== f) bad.push(f + ': naming rule does not round-trip');
+      else if (!readFileSync(join(ROOT, f), 'utf8').includes('export const ' + id)) bad.push(f + ': no "export const ' + id + '"');
+    }
+    assert.deepEqual(bad, []);
   });
 
   test('a toy map: paths, words, ignore, sorting and unique files', () => {
@@ -177,7 +243,7 @@ describe('the real map', () => {
       'apps/driver/app/(tabs)/earnings.tsx': ['money'],
       'apps/client/app/(tabs)/index.tsx': ['dispatch', 'money'],
       'packages/api/src/services/dispute.service.ts': ['access', 'money'],
-      'packages/api/src/services/driver.service.ts': ['access', 'dispatch'],
+      'packages/api/src/services/driver.service.ts': ['access', 'dispatch', 'money'],
       'docs/review/areas.json': ['access'],
       'scripts/lib/review-areas.mjs': ['access'],
       'scripts/review-areas.mjs': ['access'],
@@ -213,6 +279,30 @@ describe('the map stays true to the repository', () => {
         assert.ok(tracked.some((f) => re.test(f)), `${area.id}: ${re} matches no tracked file`);
       }
     }
+  });
+
+  test('no regex in areas.json has a literal dot written as a bare "."', () => {
+    const config = JSON.parse(readFileSync(join(ROOT, 'docs/review/areas.json'), 'utf8'));
+    const sources = [
+      ...config.ignore,
+      ...config.mustClassify,
+      ...Object.values(config.areas).flatMap((a) => a.paths),
+    ];
+    const bare = (source) => {
+      let inClass = false;
+      for (let i = 0; i < source.length; i++) {
+        const c = source[i];
+        if (c === '\\') i++;
+        else if (inClass) inClass = c !== ']';
+        else if (c === '[') inClass = true;
+        else if (c === '.' && source[i + 1] !== '*' && source[i + 1] !== '+') return true;
+      }
+      return false;
+    };
+    assert.equal(bare('^a/b\\.ts$'), false);
+    assert.equal(bare('^a/b.ts$'), true);
+    assert.equal(bare('^(?!x).*\\.md$'), false);
+    assert.deepEqual(sources.filter(bare), []);
   });
 
   test('every name inside a ( | ) group matches a tracked file', () => {
@@ -280,6 +370,29 @@ describe('CLI', () => {
     assert.match(r.stdout, /checklist: docs\/review\/money\.md/);
   });
 
+  const areasOf = (input) => {
+    const r = run(input, '--json');
+    assert.equal(r.status, 0, r.stderr);
+    return JSON.parse(r.stdout).areas.map((a) => a.id);
+  };
+
+  test('screens inherit the areas of the services they call (real files)', () => {
+    const admin = areasOf('apps/admin/src/app/drivers/[id]/page.tsx\n');
+    assert.ok(admin.includes('access') && admin.includes('money'), admin.join());
+    assert.ok(areasOf('apps/web/src/app/profile/corporate/page.tsx\n').includes('money'));
+    assert.ok(areasOf('apps/driver/app/profile/pricing.tsx\n').includes('money'));
+  });
+
+  test('review checklists and AGENTS.md are access', () => {
+    assert.deepEqual(areasOf('docs/review/money.md\n'), ['access']);
+    assert.deepEqual(areasOf('AGENTS.md\n'), ['access']);
+  });
+
+  test('NUL-separated stdin works', () => {
+    const found = areasOf('apps/client/src/components/DriverInfoMiniCard.tsx\0packages/api/src/services/wallet.service.ts\0');
+    assert.ok(found.includes('money'));
+  });
+
   test('a change with no sensitive area says so', () => {
     const r = run('docs/qa/bugs-rondas.md\n');
     assert.equal(r.status, 0, r.stderr);
@@ -302,8 +415,8 @@ describe('CLI', () => {
       assert.notEqual(r.status, 0, args.join(' '));
       assert.equal(r.status, 2, args.join(' '));
     }
-    assert.equal(existsSync(join(ROOT, 'leak')), false);
-    assert.equal(existsSync(join(ROOT, '-x...HEAD')), false);
+    const stray = readdirSync(ROOT).filter((n) => n.startsWith('leak') || n.startsWith('-x'));
+    assert.deepEqual(stray, []);
   });
 
   test('git mode with an empty range says no area', () => {

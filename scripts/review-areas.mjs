@@ -3,17 +3,19 @@
 // for each one.
 //
 //   node scripts/review-areas.mjs                          # origin/master...HEAD
-//   node scripts/review-areas.mjs --base <ref> --head <ref>
-//   git diff --name-only --no-renames A...B | node scripts/review-areas.mjs --stdin
+//   node scripts/review-areas.mjs --base <ref> --head <ref>   (recommended: asks git itself)
+//   git -c core.quotePath=false diff --name-only --no-renames -z A...B | node scripts/review-areas.mjs --stdin
 //   add --json for machine-readable output
 //
-// Git mode uses --no-renames: a renamed file counts under its old and its new path.
+// Git mode uses --no-renames: a renamed file counts under its old and its new path. A file that
+// calls an API service (walletService.x) also counts in the areas of that service. In git mode the
+// file content is read from <head>; with --stdin, from the working tree.
 // Any error (bad argument, git failure, unreadable map) prints one line to stderr and exits 2,
 // so a check built on this script never passes by accident.
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
-import { areasForPaths, loadAreas } from './lib/review-areas.mjs';
+import { areasForChange, loadAreas } from './lib/review-areas.mjs';
 
 function fail(message) {
   console.error(`review-areas: ${message}`);
@@ -38,8 +40,16 @@ try {
   });
 
   let paths;
+  let readText;
   if (values.stdin) {
-    paths = readFileSync(0, 'utf8').split(/\r?\n/);
+    paths = readFileSync(0, 'utf8').split(/\r?\n|\0/);
+    readText = (path) => {
+      try {
+        return existsSync(path) ? readFileSync(path, 'utf8') : null;
+      } catch {
+        return null;
+      }
+    };
   } else {
     const base = refOption(values.base ?? 'origin/master', 'base');
     const head = refOption(values.head ?? 'HEAD', 'head');
@@ -48,9 +58,20 @@ try {
       ['-c', 'core.quotePath=false', 'diff', '--name-only', '--no-renames', '-z', `${base}...${head}`],
       { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 },
     ).split('\0');
+    readText = (path) => {
+      try {
+        return execFileSync('git', ['-c', 'core.quotePath=false', 'show', `${head}:${path}`], {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+          maxBuffer: 64 * 1024 * 1024,
+        });
+      } catch {
+        return null;
+      }
+    };
   }
 
-  const areas = areasForPaths(paths, loadAreas());
+  const areas = areasForChange(paths, loadAreas(), readText);
 
   if (values.json) {
     process.stdout.write(`${JSON.stringify({ areas }, null, 2)}\n`);
@@ -60,7 +81,10 @@ try {
     for (const area of areas) {
       console.log(`${area.id}: ${area.title}`);
       console.log(`  checklist: ${area.checklist}`);
-      for (const file of area.files) console.log(`  ${file}`);
+      for (const file of area.files) {
+        const calls = area.via?.[file];
+        console.log(calls ? `  ${file} (calls ${calls.join(', ')})` : `  ${file}`);
+      }
     }
   }
 } catch (error) {

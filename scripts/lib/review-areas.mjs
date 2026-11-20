@@ -66,3 +66,68 @@ export function areasForPaths(paths, map) {
     .map((area) => ({ ...area, files: [...area.files].sort() }))
     .sort((a, b) => a.id.localeCompare(b.id));
 }
+
+// ---- Service-call inheritance ------------------------------------------------------------
+// A file that calls `walletService.x()` is sensitive for whatever area wallet.service.ts is in,
+// whatever folder it lives in. This is how screens in the apps, the web and the panel are
+// covered without listing every route folder.
+
+const CODE_FILE = /\.(ts|tsx|js|mjs)$/;
+const SERVICE_CALL = /\b([a-z][A-Za-z0-9]*Service)\./g;
+
+export function serviceCallsIn(text) {
+  return [...new Set([...text.matchAll(SERVICE_CALL)].map((m) => m[1]))].sort();
+}
+
+export function servicePathFor(identifier) {
+  const kebab = identifier
+    .replace(/Service$/, '')
+    .replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+  return `packages/api/src/services/${kebab}.service.ts`;
+}
+
+// Like areasForPaths, plus the areas inherited from the services each file calls.
+// `readText(path)` returns the file content, or null when it cannot be read (deleted file).
+// Areas that gained files by inheritance carry `via: { file: [service, ...] }`.
+export function areasForChange(paths, map, readText) {
+  const byPath = areasForPaths(paths, map);
+  const found = new Map(
+    byPath.map((area) => [area.id, { ...area, files: new Set(area.files), via: {} }]),
+  );
+
+  const seen = new Set();
+  for (const raw of paths) {
+    const path = normalizePath(raw);
+    if (!path || seen.has(path) || !CODE_FILE.test(path) || map.ignore.some((re) => re.test(path))) continue;
+    seen.add(path);
+    const text = readText(path);
+    if (typeof text !== 'string') continue;
+    for (const identifier of serviceCallsIn(text)) {
+      const servicePath = servicePathFor(identifier);
+      if (servicePath === path) continue;
+      for (const inherited of areasForPaths([servicePath], map)) {
+        if (!found.has(inherited.id)) {
+          found.set(inherited.id, {
+            id: inherited.id,
+            title: inherited.title,
+            checklist: inherited.checklist,
+            files: new Set(),
+            via: {},
+          });
+        }
+        const area = found.get(inherited.id);
+        if (area.files.has(path)) continue;
+        area.files.add(path);
+        (area.via[path] ??= []).push(identifier);
+      }
+    }
+  }
+
+  return [...found.values()]
+    .map(({ via, files, ...area }) => ({
+      ...area,
+      files: [...files].sort(),
+      ...(Object.keys(via).length > 0 ? { via } : {}),
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
