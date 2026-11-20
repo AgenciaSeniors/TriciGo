@@ -8,8 +8,9 @@ the same `expo.version`.
   change can go by OTA. The PR states which, and why.
 - [ ] **A native change without a version bump is a P0**: an OTA would send JS that calls native
   code the installed apps do not have.
-- [ ] **Built from Linux.** Store builds and OTAs come from the GitHub workflows, not from a
-  Windows checkout. (header of `.github/workflows/eas-update.yml`)
+- [ ] **OTAs go out through the workflow.** `eas update` from a local machine does not read the
+  `env` of `eas.json`, so it ships empty `EXPO_PUBLIC_*` values (Supabase URL, Mapbox token) to every
+  phone; `eas-update.yml` sets them and checks the bundle. (header of `.github/workflows/eas-update.yml`)
 - [ ] **Startup order.** Nothing renders `useTranslation` or reads stores before their init; a crash
   at startup cannot be fixed by OTA for users who cannot open the app. (CLAUDE.md: "Un
   `useTranslation` que se renderiza antes de `initI18n` tira la app")

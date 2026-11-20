@@ -15,9 +15,12 @@
   de los vehículos")
 - [ ] **Object ownership is checked on the server** for every RPC or function that takes an id
   (ride, wallet, document, ticket). The panel hiding a button is not a check.
-- [ ] **Roles of the admin panel.** A new page or action is gated in `apps/admin/src/middleware.ts`
-  and in the RPC, for every role (`admin`, `marketing`, `operator`). (CLAUDE.md: "Panel admin:
-  middleware, dinero y notificaciones"; "Rol `operator`")
+- [ ] **Roles of the admin panel.** A new page is in the right route list of
+  `packages/utils/src/adminPanelAccess.ts` (`MARKETING_ROUTES`, `OPERATOR_ROUTES`,
+  `SUPER_ADMIN_ROUTES`), which the middleware and the menus read, its actions ask
+  `usePanelCan().can('<capability>')`, and the RPC checks the role itself, for every panel role
+  (`super_admin`, `admin`, `marketing`, `operator`). (CLAUDE.md: "Panel admin: middleware, dinero y
+  notificaciones"; "Rol `operator`")
 - [ ] **Login never changes another account's session**, does not rotate passwords on each login,
   and respects the daily and per-number code limits. (CLAUDE.md: "Login en una app deslogueaba la
   otra"; "Enlaces de login"; "Códigos de login: topes")

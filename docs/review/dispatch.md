@@ -15,8 +15,10 @@
 - [ ] **Offers reach the driver by both channels** (Realtime and push), and a missing permission
   degrades instead of breaking. (CLAUDE.md: "Auto-launch de oferta en el conductor: 2 canales")
 - [ ] **Test accounts stay out of real dispatch.** (CLAUDE.md: "Cuentas de prueba aisladas del despacho")
-- [ ] **Timers and deadlines live on the server** when they decide something (search deadline,
-  stale ride cancellation), not only in the app. (CLAUDE.md: "La búsqueda NO tiene deadline en el servidor")
+- [ ] **A deadline in the app matches one the server really has.** Timers that decide something
+  (offer expiry, stale ride cancellation) live on the server. The search has no server deadline, so
+  the app must not show "no driver found" on a timer of its own; check the live function
+  (`pg_get_functiondef`) before adding one. (CLAUDE.md: "La búsqueda NO tiene deadline en el servidor")
 - [ ] **Realtime channels:** a new channel that carries private data is private. (CLAUDE.md:
   "Canales de Realtime: cuáles son privados")
 - [ ] **Location and GPS gates** (arrival fence, waiting charge, trail) cannot be skipped by a

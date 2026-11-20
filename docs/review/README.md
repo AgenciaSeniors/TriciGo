@@ -18,7 +18,8 @@ without `core.quotePath=false` git quotes accented names and they match nothing,
 
 The map is `areas.json`: path regexes plus words of migration file names
 (`00637_wallet_shortfall_pays_cash.sql` is money because of `wallet` and `cash`). Docs and test files
-never count. `general.md` applies to every PR.
+never count, except the checklists in `docs/review/` and `AGENTS.md`, which are the review rules
+themselves and count as access. `general.md` applies to every PR.
 
 ## Changing the map
 
@@ -34,6 +35,9 @@ its library and its CLI are in the access area, so a PR that changes them needs 
 A file that calls an API service (`walletService.…`, `adminService.…`) also counts in that service's
 areas, whatever folder it lives in; that is how screens in the apps, the web and the panel are
 covered. Checklists in `docs/review/` and `AGENTS.md` are in the access area.
+
+`notSensitive` means "not sensitive by its path". A file on that list still enters an area when it
+calls a sensitive service.
 
 ## Writing a checklist item
 

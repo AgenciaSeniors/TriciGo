@@ -71,9 +71,13 @@ export function areasForPaths(paths, map) {
 // A file that calls `walletService.x()` is sensitive for whatever area wallet.service.ts is in,
 // whatever folder it lives in. This is how screens in the apps, the web and the panel are
 // covered without listing every route folder.
+//
+// Any whole-word `<camel>Service` counts, not only `walletService.`: prettier splits long chains
+// as `driverService\n  .getVehicle()`, and the import line names the service too. A comment that
+// mentions a service also counts; over-including is the safe side.
 
 const CODE_FILE = /\.(ts|tsx|js|mjs)$/;
-const SERVICE_CALL = /\b([a-z][A-Za-z0-9]*Service)\./g;
+const SERVICE_CALL = /\b([a-z][A-Za-z0-9]*Service)\b/g;
 
 export function serviceCallsIn(text) {
   return [...new Set([...text.matchAll(SERVICE_CALL)].map((m) => m[1]))].sort();

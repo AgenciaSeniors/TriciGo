@@ -146,7 +146,9 @@ not).
 
 A check reads the description on `opened`, `edited`, `synchronize` and `ready_for_review`:
 
-- the template sections are present and not empty;
+- the template sections are present and not empty. HTML comments are stripped first (the template
+  puts its placeholders, `No tests because: <reason>` and the verdict format, inside comments), an
+  empty code fence counts as empty, and "Native and OTA" needs exactly one box checked;
 - the sensitive areas are detected from the diff with a path map (`docs/review/areas.json`): money
   (wallet, payments, promotions, gifts, bonuses), access (auth, RLS, GRANTs, RPC exposure, and the
   workflows and `ops/` scripts that hold secrets and reach production), schema
@@ -159,7 +161,13 @@ A check reads the description on `opened`, `edited`, `synchronize` and `ready_fo
 - the area map is read from the **base** commit, not from the PR head, so a PR cannot weaken the
   map it is judged by (the map, its library and its CLI are themselves in the access area);
 - `pnpm test:review-areas` runs as its own CI step, so a renamed folder or an unclassified new
-  service fails the PR instead of slipping out of every area.
+  service fails the PR instead of slipping out of every area;
+- a file also enters the areas of every API service it names (`walletService`, `adminService`…),
+  so screens in any folder inherit from the service layer. Before this becomes a gate, close the
+  gaps the part 1 review left open: read each file at the merge base as well as at the head (a
+  removed call or a deleted screen counts too), resolve stdin paths from the repo root, cover the
+  service-folder helpers whose names do not end in `Service` (`uploadFileFromUri`,
+  `createFleetRequestSubmission`) and put `apps/web/src/hooks/` under `mustClassify`.
 
 ### 2. Reviewers
 
@@ -196,7 +204,8 @@ skills, in `.claude/skills/` and `.agents/skills/` (so Codex can run them when i
 
 When it is required: the code review whenever a sensitive area is touched; the plan review when
 the change touches money, dispatch state or access, or crosses several modules. Docs-only and
-copy-only changes skip both.
+copy-only changes skip both, except changes to the review rules themselves (`docs/review/`,
+`AGENTS.md`), which the map puts in access so a PR cannot quietly weaken a checklist.
 
 #### 2.4 Codex review bot in GitHub
 

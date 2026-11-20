@@ -87,11 +87,16 @@ describe('helpers', () => {
     ]);
   });
 
-  test('serviceCallsIn lists property accesses on *Service, sorted and unique', () => {
+  test('serviceCallsIn lists every *Service identifier, sorted and unique', () => {
     assert.deepEqual(
       serviceCallsIn('a walletService.getBalance() b caseOpsService.x walletService.y; adminService'),
-      ['caseOpsService', 'walletService'],
+      ['adminService', 'caseOpsService', 'walletService'],
     );
+  });
+
+  test('serviceCallsIn finds a call split across lines (prettier style) and an import', () => {
+    assert.deepEqual(serviceCallsIn('await driverService\n      .getVehicle(id)'), ['driverService']);
+    assert.deepEqual(serviceCallsIn("import { walletService } from '@tricigo/api';"), ['walletService']);
   });
 
   test('servicePathFor turns camelCase into the kebab file name', () => {
