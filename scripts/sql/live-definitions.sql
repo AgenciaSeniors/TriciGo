@@ -22,7 +22,7 @@ fns AS (
 ),
 tbls AS (
   SELECT 'table' AS kind, r.name AS object, NULL::text AS md5,
-         format('CREATE TABLE %s (%s);', r.name, (
+         format('CREATE TABLE %s (%s)%s%s;', r.name, (
            SELECT string_agg(format('%I %s%s%s', a.attname, format_type(a.atttypid, a.atttypmod),
                     CASE WHEN a.attnotnull THEN ' NOT NULL' ELSE '' END,
                     CASE
@@ -32,7 +32,9 @@ tbls AS (
                       ELSE coalesce(' DEFAULT ' || pg_get_expr(d.adbin, d.adrelid), '')
                     END), ', ' ORDER BY a.attnum)
            FROM pg_attribute a LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
-           WHERE a.attrelid = r.oid AND a.attnum > 0 AND NOT a.attisdropped))
+           WHERE a.attrelid = r.oid AND a.attnum > 0 AND NOT a.attisdropped),
+           CASE WHEN r.relkind = 'p' THEN ' PARTITION BY ' || pg_get_partkeydef(r.oid) ELSE '' END,
+           coalesce(' WITH (' || array_to_string(r.reloptions, ', ') || ')', ''))
          || E'\n-- grants: ' || coalesce(r.relacl::text, 'default')
          || E'\n-- row level security: ' || r.relrowsecurity || ', forced: ' || r.relforcerowsecurity
   FROM rels r WHERE r.relkind IN ('r', 'p')
@@ -50,6 +52,7 @@ cons AS (
   SELECT 'constraint', r.name || ' ' || k.conname, NULL::text,
          format('ALTER TABLE %s ADD CONSTRAINT %I %s;', r.name, k.conname, pg_get_constraintdef(k.oid))
   FROM pg_constraint k JOIN rels r ON r.oid = k.conrelid
+  WHERE k.contype <> 't' -- a constraint trigger is printed once, with the triggers
 ),
 idx AS (
   SELECT 'index', r.name || ' ' || i.indexrelid::regclass::text, NULL::text, pg_get_indexdef(i.indexrelid) || ';'

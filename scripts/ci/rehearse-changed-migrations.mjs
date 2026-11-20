@@ -12,7 +12,11 @@ import { parseArgs } from 'node:util';
 import { changedFiles, git, listTree, mergeBase, readBlobs } from '../lib/git-read.mjs';
 import { planRehearsals } from './lib/rehearsal-plan.mjs';
 
-const RUN_TIMEOUT_MS = 10 * 60 * 1000;
+// Ten minutes per run. REHEARSAL_RUN_TIMEOUT_MS overrides it (the tests use a short one).
+const RUN_TIMEOUT_MS = Number(process.env.REHEARSAL_RUN_TIMEOUT_MS) > 0 ? Number(process.env.REHEARSAL_RUN_TIMEOUT_MS) : 10 * 60 * 1000;
+// On Linux each run gets its own process group, so a timeout kills psql and the rest of what the
+// runner started, not only bash. (Windows has no process groups; there only bash is killed.)
+const OWN_GROUP = process.platform !== 'win32';
 
 function fail(message) {
   console.error(`rehearse: ${message}`);
@@ -20,10 +24,12 @@ function fail(message) {
 }
 
 // Runs one runner with bash, streaming its output: { status, stdout, timedOut, error }.
+// On timeout it kills the run and returns at once: waiting for `close` would wait for every
+// process that still holds the output pipes, such as a psql stuck on a lock.
 function run(runner, arg) {
   return new Promise((resolve) => {
     console.log(`::group::bash ${runner} ${arg}`);
-    const child = spawn('bash', [runner, arg], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn('bash', [runner, arg], { stdio: ['ignore', 'pipe', 'pipe'], detached: OWN_GROUP });
     let stdout = '';
     let timedOut = false;
     let done = false;
@@ -36,7 +42,15 @@ function run(runner, arg) {
     };
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill('SIGKILL');
+      try {
+        if (OWN_GROUP) process.kill(-child.pid, 'SIGKILL');
+        else child.kill('SIGKILL');
+      } catch {
+        child.kill('SIGKILL');
+      }
+      child.stdout.destroy();
+      child.stderr.destroy();
+      finish({ status: null, stdout, timedOut });
     }, RUN_TIMEOUT_MS);
     child.stdout.on('data', (chunk) => {
       stdout += chunk;

@@ -72,6 +72,20 @@ test('a GREEN run that fails is reported', () => {
   assert.match(r.stdout, /00005_change\.sql failed \(exit 1\)/);
 });
 
+test('a run that hangs is stopped at its time limit, even when a child process holds the output', () => {
+  branch('hangs', '00007', 'sleep 30; exit 1', GOOD_GREEN);
+  const started = Date.now();
+  const r = spawnSync(
+    process.execPath,
+    [join(ROOT, 'scripts/ci/rehearse-changed-migrations.mjs'), '--base', 'master', '--head', 'HEAD'],
+    { cwd: repo, encoding: 'utf8', env: { ...process.env, GITHUB_ACTIONS: '', REHEARSAL_RUN_TIMEOUT_MS: '1500' } },
+  );
+  const seconds = (Date.now() - started) / 1000;
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stdout, /run\.sh none ran out of time/);
+  assert.ok(seconds < 20, `took ${seconds} s, the 1.5 s limit did not stop the run`);
+});
+
 test('--head must be the checked-out commit, because the runners run from the working tree', () => {
   branch('elsewhere', '00006', GOOD_RED, GOOD_GREEN);
   const r = cli('--base', 'master', '--head', 'master');
