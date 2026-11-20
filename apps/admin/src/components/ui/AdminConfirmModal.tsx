@@ -1,5 +1,6 @@
 'use client';
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 interface AdminConfirmModalProps {
   open: boolean;
@@ -26,10 +27,13 @@ export function AdminConfirmModal({
   // reward referral) confirm through this modal and aren't idempotent. The
   // confirm button locks after the first click until the modal is reopened.
   const [confirming, setConfirming] = useState(false);
+  // The modal renders into document.body, which only exists in the browser.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   // Escape key handler + auto-focus + reset the double-click guard
   useEffect(() => {
-    if (!open) return;
+    if (!open || !mounted) return;
     setConfirming(false);
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onCancel();
@@ -37,12 +41,15 @@ export function AdminConfirmModal({
     document.addEventListener('keydown', handleKey);
     cancelRef.current?.focus();
     return () => document.removeEventListener('keydown', handleKey);
-  }, [open, onCancel]);
+  }, [open, onCancel, mounted]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
   // White on amber-700 passes AA (5.0:1); on amber-500 it did not (2.1:1).
   const btnColor = variant === 'danger' ? 'bg-red-600 hover:bg-red-700' : variant === 'warning' ? 'bg-amber-700 hover:bg-amber-800' : 'bg-primary-500 hover:bg-primary-600';
-  return (
+  // Portal to <body>: an ancestor with a backdrop-filter, transform or filter becomes the
+  // containing block of `position: fixed`. The header has backdrop-blur, so the "En turno"
+  // switch's number dialog was clipped to the header's 64 px and could not be used.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4" onClick={onCancel}>
       <div role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title" className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl p-6 max-w-md w-full my-auto max-h-[90dvh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <h3 id="confirm-modal-title" className="text-lg font-semibold text-neutral-900 dark:text-neutral-100 mb-2">{title}</h3>
@@ -72,6 +79,7 @@ export function AdminConfirmModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
