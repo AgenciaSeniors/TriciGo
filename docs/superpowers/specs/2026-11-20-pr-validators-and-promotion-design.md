@@ -148,7 +148,8 @@ A check reads the description on `opened`, `edited`, `synchronize` and `ready_fo
 
 - the template sections are present and not empty;
 - the sensitive areas are detected from the diff with a path map (`docs/review/areas.json`): money
-  (wallet, payments, promotions, gifts, bonuses), access (auth, RLS, GRANTs, RPC exposure), schema
+  (wallet, payments, promotions, gifts, bonuses), access (auth, RLS, GRANTs, RPC exposure, and the
+  workflows and `ops/` scripts that hold secrets and reach production), schema
   (migrations), dispatch (ride state, offers, matching), Edge Functions, native. If any is touched,
   the description must carry the verdict line produced by the local cross-review:
   `Cross-review: <verdict> <work-id> <sha>`, where `<verdict>` is `APPROVED`,
