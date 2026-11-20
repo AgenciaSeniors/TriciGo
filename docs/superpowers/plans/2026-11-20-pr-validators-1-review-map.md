@@ -991,7 +991,7 @@ Expected: `exit=0` for both (nothing in this PR should change them).
 - [ ] **Step 3: Run the CLI on this branch**
 
 Run: `node scripts/review-areas.mjs --base origin/master`
-Expected: `No sensitive area touched.` (this PR changes scripts, docs, the PR template, `AGENTS.md`, `CLAUDE.md` and `package.json`, none of them in an area).
+Expected (after the review fix): `access` for `docs/review/areas.json` and the two review-areas scripts, and `native` for the root `package.json`. The map protects itself and the root `package.json` holds the native `pnpm.overrides`, so this PR is the first one the map marks as sensitive. The required cross-review only becomes a CI gate in part 2; for this PR it is recorded in the PR body.
 
 - [ ] **Step 4: Ask Eduardo before pushing and opening the PR**
 

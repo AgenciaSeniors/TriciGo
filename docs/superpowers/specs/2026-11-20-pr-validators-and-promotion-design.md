@@ -155,7 +155,11 @@ A check reads the description on `opened`, `edited`, `synchronize` and `ready_fo
   `Cross-review: <verdict> <work-id> <sha>`, where `<verdict>` is `APPROVED`,
   `APPROVED_WITH_RESERVATIONS` or `FIX_CONFIRMED`;
 - the reviewed `<sha>` must be an ancestor of the PR head, and no file of a sensitive area may
-  change after it. A fix after the review needs the round-2 verdict line.
+  change after it. A fix after the review needs the round-2 verdict line;
+- the area map is read from the **base** commit, not from the PR head, so a PR cannot weaken the
+  map it is judged by (the map, its library and its CLI are themselves in the access area);
+- `pnpm test:review-areas` runs as its own CI step, so a renamed folder or an unclassified new
+  service fails the PR instead of slipping out of every area.
 
 ### 2. Reviewers
 
