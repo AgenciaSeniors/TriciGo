@@ -34,15 +34,15 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 | R2-12 | Pasajero | Inicio | Con la app en inglés, el inicio sigue casi todo en español | verificado (ronda 3) |
 | R2-13 | Pasajero | Ajustes | Tocar "Idioma preferido" cambia el idioma al instante, sin mostrar opciones | verificado (ronda 3) |
 | R2-14 | Pasajero | Calificar y chat | Lector de pantalla: estrellas sin número y remitente del chat genérico | verificado (ronda 3) |
-| R3-01 | Pasajero | Inicio → "Tu último viaje" | "Volver a [destino]" termina en "Ubicación inválida" y no deja pedir el viaje | en arreglo (#1224) |
-| R3-02 | Pasajero | Elegir servicio | Con la app en inglés, el selector de servicio sigue casi todo en español | en arreglo (#1224) |
-| R3-03 | Pasajero | Buscar destino y parada | El campo de búsqueda no toma el foco al abrirse: hay que tocarlo | en arreglo (#1224) |
-| R3-04 | Pasajero | Buscar destino | Las direcciones de Google llegan en inglés ("Vedado, Havana, Cuba") | en arreglo (#1224) |
-| R3-05 | Pasajero | Buscar destino | Elegir una zona de Google ("Vedado") ya no pide confirmar el punto en el mapa | en arreglo (#1224) |
-| R3-06 | Pasajero y conductor | Notificaciones | Abrir la app o volver al inicio borra todas sus notificaciones del teléfono | en arreglo (#1224) |
-| R3-07 | Pasajero | Notificaciones | Si el permiso se da durante la sesión, las notificaciones del viaje caen en el canal "Miscellaneous" | en arreglo (#1224) |
-| R3-08 | Pasajero | Accesibilidad | "Back" en inglés, y "Copiado" en un botón que todavía no copió | en arreglo (#1224) |
-| R3-09 | Pasajero | Buscar destino | "23 y 12" sugiere "12 e/ Calle 12" | en arreglo (#1224) |
+| R3-01 | Pasajero | Inicio → "Tu último viaje" | "Volver a [destino]" termina en "Ubicación inválida" y no deja pedir el viaje | arreglado (#1224) |
+| R3-02 | Pasajero | Elegir servicio | Con la app en inglés, el selector de servicio sigue casi todo en español | arreglado (#1224) |
+| R3-03 | Pasajero | Buscar destino y parada | El campo de búsqueda no toma el foco al abrirse: hay que tocarlo | arreglado (#1224) |
+| R3-04 | Pasajero | Buscar destino | Las direcciones de Google llegan en inglés ("Vedado, Havana, Cuba") | arreglado (#1224) |
+| R3-05 | Pasajero | Buscar destino | Elegir una zona de Google ("Vedado") ya no pide confirmar el punto en el mapa | arreglado (#1224) |
+| R3-06 | Pasajero y conductor | Notificaciones | Abrir la app o volver al inicio borra todas sus notificaciones del teléfono | arreglado (#1224) |
+| R3-07 | Pasajero | Notificaciones | Si el permiso se da durante la sesión, las notificaciones del viaje caen en el canal "Miscellaneous" | arreglado (#1224) |
+| R3-08 | Pasajero | Accesibilidad | "Back" en inglés, y "Copiado" en un botón que todavía no copió | arreglado (#1224) |
+| R3-09 | Pasajero | Buscar destino | "23 y 12" sugiere "12 e/ Calle 12" | arreglado (#1224) |
 
 ## Fichas
 
@@ -270,7 +270,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** direcciones y nombres en español.
 - **Ojo:** `google_places_cache` guarda cada respuesta 30 días por consulta y zona. Después del arreglo, las consultas ya guardadas siguen en inglés hasta que venzan o se borren.
 - **Volver a probar:** buscar un barrio con una consulta que no esté en `google_places_cache` y leer la dirección.
-- **Arreglo (#1224):** la llamada de detalles del lugar pide `languageCode=es` y `regionCode=CU`. La clave del caché pasó a `v2`, así que las respuestas guardadas en inglés dejan de usarse sin borrar nada. **Hace falta desplegar `search-places-google`.**
+- **Arreglo (#1224):** la llamada de detalles del lugar pide `languageCode=es` y `regionCode=CU`. La clave del caché pasó a `v2`, así que las respuestas guardadas en inglés dejan de usarse sin borrar nada. **Desplegado el 2026-11-20 (versión 21).** En el caché de los 30 días anteriores, el 19 % de las direcciones decía "Havana" sin "La Habana", casi todas de lugares sin calle ("4JVC+8MH, Havana, Cuba"). Después del despliegue, esos lugares llegan con "La Habana", y "Cayo Hueso" también. **Queda:** el barrio Vedado sigue llegando como "Vedado, Havana", aun pidiendo español: es el dato de Google. Para cambiarlo haría falta reescribir "Havana" en las direcciones, y eso queda para decidir.
 
 ### R3-05 · Elegir "Vedado" ya no pide confirmar el punto
 
@@ -279,7 +279,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Causa:** la función guarda solo el primer tipo que da Google (`matchedCategory: d.types[0]`, `google.ts:268`). Para Vedado, Google daba `political` el 2026-11-09 a las 00:24 y da `geocode` desde las 00:43 (`google_places_cache`). `isZoneLevelResult` (`packages/utils/src/addressSearch.ts:265`) dice que no es zona cuando la categoría no está en `ZONE_LEVEL_CATEGORIES`, y no prueba el nombre del barrio.
 - **Esperado:** cualquier barrio, municipio o ciudad pide confirmar el punto.
 - **Volver a probar:** buscar "Vedado" y elegir el resultado de Google: tiene que abrir el mapa para confirmar el punto.
-- **Arreglo (#1224):** la función guarda el tipo de zona más específico de todos los que da Google (`pickMatchedCategory`), no solo el primero. Para Vedado queda `sublocality` aunque Google ponga `geocode` primero. Mismo despliegue que R3-04.
+- **Arreglo (#1224):** la función guarda el tipo de zona más específico de todos los que da Google (`pickMatchedCategory`), no solo el primero. Para Vedado queda `sublocality` aunque Google ponga `geocode` primero. Mismo despliegue que R3-04. **Desplegado el 2026-11-20 (versión 21):** buscando "cayo hueso", Google devolvió el barrio como `neighborhood`, y al elegirlo la app pidió "Es una zona amplia — ajusta el pin al lugar exacto". Una zona se ordena debajo de los lugares concretos (#989), así que con "vedado" no entra entre los 6 primeros.
 
 ### R3-06 · Abrir la app o volver al inicio borra todas sus notificaciones
 
