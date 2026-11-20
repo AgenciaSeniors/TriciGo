@@ -126,6 +126,11 @@ export function checkMigrations({ changes, baseMigrations, masterMigrations = ba
   const leaving = new Set();
   const added = [];
   for (const change of changes) {
+    if (change.status !== 'D' && change.path.startsWith('supabase/migrations/') && !MIGRATION.test(change.path)) {
+      errors.push(
+        `${change.path} does not follow the name supabase/migrations/<number>_<name>.sql, so the migration checks would not see it. Rename it.`,
+      );
+    }
     const old = change.oldPath ?? change.path;
     if (onBase.has(old) && MIGRATION.test(old)) {
       if (change.status === 'R' || change.status === 'D') leaving.add(old);
