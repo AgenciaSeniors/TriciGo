@@ -62,7 +62,24 @@ describe('driver profile trips label', () => {
     ['en', 2, 'trips'],
     ['pt', 1, 'viagem'],
     ['pt', 2, 'viagens'],
+    // A driver with no rides yet. CLDR puts 0 in Portuguese's "one" category,
+    // so without a _zero form the screen read "0 viagem".
+    ['es', 0, 'viajes'],
+    ['en', 0, 'trips'],
+    ['pt', 0, 'viagens'],
   ] as const)('%s, %i: %s', (lng, count, expected) => {
     expect(i18n.getFixedT(lng, 'rider')('ride.driver_profile_trips', { count })).toBe(expected);
+  });
+});
+
+// The card leaves the count out at 0, but the web version of the active ride
+// (WebActiveRideView) shows it whenever the driver has a count.
+describe('ride count phrase with no rides', () => {
+  it.each([
+    ['es', '0 viajes'],
+    ['en', '0 rides'],
+    ['pt', '0 viagens'],
+  ] as const)('%s: %s', (lng, expected) => {
+    expect(i18n.getFixedT(lng, 'rider')('ride.driver_rides_count', { count: 0 })).toBe(expected);
   });
 });
