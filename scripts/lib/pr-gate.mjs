@@ -103,18 +103,23 @@ export function latestVerdict(body) {
 const isTest = (path) => TEST.some((re) => re.test(path));
 const isSource = (path) => !isTest(path) && SOURCE.some((re) => re.test(path));
 
-export function checkTests(paths, body) {
-  const sources = paths.filter(isSource);
-  if (sources.length === 0 || paths.some(isTest) || reasonFor(body, 'No tests because')) return result();
+// changes: [{ status, path }] (plain paths count as modified). A deleted test does not count.
+export function checkTests(changes, body) {
+  const all = changes.map((change) => (typeof change === 'string' ? { status: 'M', path: change } : change));
+  const sources = all.map((change) => change.path).filter(isSource);
+  const hasTest = all.some((change) => change.status !== 'D' && isTest(change.path));
+  if (sources.length === 0 || hasTest || reasonFor(body, 'No tests because')) return result();
   const listed = sources.slice(0, 3).join(', ') + (sources.length > 3 ? ', …' : '');
   return result([
     `This PR changes source (${listed}) and no test. Add a test that fails without the change, or a line "No tests because: <reason>".`,
   ]);
 }
 
-// changes: changedFiles(fork, head) with renames. baseMigrations: migration paths at the merge
-// base. openPrs: [{ number, files: [path] }] of the open PRs (this one included or not).
-export function checkMigrations({ changes, baseMigrations, body, prNumber = Infinity, openPrs = [] }) {
+// changes: changedFiles(fork, head) with renames (it carries the blob ids). baseMigrations:
+// migration paths at the merge base (what the PR may not edit). masterMigrations: migration paths
+// on master as it is now (the numbers taken); defaults to baseMigrations. openPrs:
+// [{ number, files: [path] }] of the open PRs (this one included or not).
+export function checkMigrations({ changes, baseMigrations, masterMigrations = baseMigrations, body, prNumber = Infinity, openPrs = [] }) {
   const errors = [];
   const edits = migrationEdits(body);
   const onBase = new Set(baseMigrations);
@@ -124,10 +129,12 @@ export function checkMigrations({ changes, baseMigrations, body, prNumber = Infi
     const old = change.oldPath ?? change.path;
     if (onBase.has(old) && MIGRATION.test(old)) {
       if (change.status === 'R' || change.status === 'D') leaving.add(old);
-      const pureRename = change.status === 'R' && change.score === 100;
+      const movedOut = change.status === 'R' && !MIGRATION.test(change.path);
+      const sameContent = Boolean(change.oldBlob) && change.oldBlob === change.newBlob;
+      const pureRename = change.status === 'R' && !movedOut && sameContent;
       const keepsOld = change.status === 'A' || change.status === 'C';
       if (!pureRename && !keepsOld && !edits.has(old)) {
-        const verb = change.status === 'D' ? 'deletes' : 'changes';
+        const verb = change.status === 'D' ? 'deletes' : movedOut ? 'moves it out of supabase/migrations/, which deletes' : 'changes';
         errors.push(
           `${old} is already on master and this PR ${verb} it. Write a new migration instead, or add a line "Migration edit: ${old} <reason>".`,
         );
@@ -138,18 +145,25 @@ export function checkMigrations({ changes, baseMigrations, body, prNumber = Infi
     }
   }
   const numberOf = (path) => MIGRATION.exec(path)[1];
-  const baseNumbers = new Map();
-  for (const path of baseMigrations) {
-    if (MIGRATION.test(path) && !leaving.has(path)) baseNumbers.set(numberOf(path), path);
+  const masterNumbers = new Map();
+  for (const path of masterMigrations) {
+    if (MIGRATION.test(path) && !leaving.has(path)) masterNumbers.set(numberOf(path), path);
+  }
+  const addedByNumber = new Map();
+  for (const path of added) addedByNumber.set(numberOf(path), [...(addedByNumber.get(numberOf(path)) ?? []), path]);
+  for (const [number, paths] of addedByNumber) {
+    if (paths.length > 1) errors.push(`Number ${number} is used twice in this PR: ${paths.join(', ')}.`);
   }
   for (const path of added) {
     const number = numberOf(path);
-    if (baseNumbers.has(number)) {
-      errors.push(`${path}: number ${number} is already used on master by ${baseNumbers.get(number)}. Take the next free number.`);
+    if (masterNumbers.has(number)) {
+      errors.push(`${path}: number ${number} is already used on master by ${masterNumbers.get(number)}. Take the next free number.`);
     }
     for (const pr of openPrs) {
       if (!(pr.number < prNumber)) continue;
-      const taken = (pr.files ?? []).find((file) => MIGRATION.test(file) && !onBase.has(file) && numberOf(file) === number);
+      const taken = (pr.files ?? []).find(
+        (file) => MIGRATION.test(file) && !onBase.has(file) && !masterNumbers.has(numberOf(file)) && numberOf(file) === number,
+      );
       if (taken) errors.push(`${path}: number ${number} is taken by the older open PR #${pr.number} (${taken}). The older PR keeps it.`);
     }
   }

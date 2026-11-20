@@ -29,12 +29,13 @@ function refOption(value, name) {
 
 // Areas of the paths changed between two commits, with every map; files are read at both ends.
 function areasBetween(from, to, maps, helpers) {
-  const paths = changedFiles(from, to, { renames: false }).map((change) => change.path);
+  const changes = changedFiles(from, to, { renames: false });
+  const paths = changes.map((change) => change.path);
   const code = paths.filter((path) => CODE_FILE.test(path));
   const atTo = readBlobs(to, code);
   const atFrom = readBlobs(from, code);
   const read = (path) => [atTo.get(path), atFrom.get(path)];
-  return { paths, areas: unionAreas(...maps.map((map) => areasForChange(paths, map, read, helpers))) };
+  return { changes, paths, areas: unionAreas(...maps.map((map) => areasForChange(paths, map, read, helpers))) };
 }
 
 const annotate = (level, title, message) => {
@@ -79,27 +80,33 @@ try {
     ...readBlobs(head, listTree(head, SERVICES_DIR)),
     ...readBlobs(fork, listTree(fork, SERVICES_DIR)),
   ]);
-  const { paths, areas } = areasBetween(fork, head, maps, helpers);
+  const { changes, paths, areas } = areasBetween(fork, head, maps, helpers);
 
+  // The reviewed commit must be a commit of the PR (an ancestor of the head that master does not
+  // have). Merging master into the PR after the review moves the merge base past it, so the merge
+  // base is not used here; the files changed after the review only count when the PR itself
+  // changes them, so what a merge of master brings in is left out.
   const verdict = latestVerdict(body);
   let reviewedIsAncestor = false;
   let sensitiveAfterReview = [];
   if (verdict && commitExists(verdict.sha)) {
-    reviewedIsAncestor = isAncestor(verdict.sha, head) && isAncestor(fork, verdict.sha);
+    reviewedIsAncestor = isAncestor(verdict.sha, head) && !isAncestor(verdict.sha, base);
     if (reviewedIsAncestor) {
+      const inThisPr = new Set(paths);
       const after = areasBetween(verdict.sha, head, maps, helpers);
-      sensitiveAfterReview = [...new Set(after.areas.flatMap((area) => area.files))].sort();
+      sensitiveAfterReview = [...new Set(after.areas.flatMap((area) => area.files))].filter((file) => inThisPr.has(file)).sort();
     }
   }
 
   const outcomes = [
     ['Description', checkDescription(body)],
-    ['Tests', checkTests(paths, body)],
+    ['Tests', checkTests(changes, body)],
     [
       'Migrations',
       checkMigrations({
         changes: changedFiles(fork, head, { renames: true }),
         baseMigrations: listTree(fork, 'supabase/migrations'),
+        masterMigrations: listTree(base, 'supabase/migrations'),
         body,
         prNumber,
         openPrs,

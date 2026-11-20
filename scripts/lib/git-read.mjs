@@ -36,21 +36,23 @@ export function isAncestor(a, b) {
   }
 }
 
-// Changed files between two commits: [{ status, path, oldPath?, score? }]. `status` is the letter
-// git prints (A, M, D, T, R, C). With renames on, a rename carries its similarity in `score`
-// (100 = the same content under a new name).
+// Changed files between two commits: [{ status, path, oldPath?, score?, oldBlob, newBlob }].
+// `status` is the letter git prints (A, M, D, T, R, C). With renames on, a rename carries its
+// similarity in `score`, but only equal blob ids prove the content did not change: git can score a
+// file whose lines were only reordered as R100.
 export function changedFiles(from, to, { renames = true } = {}) {
-  const parts = git(['diff', '--name-status', '-z', renames ? '--find-renames' : '--no-renames', from, to])
+  const parts = git(['diff', '--raw', '-z', '--no-abbrev', renames ? '--find-renames' : '--no-renames', from, to])
     .split('\0')
     .filter((part) => part !== '');
   const changes = [];
   for (let i = 0; i < parts.length; ) {
-    const code = parts[i++];
+    // ":<old mode> <new mode> <old blob> <new blob> <status>", then one path, or two for R and C.
+    const [, , oldBlob, newBlob, code] = parts[i++].split(' ');
     const status = code[0];
     if (status === 'R' || status === 'C') {
-      changes.push({ status, score: Number(code.slice(1)), oldPath: parts[i++], path: parts[i++] });
+      changes.push({ status, score: Number(code.slice(1)), oldPath: parts[i++], path: parts[i++], oldBlob, newBlob });
     } else {
-      changes.push({ status, path: parts[i++] });
+      changes.push({ status, path: parts[i++], oldBlob, newBlob });
     }
   }
   return changes;
@@ -61,10 +63,15 @@ export function listTree(ref, dir) {
 }
 
 // Text of many files at one commit, in a single git process: Map(path -> text). Paths that are
-// missing or are not files are left out.
+// missing or are not files are left out. `cat-file --batch` reads one request per line, so a path
+// holding a line break would shift every answer after it: such a path throws instead.
 export function readBlobs(ref, paths) {
   const result = new Map();
   if (paths.length === 0) return result;
+  const broken = paths.find((path) => /[\r\n]/.test(path));
+  if (broken !== undefined) {
+    throw new Error(`a file name holds a line break, which the gate cannot read safely: ${JSON.stringify(broken)}`);
+  }
   const out = execFileSync('git', ['cat-file', '--batch'], {
     input: paths.map((path) => `${ref}:${path}`).join('\n') + '\n',
     stdio: ['pipe', 'pipe', 'pipe'],

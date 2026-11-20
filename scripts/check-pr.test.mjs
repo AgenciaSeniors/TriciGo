@@ -41,14 +41,21 @@ describe('git-read', () => {
     const cwd = process.cwd();
     process.chdir(repo);
     try {
-      assert.deepEqual(changedFiles('HEAD~1', 'HEAD'), [
+      const [rename, ...rest] = changedFiles('HEAD~1', 'HEAD');
+      assert.deepEqual(rest, []);
+      assert.deepEqual(
+        { status: rename.status, score: rename.score, oldPath: rename.oldPath, path: rename.path },
         { status: 'R', score: 100, oldPath: 'a/uno.sql', path: 'a/dos.sql' },
-      ]);
+      );
+      assert.match(rename.oldBlob, /^[0-9a-f]{40}$/);
+      assert.equal(rename.newBlob, rename.oldBlob);
       assert.deepEqual(
         changedFiles('HEAD~1', 'HEAD', { renames: false }).map((c) => `${c.status} ${c.path}`).sort(),
         ['A a/dos.sql', 'D a/uno.sql'],
       );
-      assert.deepEqual([...readBlobs('HEAD', ['a/ñandú.txt', 'a/missing.txt', 'a'])], [['a/ñandú.txt', 'hola\n']]);
+      // A tree before a file: its content is skipped by size, the file after it is still read right.
+      assert.deepEqual([...readBlobs('HEAD', ['a', 'a/missing.txt', 'a/ñandú.txt'])], [['a/ñandú.txt', 'hola\n']]);
+      assert.throws(() => readBlobs('HEAD', ['a/x\ny.txt']), /line break/);
       assert.equal(isAncestor('HEAD~1', 'HEAD'), true);
       assert.equal(isAncestor('HEAD', 'HEAD~1'), false);
       assert.equal(commitExists('HEAD'), true);
@@ -166,6 +173,14 @@ describe('tests come with the change', () => {
     }
     assert.deepEqual(checkTests(['docs/review/money.md', '.github/workflows/ci.yml'], filledBody()).errors, []);
   });
+
+  test('deleting a test does not count as adding one', () => {
+    const changes = [
+      { status: 'M', path: 'apps/web/src/app/page.tsx' },
+      { status: 'D', path: 'apps/web/src/__tests__/page.test.tsx' },
+    ];
+    assert.equal(checkTests(changes, filledBody()).errors.length, 1);
+  });
 });
 
 describe('migrations', () => {
@@ -183,9 +198,41 @@ describe('migrations', () => {
     assert.deepEqual(run([{ status: 'M', path: base[0] }], { body }), []);
   });
 
-  test('a pure rename passes, a rename that also edits fails', () => {
-    assert.deepEqual(run([{ status: 'R', score: 100, oldPath: base[1], path: 'supabase/migrations/00652_b.sql' }]), []);
-    assert.equal(run([{ status: 'R', score: 92, oldPath: base[1], path: 'supabase/migrations/00652_b.sql' }]).length, 1);
+  const rename = (extra = {}) => ({
+    status: 'R',
+    score: 100,
+    oldPath: base[1],
+    path: 'supabase/migrations/00652_b.sql',
+    oldBlob: 'b1',
+    newBlob: 'b1',
+    ...extra,
+  });
+
+  test('a rename passes only with the same blob and inside supabase/migrations/', () => {
+    assert.deepEqual(run([rename()]), []);
+    // git can score a file whose lines were only reordered as R100: the blob decides.
+    assert.equal(run([rename({ newBlob: 'b2' })]).length, 1);
+    assert.equal(run([rename({ score: 92, newBlob: 'b2' })]).length, 1);
+    assert.match(run([rename({ path: 'supabase/old/00651_b.sql' })])[0], /moves it out of supabase\/migrations/);
+  });
+
+  test('two new migrations of the PR may not share a number', () => {
+    const errors = run([
+      { status: 'A', path: 'supabase/migrations/00700_a.sql' },
+      { status: 'A', path: 'supabase/migrations/00700_b.sql' },
+    ]);
+    assert.match(errors[0], /00700 is used twice in this PR/);
+  });
+
+  test('the numbers are checked against master as it is now, not where the branch started', () => {
+    const errors = checkMigrations({
+      changes: [{ status: 'A', path: 'supabase/migrations/00700_mine.sql' }],
+      baseMigrations: base,
+      masterMigrations: [...base, 'supabase/migrations/00700_merged.sql'],
+      body: filledBody(),
+      prNumber: 50,
+    }).errors;
+    assert.match(errors[0], /already used on master by supabase\/migrations\/00700_merged\.sql/);
   });
 
   test('a new migration may not reuse a number of master', () => {
@@ -195,10 +242,7 @@ describe('migrations', () => {
 
   test('a renumbering in the same PR frees the old number', () => {
     assert.deepEqual(
-      run([
-        { status: 'R', score: 100, oldPath: base[1], path: 'supabase/migrations/00653_b.sql' },
-        { status: 'A', path: 'supabase/migrations/00651_c.sql' },
-      ]),
+      run([rename({ path: 'supabase/migrations/00653_b.sql' }), { status: 'A', path: 'supabase/migrations/00651_c.sql' }]),
       [],
     );
   });
@@ -362,6 +406,55 @@ describe('CLI', () => {
     assert.equal(r.status, 1, r.stdout + r.stderr);
     assert.match(r.stdout, /number 00001 is already used on master/);
     assert.match(r.stdout, /older open PR #3/);
+  });
+
+  test('a number master took after the branch started fails', () => {
+    g('checkout', '-q', '-B', 'stale', 'master');
+    write('supabase/migrations/00003_mine.sql', 'select 1;\n');
+    write('supabase/tests/00003/run.sh', 'x\n');
+    commit('mine');
+    g('checkout', '-q', '-B', 'master-with-3', 'master');
+    write('supabase/migrations/00003_merged.sql', 'select 1;\n');
+    commit('master takes 00003');
+    g('checkout', '-q', 'stale');
+    const r = gate(filledBody(), 'master-with-3');
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /number 00003 is already used on master by supabase\/migrations\/00003_merged\.sql/);
+  });
+
+  test('merging master into the PR after the review keeps the verdict valid', () => {
+    g('checkout', '-q', '-B', 'reviewed', 'master');
+    write('apps/client/src/zz/Pay3.tsx', 'walletService.pay();\n');
+    write('apps/client/src/zz/__tests__/Pay3.test.tsx', 'test\n');
+    const reviewed = commit('pay3');
+    g('checkout', '-q', '-B', 'master-later', 'master');
+    write('docs/other.md', 'unrelated\n');
+    commit('master moves on');
+    g('checkout', '-q', 'reviewed');
+    g('-c', 'user.email=t@t', '-c', 'user.name=t', 'merge', '-q', '--no-edit', 'master-later');
+    const r = gate(filledBody({ 'Cross-review': `Cross-review: APPROVED w1 ${reviewed}` }), 'master-later');
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+  });
+
+  test('a file name with a line break stops the gate instead of hiding other files', () => {
+    g('checkout', '-q', '-B', 'odd-name', 'master');
+    write('apps/client/src/zz/Pay4.tsx', 'walletService.pay();\n');
+    commit('pay4');
+    // Windows cannot create such a file, so the tree is built with git plumbing.
+    const run = (args, input) => execFileSync('git', args, { cwd: repo, input, encoding: 'utf8' }).trim();
+    const blob = run(['hash-object', '-w', '--stdin'], 'x\n');
+    const entries = execFileSync('git', ['ls-tree', '-z', 'HEAD'], { cwd: repo, encoding: 'utf8' });
+    const tree = run(['mktree', '-z'], `${entries}100644 blob ${blob}\tA\nB.tsx\0`);
+    const odd = run(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit-tree', tree, '-p', 'HEAD', '-m', 'odd name']);
+    const file = join(outside, 'body.md');
+    writeFileSync(file, filledBody());
+    const r = spawnSync(
+      process.execPath,
+      [join(ROOT, 'scripts/check-pr.mjs'), '--base', 'master', '--head', odd, '--body-file', file],
+      { cwd: repo, encoding: 'utf8', env },
+    );
+    assert.equal(r.status, 2, r.stdout + r.stderr);
+    assert.match(r.stderr, /line break/);
   });
 
   test('bad or missing arguments fail closed with exit 2', () => {
