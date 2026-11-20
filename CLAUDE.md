@@ -2390,6 +2390,16 @@ Desde la 00660, `/rides/[id]/assist` también ayuda a un viaje `accepted`, `driv
   JOIN rides r ON r.id = d.ride_id ORDER BY d.released_at DESC LIMIT 20;
   ```
 
+### El rastro de un viaje es el de su chofer actual (00692, 2026-11-20)
+
+Como 00686 guarda los puntos del chofer liberado, un viaje que después toma otro chofer queda con el rastro de los dos. Seis funciones leían el rastro sin mirar de quién era cada punto. La más grave era `update_ride_status_v2`: su camino C acepta un punto del rastro cerca del objetivo como prueba de llegada, así que un punto del chofer anterior junto a la recogida le dejaba al nuevo marcar "Llegué" a 2 km y arrancar el cobro de espera. El filtro `recorded_at >= accepted_at` no lo frena, porque `recorded_at` es el reloj del celular y en Cuba puede ir una hora adelantado (el de Denis lo iba el 2026-11-19).
+
+- **La regla:** toda lectura de `ride_location_events` para un viaje se queda con los puntos de su chofer actual: `le.driver_id IS NOT DISTINCT FROM COALESCE(<driver_id del viaje>, le.driver_id)`. Un viaje sin chofer (cancelado mientras buscaba) conserva todos sus puntos, así el panel los sigue dibujando. Para probar la llegada, en `update_ride_status_v2`, el filtro es `le.driver_id = v_ride.driver_id`.
+- **Parcheadas** (en sitio, con verja md5): `update_ride_status_v2` `e856be95…/8718`, `compute_ride_trail_distance_m` `45f4502e…/1707`, `calculate_ride_distance` `b3e8adb5…/1048`, `get_shared_trip_state` `da39d1ed…/856`, `check_stuck_active_rides` `f045c051…/9425`, `admin_get_ride_track` `838355cb…/664`. `_ride_gps_departure_at` y `admin_active_ride_context` ya filtraban. Una migración que redefina cualquiera de estas funciones parte de estos cuerpos.
+- **Una función nueva que lea el rastro** usa la misma condición.
+- **Medido:** en 60 días un solo viaje tuvo puntos de dos choferes (`79b5d8a9`, 2026-11-19) y no se cobró nada por eso.
+- **Ensayo en prod** dentro de un bloque revertido, con QA Auto y QA Moto: antes, QA Moto marcó "Llegué" a 1.993 m usando el punto de QA Auto, y el enlace compartido mostraba a QA Auto. Después, "Llegué" se rechaza con "Estás a 1993 m" y pasa cuando el punto es suyo, y el enlace muestra a QA Moto. La migración, aplicada dos veces, deja los mismos cuerpos.
+
 ---
 
 ### Chat, soporte, objetos perdidos e incidentes: qué escribe un cliente (00653, 2026-10-11)
