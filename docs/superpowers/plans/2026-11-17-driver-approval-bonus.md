@@ -155,4 +155,4 @@ export type { DriverDecision, ReviewDecision, OutreachChannelCode, ApprovalBonus
 
 ### Task 6: Hand-over
 
-- [ ] Ask the owner for the OK to apply 00691 in prod (MCP `apply_migration`, re-checking master and open PRs for 00691 just before), then to push and open the PR (title and body in Portuguese). After applying: verify by object (md5 of both bodies, grants, the key, one claim per approved driver with a confirmed phone: 249 on 2026-11-20) and that admins stop loading the bonus by hand.
+- [x] Ask the owner for the OK to apply 00691 in prod (MCP `apply_migration`, re-checking master and open PRs for 00691 just before), then to push and open the PR (title and body in Portuguese). After applying: verify by object (md5 of both bodies, grants, the key, one claim per approved driver with a confirmed phone: 249 on 2026-11-20) and that admins stop loading the bonus by hand.

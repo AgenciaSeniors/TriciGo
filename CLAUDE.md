@@ -2661,6 +2661,7 @@ Cada conductor aprobado recibe un bono en su billetera `tricicoin`: 5000 CUP des
   ```
 - **Cuerpos tras 00691** (md5 de `prosrc`): `_pay_driver_approval_bonus` `26d54b40b6770e5cb2269fd32d522878` y `ops_set_driver_status` `13154cbfcbcd4e63000d19aec08f07f1`. La migración se niega a correr si `ops_set_driver_status` no tiene el cuerpo de la 00672 (`a27519ab…`) ni el suyo. Una migración que redefina `ops_set_driver_status` tiene que partir de este cuerpo, o la aprobación deja de pagar sin ningún error.
 - **Ensayo en prod:** `supabase/tests/00691/prod-rehearsal.sql`, generado desde `prod-rehearsal.template.sql` con `make-rehearsal.py`. Es un solo `DO` que comprueba el md5 de la migración que lleva adentro, la aplica, prueba como un operador y un admin reales con cuentas de prueba nuevas, y deshace todo al final. El 2026-11-17 dio 25 chequeos y 0 fallas, y otra vez el 2026-11-20 después de renumerar la migración de 00686 a 00691 (master había tomado el 00686), con prod igual que antes.
+- **Estado: aplicada en prod el 2026-11-20** por MCP (`20261120033359`), dentro de un `DO` que solo la ejecutaba si el texto tenía el md5 del archivo (`daf9d0c7…`). Verificado por objeto: los dos md5 de arriba, sin `\r`; `_pay_driver_approval_bonus` no la ejecuta `anon`, `authenticated` ni `service_role`; `ops_set_driver_status` sigue abierta a `authenticated` y cerrada a `anon`; el monto en 5000; 249 teléfonos registrados y ningún conductor aprobado con el teléfono libre.
 
 ### Canales de Realtime: cuáles son privados y cómo agregar uno (00626, verificado 2026-10-07)
 
