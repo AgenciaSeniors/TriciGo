@@ -22,6 +22,7 @@ import { formatAdminDate } from '@/lib/formatDate';
 import { DOC_TYPE_LABEL, VEHICLE_TYPE_LABEL, labelFor } from '@/lib/labels';
 import { usePanelCan } from '@/lib/usePanelCan';
 import { opsErrorMessage } from '@/lib/opsErrors';
+import { approvalToast } from '@/lib/approvalBonus';
 import { DriverDetailReadOnly } from '@/components/panel/DriverDetailReadOnly';
 import {
   ArrowLeft,
@@ -360,9 +361,15 @@ function AdminDriverDetailPage() {
     setActionLoading(true);
     setActionsMenuOpen(false);
     try {
-      await onboardingService.setDriverStatus(id, 'approved', driver.profile.status);
+      // 00686: a first approval also pays the approval bonus; the toast says what happened to it.
+      const { bonus } = await onboardingService.setDriverStatus(id, 'approved', driver.profile.status);
       await refreshDriver();
-      showToast('success', t('drivers.approved_success', { defaultValue: 'Conductor aprobado' }));
+      const toast = approvalToast(bonus);
+      showToast(
+        toast.type,
+        t(toast.key, { ...toast.values, defaultValue: toast.defaultValue }),
+        toast.type === 'warning' ? 10000 : undefined,
+      );
     } catch (err) {
       showToast('error', opsErrorMessage(err, t));
     } finally {

@@ -61,6 +61,44 @@ describe('onboardingService.setDriverStatus', () => {
 
     await expect(onboardingService.setDriverStatus('d-1', 'approved', 'under_review')).rejects.toBe(dbErr);
   });
+
+  // 00686: a profile's first approval pays the approval bonus and says what happened.
+  it('returns the approval bonus the server paid', async () => {
+    mockRpc.mockResolvedValueOnce(ok({
+      success: true,
+      status: 'approved',
+      previous_status: 'under_review',
+      bonus: { status: 'paid', amount_cup: 5000, transaction_id: 'tx-1' },
+    }));
+
+    const result = await onboardingService.setDriverStatus('d-1', 'approved', 'under_review');
+
+    expect(result.bonus).toEqual({ status: 'paid', amountCup: 5000 });
+  });
+
+  it('returns no bonus when the approval was not the first', async () => {
+    mockRpc.mockResolvedValueOnce(ok({ success: true, status: 'approved', bonus: null }));
+
+    const result = await onboardingService.setDriverStatus('d-1', 'approved', 'suspended');
+
+    expect(result.bonus).toBeNull();
+  });
+
+  it('returns no bonus before 00686 and ignores a bonus it does not know', async () => {
+    mockRpc.mockResolvedValueOnce(ok({ success: true, status: 'approved' }));
+    mockRpc.mockResolvedValueOnce(ok({ success: true, bonus: { status: 'something_new' } }));
+
+    expect((await onboardingService.setDriverStatus('d-1', 'approved', 'under_review')).bonus).toBeNull();
+    expect((await onboardingService.setDriverStatus('d-2', 'approved', 'under_review')).bonus).toBeNull();
+  });
+
+  it('keeps an outcome without an amount', async () => {
+    mockRpc.mockResolvedValueOnce(ok({ success: true, bonus: { status: 'no_phone' } }));
+
+    const result = await onboardingService.setDriverStatus('d-1', 'approved', 'under_review');
+
+    expect(result.bonus).toEqual({ status: 'no_phone', amountCup: null });
+  });
 });
 
 describe('onboardingService.reviewDocument', () => {

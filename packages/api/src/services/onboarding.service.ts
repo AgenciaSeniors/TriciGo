@@ -21,21 +21,61 @@ export type DriverDecision = Extract<DriverStatus, 'approved' | 'rejected' | 'su
 export type ReviewDecision = 'approved' | 'rejected';
 export type OutreachChannelCode = 'whatsapp' | 'llamada' | 'sms' | 'otro';
 
+/** What a driver's first approval did with the approval bonus (00686). */
+export type ApprovalBonusStatus =
+  | 'paid' // credited now
+  | 'already_paid' // this account or this confirmed phone got it before
+  | 'no_phone' // no confirmed phone: one bonus per person needs one
+  | 'disabled' // driver_approval_bonus_cup is 0
+  | 'invalid_amount' // the amount in Settings is not a whole number from 1 to 50000
+  | 'failed' // the payment failed; the approval stands
+  | 'no_driver';
+
+export interface ApprovalBonus {
+  status: ApprovalBonusStatus;
+  /** CUP credited, when paid. */
+  amountCup: number | null;
+}
+
+export interface DriverStatusResult {
+  /** Null unless the decision was the profile's first approval (and before 00686 is applied). */
+  bonus: ApprovalBonus | null;
+}
+
+const APPROVAL_BONUS_STATUSES: ReadonlySet<string> = new Set<ApprovalBonusStatus>([
+  'paid', 'already_paid', 'no_phone', 'disabled', 'invalid_amount', 'failed', 'no_driver',
+]);
+
+/** The server's `bonus`, or null for none or for an outcome this build does not know. */
+function parseApprovalBonus(raw: unknown): ApprovalBonus | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const { status, amount_cup: amount } = raw as Record<string, unknown>;
+  if (typeof status !== 'string' || !APPROVAL_BONUS_STATUSES.has(status)) return null;
+  return { status: status as ApprovalBonusStatus, amountCup: typeof amount === 'number' ? amount : null };
+}
+
 const trimmed = trimmedText;
 const callOps = (rpc: string, args: Record<string, unknown>) => callOpsRpc(rpc, args, ONBOARDING_UNAVAILABLE);
 
 export const onboardingService = {
   /**
    * Approve, reject or suspend a driver. `expectedStatus` is the status the reviewer saw: the
-   * server refuses with driver_changed if it moved. Reject and suspend need a reason.
+   * server refuses with driver_changed if it moved. Reject and suspend need a reason. A profile's
+   * first approval also pays the approval bonus (00686): `bonus` says what happened.
    */
-  async setDriverStatus(driverId: string, status: DriverDecision, expectedStatus: string, reason?: string): Promise<void> {
-    await callOps('ops_set_driver_status', {
+  async setDriverStatus(
+    driverId: string,
+    status: DriverDecision,
+    expectedStatus: string,
+    reason?: string,
+  ): Promise<DriverStatusResult> {
+    const result = await callOps('ops_set_driver_status', {
       p_driver_id: driverId,
       p_status: status,
       p_expected_status: expectedStatus,
       p_reason: trimmed(reason),
     });
+    return { bonus: parseApprovalBonus(result.bonus) };
   },
 
   /**
