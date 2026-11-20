@@ -36,8 +36,10 @@ interface DriverInfoMiniCardProps {
   /** BUG-293: optional trip-summary block under the driver section. */
   pickupAddress?: string | null;
   dropoffAddress?: string | null;
-  /** Pre-formatted fare label (e.g. "$1,440 CUP" or "$1,440 TRC"). */
+  /** Pre-formatted fare label (e.g. "$1,440 CUP" or "$1,440 TRC"), with the discount already taken off. */
   fareDisplay?: string | null;
+  /** The fare before the discount, shown struck through next to `fareDisplay`. Omit when there is no discount. */
+  fareOriginalDisplay?: string | null;
   /** Pre-formatted ETA string (e.g. "~5 min"). */
   etaLabel?: string | null;
   /** Service type human label (e.g. "Triciclo Básico"). */
@@ -187,6 +189,7 @@ function TripSummary({
   pickupAddress,
   dropoffAddress,
   fareDisplay,
+  fareOriginalDisplay,
   etaLabel,
   isDark,
   t,
@@ -194,6 +197,7 @@ function TripSummary({
   pickupAddress?: string | null;
   dropoffAddress?: string | null;
   fareDisplay?: string | null;
+  fareOriginalDisplay?: string | null;
   etaLabel?: string | null;
   isDark: boolean;
   t: (key: string, opts?: Record<string, unknown>) => string;
@@ -228,7 +232,12 @@ function TripSummary({
               <Text style={[styles.summaryFooterLabel, { color: mute }]}>
                 {t('ride.estimated_fare', { defaultValue: 'Tarifa estimada' })}
               </Text>
-              <Text style={[styles.summaryFooterValue, { color: text }]}>{fareDisplay}</Text>
+              <View style={styles.fareValueRow}>
+                {fareOriginalDisplay ? (
+                  <Text style={[styles.summaryFooterOriginal, { color: mute }]}>{fareOriginalDisplay}</Text>
+                ) : null}
+                <Text style={[styles.summaryFooterValue, { color: text }]}>{fareDisplay}</Text>
+              </View>
             </View>
           ) : null}
           {etaLabel ? (
@@ -252,6 +261,7 @@ export function DriverInfoMiniCard({
   pickupAddress,
   dropoffAddress,
   fareDisplay,
+  fareOriginalDisplay,
   etaLabel,
   serviceTypeLabel,
 }: DriverInfoMiniCardProps) {
@@ -327,6 +337,7 @@ export function DriverInfoMiniCard({
         pickupAddress={pickupAddress}
         dropoffAddress={dropoffAddress}
         fareDisplay={fareDisplay}
+        fareOriginalDisplay={fareOriginalDisplay}
         etaLabel={etaLabel}
         isDark={isDark}
         t={t}
@@ -523,5 +534,15 @@ const styles = StyleSheet.create({
   summaryFooterValue: {
     fontSize: 14,
     fontWeight: '700',
+  },
+  fareValueRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flexWrap: 'wrap',
+    columnGap: 6,
+  },
+  summaryFooterOriginal: {
+    fontSize: 12,
+    textDecorationLine: 'line-through',
   },
 });

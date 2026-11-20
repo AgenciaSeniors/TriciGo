@@ -12,7 +12,7 @@ import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
 import Toast from 'react-native-toast-message';
-import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, findNearestPreset, estimateVehicleEtaMinutes, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, INCOMPATIBILITY_REASON_LABELS, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta, formatRating, SEARCH_TYPICAL_WAIT_S, searchWaitView, discountBaseCup, isSignupPromoCode, signupPromoAction, shouldOfferMotoFallback, shouldSpendPushPrompt, motoDeportivaCard as buildMotoDeportivaCard } from '@tricigo/utils';
+import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, findNearestPreset, estimateVehicleEtaMinutes, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, INCOMPATIBILITY_REASON_LABELS, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta, formatRating, SEARCH_TYPICAL_WAIT_S, searchWaitView, discountBaseCup, riderExpectedFareCup, riderExpectedFareTrc, isSignupPromoCode, signupPromoAction, shouldOfferMotoFallback, shouldSpendPushPrompt, motoDeportivaCard as buildMotoDeportivaCard } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import { useTranslation } from '@tricigo/i18n';
@@ -5567,12 +5567,19 @@ function SearchingView() {
         // RideActiveView so the badge inside the card respects payment
         // method (cash → CUP, tricicoin → TRC).
         const showTrc = activeRide.payment_method === 'tricicoin';
-        const fareTrc = activeRide.estimated_fare_trc;
-        const fareCup = activeRide.estimated_fare_cup;
+        // The fare the rider will pay, with the discount (promo, apology
+        // coupon, shared ride) taken off, as the booking screen showed it.
+        // The pre-discount fare goes struck through next to it.
+        const fareTrc = riderExpectedFareTrc(activeRide);
         const fareDisplay =
           showTrc && fareTrc != null
             ? formatTRC(fareTrc)
-            : formatCUP(fareCup ?? 0);
+            : formatCUP(riderExpectedFareCup(activeRide));
+        const fareOriginalDisplay = (activeRide.discount_amount_cup ?? 0) > 0
+          ? (showTrc && activeRide.estimated_fare_trc != null
+              ? formatTRC(activeRide.estimated_fare_trc)
+              : formatCUP(activeRide.estimated_fare_cup ?? 0))
+          : null;
         const serviceSlug = activeRide.service_type;
         const serviceTypeLabel = serviceSlug
           ? t(`service_type.${serviceSlug}` as const, { defaultValue: String(serviceSlug) })
@@ -5592,6 +5599,7 @@ function SearchingView() {
             pickupAddress={activeRide.pickup_address ?? null}
             dropoffAddress={activeRide.dropoff_address ?? null}
             fareDisplay={fareDisplay}
+            fareOriginalDisplay={fareOriginalDisplay}
             etaLabel={etaLabel}
             serviceTypeLabel={serviceTypeLabel}
           />
