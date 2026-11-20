@@ -13,11 +13,14 @@ import { fileURLToPath } from 'node:url';
 
 export const AREAS_FILE = fileURLToPath(new URL('../../docs/review/areas.json', import.meta.url));
 
-const MIGRATION = /^supabase\/migrations\/\d+_([^/]+)\.sql$/;
+const MIGRATION = /^supabase\/migrations\/\d+[a-z]?_([^/]+)\.sql$/;
 
 export function compileAreas(config) {
   return {
     ignore: (config.ignore ?? []).map((p) => new RegExp(p)),
+    // Used by the map-integrity tests, not by areasForPaths.
+    mustClassify: (config.mustClassify ?? []).map((p) => new RegExp(p)),
+    notSensitive: new Set(config.notSensitive ?? []),
     areas: Object.entries(config.areas).map(([id, area]) => ({
       id,
       title: area.title,

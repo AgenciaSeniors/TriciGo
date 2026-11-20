@@ -1,10 +1,11 @@
 // Tests for scripts/lib/review-areas.mjs, its CLI scripts/review-areas.mjs, and the real map
 // in docs/review/areas.json checked against the real tree:
 //   node --test scripts/review-areas.test.mjs     (pnpm test:review-areas)
-import { test, describe } from 'node:test';
+import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -18,6 +19,35 @@ import {
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const real = loadAreas();
 const ids = (paths, map = real) => areasForPaths(paths, map).map((a) => a.id);
+
+// Splits a regex source into one variant per alternative of each flat capturing group
+// `( a | b )`: the group is replaced by one alternative, the rest stays as it is.
+// Escaped parentheses are literals; character classes are skipped; groups are not nested.
+function expandGroups(source) {
+  const groups = [];
+  let inClass = false;
+  for (let i = 0; i < source.length; i++) {
+    const c = source[i];
+    if (c === '\\') {
+      i++;
+    } else if (inClass) {
+      if (c === ']') inClass = false;
+    } else if (c === '[') {
+      inClass = true;
+    } else if (c === '(' && source[i + 1] !== '?') {
+      const end = source.indexOf(')', i);
+      groups.push({ start: i, end, alts: source.slice(i + 1, end).split('|') });
+      i = end;
+    }
+  }
+  const variants = [];
+  for (const g of groups) {
+    for (const alt of g.alts) {
+      variants.push({ alt, source: source.slice(0, g.start) + alt + source.slice(g.end + 1) });
+    }
+  }
+  return variants;
+}
 
 describe('helpers', () => {
   test('migrationWords splits the name of a migration file', () => {
@@ -36,6 +66,22 @@ describe('helpers', () => {
 
   test('normalizePath turns Windows separators and ./ into repo paths', () => {
     assert.equal(normalizePath('.\\packages\\api\\x.ts '), 'packages/api/x.ts');
+  });
+
+  test('expandGroups makes one variant per alternative and ignores escaped parentheses', () => {
+    assert.deepEqual(
+      expandGroups('^a/(x|y)/(p|q)$').map((v) => v.source),
+      ['^a/x/(p|q)$', '^a/y/(p|q)$', '^a/(x|y)/p$', '^a/(x|y)/q$'],
+    );
+    assert.deepEqual(expandGroups('^\\(auth\\)/'), []);
+    assert.deepEqual(expandGroups('^(?:a|b)/[(]x$'), []);
+  });
+
+  test('migrationWords accepts a letter after the number (00059b_...)', () => {
+    assert.deepEqual(migrationWords('supabase/migrations/00059b_wait_charge_in_complete_ride.sql').slice(0, 2), [
+      'wait',
+      'charge',
+    ]);
   });
 
   test('a toy map: paths, words, ignore, sorting and unique files', () => {
@@ -124,6 +170,30 @@ describe('the real map', () => {
   test('Windows paths work', () => {
     assert.deepEqual(ids(['packages\\api\\src\\services\\wallet.service.ts']), ['money']);
   });
+
+  test('tab screens, services, the map itself, dependencies and late migrations', () => {
+    const cases = {
+      'apps/client/app/(tabs)/wallet.tsx': ['money'],
+      'apps/driver/app/(tabs)/earnings.tsx': ['money'],
+      'apps/client/app/(tabs)/index.tsx': ['dispatch', 'money'],
+      'packages/api/src/services/dispute.service.ts': ['access', 'money'],
+      'packages/api/src/services/driver.service.ts': ['access', 'dispatch'],
+      'docs/review/areas.json': ['access'],
+      'scripts/lib/review-areas.mjs': ['access'],
+      'scripts/review-areas.mjs': ['access'],
+      'patches/@expo__dom-webview@55.0.3.patch': ['native'],
+      'package.json': ['native'],
+      'pnpm-lock.yaml': ['native'],
+      'apps/client/react-native.config.js': ['native'],
+      'supabase/migrations/00059b_wait_charge_in_complete_ride.sql': ['dispatch', 'money', 'schema'],
+      'supabase/migrations/00122_secdef_search_path_hardening.sql': ['access', 'schema'],
+      'supabase/migrations/00679_moto_deportiva.sql': ['dispatch', 'schema'],
+      'apps/client/app/(tabs)/profile.tsx': [],
+    };
+    for (const [file, expected] of Object.entries(cases)) {
+      assert.deepEqual(ids([file]), expected, file);
+    }
+  });
 });
 
 describe('the map stays true to the repository', () => {
@@ -143,6 +213,46 @@ describe('the map stays true to the repository', () => {
         assert.ok(tracked.some((f) => re.test(f)), `${area.id}: ${re} matches no tracked file`);
       }
     }
+  });
+
+  test('every name inside a ( | ) group matches a tracked file', () => {
+    const dead = [];
+    for (const area of real.areas) {
+      for (const re of area.paths) {
+        for (const { alt, source } of expandGroups(re.source)) {
+          const variant = new RegExp(source);
+          if (!tracked.some((f) => variant.test(f))) {
+            dead.push(`${area.id}: ${re} alternative "${alt}" matches no tracked file`);
+          }
+        }
+      }
+    }
+    assert.deepEqual(dead, []);
+  });
+
+  test('every tracked file in a mustClassify folder is in an area or in notSensitive', () => {
+    const unclassified = tracked.filter(
+      (f) =>
+        real.mustClassify.some((re) => re.test(f)) &&
+        !real.ignore.some((re) => re.test(f)) &&
+        !real.notSensitive.has(f) &&
+        areasForPaths([f], real).length === 0,
+    );
+    assert.deepEqual(unclassified, []);
+  });
+
+  test('notSensitive lists tracked files, once, that no area matches', () => {
+    const config = JSON.parse(readFileSync(join(ROOT, 'docs/review/areas.json'), 'utf8'));
+    const list = config.notSensitive ?? [];
+    assert.ok(list.length > 0, 'notSensitive is empty');
+    assert.equal(new Set(list).size, list.length, 'duplicates in notSensitive');
+    const problems = [];
+    for (const f of list) {
+      if (!tracked.includes(f)) problems.push(`${f}: not a tracked file`);
+      const hit = areasForPaths([f], real).map((a) => a.id);
+      if (hit.length > 0) problems.push(`${f}: listed as notSensitive but matches ${hit.join(', ')}`);
+    }
+    assert.deepEqual(problems, []);
   });
 });
 
@@ -174,5 +284,61 @@ describe('CLI', () => {
     const r = run('docs/qa/bugs-rondas.md\n');
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, /No sensitive area touched\./);
+  });
+
+  const cli = (cwd, ...args) =>
+    spawnSync(process.execPath, [join(ROOT, 'scripts/review-areas.mjs'), ...args], { cwd, encoding: 'utf8' });
+
+  test('an unknown flag fails closed and names the flag', () => {
+    const r = cli(ROOT, '--stdn');
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /^review-areas: /);
+    assert.match(r.stderr, /--stdn/);
+  });
+
+  test('an empty or dash-led base is refused and creates nothing', () => {
+    for (const args of [['--base', ''], ['--base', '-x'], ['--base=-x'], ['--base=--output=leak']]) {
+      const r = cli(ROOT, ...args);
+      assert.notEqual(r.status, 0, args.join(' '));
+      assert.equal(r.status, 2, args.join(' '));
+    }
+    assert.equal(existsSync(join(ROOT, 'leak')), false);
+    assert.equal(existsSync(join(ROOT, '-x...HEAD')), false);
+  });
+
+  test('git mode with an empty range says no area', () => {
+    const r = cli(ROOT, '--base', 'HEAD', '--head', 'HEAD');
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /No sensitive area touched\./);
+  });
+
+  test('CRLF input lines are handled', () => {
+    const r = run('packages/api/src/services/wallet.service.ts\r\n', '--json');
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(
+      JSON.parse(r.stdout).areas.map((a) => a.id),
+      ['money'],
+    );
+  });
+
+  describe('non-ASCII paths in git mode', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'review-areas-'));
+    after(() => rmSync(repo, { recursive: true, force: true }));
+
+    test('a file with an accent is read as it is, not quoted', () => {
+      const git = (...a) => execFileSync('git', a, { cwd: repo, encoding: 'utf8' });
+      git('init', '-q');
+      git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'base');
+      mkdirSync(join(repo, 'apps/client/app/wallet'), { recursive: true });
+      writeFileSync(join(repo, 'apps/client/app/wallet/recarga-rápida.tsx'), 'x\n');
+      git('add', '.');
+      git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'add');
+      const r = cli(repo, '--base', 'HEAD~1', '--head', 'HEAD', '--json');
+      assert.equal(r.status, 0, r.stderr);
+      assert.deepEqual(
+        JSON.parse(r.stdout).areas.map((a) => a.id),
+        ['money'],
+      );
+    });
   });
 });

@@ -11,6 +11,9 @@ One definition of what is sensitive in TriciGo, read by every reviewer:
     pnpm review:areas                       # this branch against origin/master
     node scripts/review-areas.mjs --json    # machine output
 
+Feeding paths from git yourself: use `git diff --name-only --no-renames A...B | node scripts/review-areas.mjs --stdin`,
+so a moved file counts under its old and its new path.
+
 The map is `areas.json`: path regexes plus words of migration file names
 (`00637_wallet_shortfall_pays_cash.sql` is money because of `wallet` and `cash`). Docs and test files
 never count. `general.md` applies to every PR.
@@ -20,6 +23,11 @@ never count. `general.md` applies to every PR.
 Edit `areas.json` and run `pnpm test:review-areas`. The tests fail when a path regex matches no
 tracked file (a typo or a renamed folder) or a checklist file is missing. A new area needs its
 checklist file in the same PR.
+
+Every file under the folders in `mustClassify` (API services, the tab screens, app services, hooks
+and stores, the admin lib) has to match an area or be listed in `notSensitive`; the tests fail on a
+new file nobody classified. Each name inside a `( | )` group has to match a tracked file. The map,
+its library and its CLI are in the access area, so a PR that changes them needs the cross-review.
 
 ## Writing a checklist item
 
