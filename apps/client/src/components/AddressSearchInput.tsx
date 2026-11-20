@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, ALL_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, parseCornerQuery, bareStreetName, isZoneLevelResult, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap, findNearestPreset, historyMatchesQuery, tokenOverlapRatio, isProviderStreetResult, filterProviderStreetsByLocalAnchor, resolveFixedPlaces } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, ALL_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, parseCornerQuery, bareStreetName, isZoneLevelResult, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchResultA11yLabel, searchAddressUnified, newSessionToken, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap, findNearestPreset, historyMatchesQuery, tokenOverlapRatio, isProviderStreetResult, filterProviderStreetsByLocalAnchor, resolveFixedPlaces } from '@tricigo/utils';
 import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
 import { getSupabaseClient } from '@tricigo/api';
 import type { GeoPoint, AddressSearchResult, SearchBoxResult } from '@tricigo/utils';
@@ -103,6 +103,9 @@ interface AddressSearchInputProps {
   onPickOnMap?: () => void;
   /** When true, component starts expanded with suggestions visible */
   autoExpand?: boolean;
+  /** Focus the field and open the keyboard when it mounts. For a search the
+   *  rider just opened on purpose: they came to type (QA R3-03). */
+  autoFocus?: boolean;
   /** Offer the fixed Casa / Trabajo slots at the top of the idle panel (an
    *  empty slot links to the saved-places screen). Off inside that screen. */
   showFixedPlaces?: boolean;
@@ -119,9 +122,19 @@ function AddressSearchInputInner({
   showUseMyLocation = false,
   onPickOnMap,
   autoExpand = false,
+  autoFocus = false,
   showFixedPlaces = true,
 }: AddressSearchInputProps) {
   const { t } = useTranslation('rider');
+  const inputRef = useRef<TextInput>(null);
+  // focus() after mount, not the TextInput autoFocus prop: when the field
+  // mounts in the same frame as the sheet that holds it, Android often skips
+  // opening the keyboard for autoFocus (QA R3-03: mInputShown=false).
+  useEffect(() => {
+    if (!autoFocus) return;
+    const id = setTimeout(() => inputRef.current?.focus(), 150);
+    return () => clearTimeout(id);
+  }, [autoFocus]);
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
   const isDark = resolvedScheme === 'dark';
   const [query, setQuery] = useState('');
@@ -998,6 +1011,7 @@ function AddressSearchInputInner({
       <View className="bg-neutral-100 dark:bg-neutral-800 rounded-xl px-3 py-2 flex-row items-center" accessibilityRole="search">
         <Ionicons name="search-outline" size={18} color={isDark ? darkColors.text.secondary : colors.neutral[400]} />
         <TextInput
+          ref={inputRef}
           className="flex-1 text-base text-neutral-900 dark:text-neutral-100 ml-2 py-1"
           placeholder={placeholder ?? t('ride.search_address', { defaultValue: 'Buscar dirección...' })}
           placeholderTextColor={isDark ? darkColors.text.tertiary : colors.neutral[400]}
@@ -1006,7 +1020,7 @@ function AddressSearchInputInner({
           onFocus={handleFocus}
           autoCorrect={false}
           returnKeyType="search"
-          accessibilityLabel="Buscar dirección"
+          accessibilityLabel={placeholder ?? t('ride.search_address', { defaultValue: 'Buscar dirección...' })}
         />
         {isSearching && <ActivityIndicator size="small" color={colors.brand.orange} />}
         {query.length > 0 && !isSearching && (
@@ -1044,7 +1058,7 @@ function AddressSearchInputInner({
                 key={`merged-${item.source}-${item.latitude}-${item.longitude}`}
                 className={`px-4 flex-row items-center border-b border-neutral-100 dark:border-neutral-800 ${index === 0 ? 'py-4' : 'py-3'}`}
                 onPress={() => handleSelectMerged(item)}
-                accessibilityLabel={item.displayName ? `${item.displayName}, ${item.address}` : item.address}
+                accessibilityLabel={searchResultA11yLabel(item.displayName, item.address)}
               >
                 {item.emoji ? (
                   <Text style={{ fontSize: index === 0 ? 20 : 18, width: 22, textAlign: 'center' }}>

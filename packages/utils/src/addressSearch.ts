@@ -282,6 +282,21 @@ export function isZoneLevelResult(r: {
 }
 
 /**
+ * Screen reader label for a search row: the name, then the address, but only
+ * once when they are the same text (QA R3-09: a corner was read twice).
+ */
+export function searchResultA11yLabel(
+  displayName?: string | null,
+  address?: string | null,
+): string {
+  const name = (displayName ?? '').trim();
+  const addr = (address ?? '').trim();
+  if (!name) return addr;
+  if (!addr || addr.toLowerCase() === name.toLowerCase()) return name;
+  return `${name}, ${addr}`;
+}
+
+/**
  * Present a Cuban street label "alias first, official in parens".
  * Mirrors the backend `_street_full_display` helper so any raw
  * "Official (Alias)" string that leaks through to the client gets the

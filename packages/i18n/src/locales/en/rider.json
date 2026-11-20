@@ -25,6 +25,8 @@
   },
 
   "home": {
+    "weather_surge_label": "Bad weather",
+    "back": "Back",
     "detecting_address": "Finding your address...",
     "just_now": "A while ago",
     "hours_ago": "{{hours}}h ago",
@@ -120,6 +122,25 @@
   },
 
   "ride": {
+    "where_to": "Where to?",
+    "passengers": "Passengers",
+    "share_ride_toggle": "Share ride",
+    "share_ride_active_one": "{{count}} free seat · −{{pct}}%",
+    "share_ride_active_other": "{{count}} free seats · −{{pct}}%",
+    "share_ride_desc": "The driver can pick up people in the free seats and you pay less",
+    "share_ride_seats_q": "How many are going with you?",
+    "share_discount": "Share ride",
+    "select_locations": "Select pickup and destination",
+    "promo_code": "Promo code",
+    "enter_code": "Enter a code",
+    "promo_error_invalid": "Invalid code",
+    "apply": "Apply",
+    "no_nearby_vehicles": "No drivers nearby",
+    "trip_minutes": "~{{minutes}} min ride",
+    "add_stop_counter": "ADD STOP · {{current}}/{{max}}",
+    "cup_per_km": "{{amount}} CUP per km",
+    "invalid_location_title": "Invalid location",
+    "invalid_location_body": "Select the pickup and destination again",
     "step_searching": "Searching",
     "cancel_search_title": "Cancel the search?",
     "cancel_search_msg": "No driver has been assigned yet, so cancelling now does not lower your rating.",
@@ -567,6 +588,14 @@
     "presets_title": "Popular places"
   },
 
+  "service_desc": {
+    "triciclo_basico": "Budget",
+    "moto_standard": "Fast",
+    "moto_deportiva": "Exclusive",
+    "auto_standard": "Comfortable",
+    "auto_confort": "Premium",
+    "mensajeria": "Delivery"
+  },
   "service_type": {
     "moto_deportiva": "Sport Motorbike",
     "triciclo_basico": "Tricycle",

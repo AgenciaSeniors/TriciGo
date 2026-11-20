@@ -21,6 +21,7 @@ import { View, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from './Text';
 import { colors } from '@tricigo/theme';
+import { useTranslation } from '@tricigo/i18n';
 
 export interface ProfileScreenHeaderProps {
   title: string;
@@ -46,6 +47,7 @@ export function ProfileScreenHeader({
   backAccessibilityLabel,
   className,
 }: ProfileScreenHeaderProps) {
+  const { t } = useTranslation('common');
   return (
     <View className={`flex-row items-center mb-6 ${className ?? ''}`}>
       <Pressable
@@ -54,7 +56,7 @@ export function ProfileScreenHeader({
         className="mr-3 w-11 h-11 rounded-xl items-center justify-center"
         style={{ backgroundColor: colors.neutral[100] }}
         accessibilityRole="button"
-        accessibilityLabel={backAccessibilityLabel ?? 'Back'}
+        accessibilityLabel={backAccessibilityLabel ?? t('back', { defaultValue: 'Volver' })}
       >
         <Ionicons name="arrow-back" size={20} color={colors.neutral[800]} />
       </Pressable>

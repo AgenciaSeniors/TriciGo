@@ -92,7 +92,7 @@ export function useRideActions() {
         !Number.isFinite(draft.pickup?.location?.longitude) ||
         !Number.isFinite(draft.dropoff?.location?.latitude) ||
         !Number.isFinite(draft.dropoff?.location?.longitude)) {
-      Toast.show({ type: 'error', text1: 'Ubicación inválida', text2: 'Selecciona la recogida y destino de nuevo' });
+      Toast.show({ type: 'error', text1: i18next.t('rider:ride.invalid_location_title', { defaultValue: 'Ubicación inválida' }), text2: i18next.t('rider:ride.invalid_location_body', { defaultValue: 'Selecciona la recogida y el destino de nuevo' }) });
       return;
     }
 

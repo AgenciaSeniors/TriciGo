@@ -584,6 +584,7 @@
   "recurring_rides": "Recurring Rides",
 
   "copied": "Copied",
+  "copy_ride_id": "Copy ride ID",
   "pull_to_refresh": "Pull to refresh",
   "just_now": "Just now",
   "minutes_ago": "{{count}} min ago",

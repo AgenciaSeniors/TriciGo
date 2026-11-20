@@ -1465,7 +1465,8 @@ export const rideService = {
       .order('created_at', { ascending: false })
       .range(from, to);
     if (error) throw error;
-    return data as Ride[];
+    // Geography columns come back as WKB hex: hand the UI GeoPoints (R3-01).
+    return (data ?? []).map((r) => transformRideCoordinates(r as Record<string, unknown>));
   },
 
   /**
@@ -1518,7 +1519,9 @@ export const rideService = {
       .order('created_at', { ascending: false })
       .range(from, to);
     if (error) throw error;
-    return data as Ride[];
+    // Geography columns come back as WKB hex. "¿Volver a [destino]?" hands
+    // dropoff_location to the ride draft, so it must be a GeoPoint (R3-01).
+    return (data ?? []).map((r) => transformRideCoordinates(r as Record<string, unknown>));
   },
 
   /**

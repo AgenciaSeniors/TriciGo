@@ -182,9 +182,13 @@ export async function googlePlacesAutocomplete(
         // same billable session as the preceding Autocomplete calls. Without
         // it, Google bills this as a standalone Place Details Basic call
         // ($5/1k) on top of any per-request Autocomplete charges.
-        const detailsUrl = sessionToken
-          ? `https://places.googleapis.com/v1/places/${placeId}?sessionToken=${encodeURIComponent(sessionToken)}`
-          : `https://places.googleapis.com/v1/places/${placeId}`;
+        //
+        // languageCode/regionCode: the address shown to the rider comes from
+        // THIS call, not from the autocomplete one. Without them Google answered
+        // "Vedado, Havana, Cuba" (QA R3-04).
+        const detailsParams = new URLSearchParams({ languageCode: 'es', regionCode: 'CU' });
+        if (sessionToken) detailsParams.set('sessionToken', sessionToken);
+        const detailsUrl = `https://places.googleapis.com/v1/places/${placeId}?${detailsParams.toString()}`;
         const detailsResp = await fetch(
           detailsUrl,
           {
@@ -265,7 +269,7 @@ export async function googlePlacesAutocomplete(
       address: d.formattedAddress,
       place_name: d.mainText || d.formattedAddress,
       specificity: 0.95, // Google results are high-confidence by default
-      matchedCategory: d.types[0] ?? null,
+      matchedCategory: pickMatchedCategory(d.types),
       source: 'google',
       external_place_id: d.placeId,
     });
@@ -273,6 +277,40 @@ export async function googlePlacesAutocomplete(
 
   return results;
 }
+
+/**
+ * Google place types that mean "an area", not "a point". Picking one of these
+ * makes the app ask the rider to place the pin. DUPLICATE of the Google part
+ * of ZONE_LEVEL_CATEGORIES in packages/utils/src/addressSearch.ts (Deno cannot
+ * import @tricigo/utils). Keep them in sync.
+ */
+const ZONE_TYPES: ReadonlySet<string> = new Set([
+  'locality', 'sublocality', 'sublocality_level_1', 'sublocality_level_2',
+  'sublocality_level_3', 'sublocality_level_4', 'sublocality_level_5',
+  'neighborhood', 'political', 'colloquial_area', 'postal_code', 'country',
+  'administrative_area_level_1', 'administrative_area_level_2',
+  'administrative_area_level_3', 'administrative_area_level_4',
+  'administrative_area_level_5', 'administrative_area_level_6',
+  'administrative_area_level_7',
+]);
+
+/** The most specific zone type when there is one, else Google's first type.
+ *  `political` is the weakest zone type, so a named level wins over it.
+ *  Google's order is not stable: for Vedado it listed `political` first on
+ *  2026-11-09 and `geocode` first an hour later, and keeping only types[0]
+ *  stopped the "Es una zona amplia" pin check (QA R3-05). */
+export function pickMatchedCategory(types: string[]): string | null {
+  const zone = types.find((t) => ZONE_TYPES.has(t) && t !== 'political')
+    ?? types.find((t) => ZONE_TYPES.has(t));
+  return zone ?? types[0] ?? null;
+}
+
+/**
+ * Bump when a cached result would differ under the current code, so old
+ * entries stop being served. v2 (2026-11-20): Spanish addresses (R3-04) and
+ * zone types (R3-05). Unversioned entries simply expire.
+ */
+const CACHE_KEY_VERSION = 'v2';
 
 /**
  * Compute a cache key from query + optional proximity. Proximity is
@@ -287,7 +325,7 @@ export async function computeCacheKey(
   const proximityKey = proximity
     ? `${proximity.latitude.toFixed(2)},${proximity.longitude.toFixed(2)}`
     : null;
-  const input = `${normalizedQuery}|${proximityKey ?? ''}`;
+  const input = `${CACHE_KEY_VERSION}|${normalizedQuery}|${proximityKey ?? ''}`;
   const data = new TextEncoder().encode(input);
   const digest = await crypto.subtle.digest('SHA-256', data);
   const hash = Array.from(new Uint8Array(digest))

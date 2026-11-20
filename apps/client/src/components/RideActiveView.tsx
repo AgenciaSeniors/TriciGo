@@ -1706,6 +1706,7 @@ export function RideActiveView() {
               {t('ride.add_stop', { defaultValue: 'Agregar parada' })}
             </Text>
             <AddressSearchInput
+              autoFocus
               placeholder={t('ride.search_address', { defaultValue: 'Buscar dirección...' })}
               onSelect={handleAddStop}
               onPickOnMap={() => { setAddStopVisible(false); setMapPickerVisible(true); }}

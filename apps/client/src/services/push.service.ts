@@ -3,6 +3,7 @@ import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { getSupabaseClient, notificationService } from '@tricigo/api';
 import { resolveExpoPushToken } from '@/hooks/useNotifications';
+import { ensureAndroidRidesChannel } from '@/lib/appNotifications';
 
 // NOTE: this module deliberately no longer calls setNotificationHandler.
 //
@@ -34,6 +35,10 @@ import { resolveExpoPushToken } from '@/hooks/useNotifications';
 export async function registerForPushNotifications(
   opts?: { promptIfNeeded?: boolean },
 ): Promise<string | null> {
+  // First, on every launch: the channel needs no permission and no physical
+  // device, and the local ride notifications use it (QA R3-07).
+  await ensureAndroidRidesChannel().catch(() => {});
+
   if (!Device.isDevice) {
     console.warn('Push notifications require a physical device');
     return null;
@@ -51,17 +56,6 @@ export async function registerForPushNotifications(
 
   if (finalStatus !== 'granted') {
     return null;
-  }
-
-  if (Platform.OS === 'android') {
-    // `sound: null` means "use the default ringtone for this channel".
-    // expo-notifications' types want `boolean | 'default' | string`, so
-    // omit the key to get the same behavior without the type mismatch.
-    await Notifications.setNotificationChannelAsync('rides', {
-      name: 'Ride updates',
-      importance: Notifications.AndroidImportance.HIGH,
-      vibrationPattern: [0, 250, 250, 250],
-    });
   }
 
   try {
