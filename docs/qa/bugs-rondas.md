@@ -20,20 +20,20 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 | R1-03 | Pasajero | Perfil | Con el teléfono en inglés, mezcla inglés y español | arreglado (#1215) |
 | R1-04 | Pasajero | Elegir servicio | Atrás de Android cierra la app | arreglado (#1215) |
 | R1-05 | Pasajero | Inicio → elegir servicio | Si se toca un destino antes de que la app tenga la ubicación, el origen queda vacío para siempre | arreglado (#1215) |
-| R2-01 | Pasajero | Buscando conductor | En un teléfono de 360×800 dp, "Cancelar viaje" queda debajo del borde y la parte de arriba queda vacía | en arreglo (#1219) |
-| R2-02 | Pasajero | Buscando conductor | El diálogo de cancelar avisa de una "tarifa de cancelación" que ya no existe, y no está traducido | en arreglo (#1219) |
-| R2-03 | Pasajero | Buscando conductor | El primer paso del indicador sale cortado: "Buscando cond…" | en arreglo (#1219) |
-| R2-04 | Pasajero | Hoja de cancelar | "Sin penalización (primera cancelación del día)" también sale cuando el motivo es otro | en arreglo (#1219) |
-| R2-05 | Pasajero | Viaje cancelado por otro | La notificación del teléfono dice siempre "Tu conductor canceló el viaje" | en arreglo (#1219) |
+| R2-01 | Pasajero | Buscando conductor | En un teléfono de 360×800 dp, "Cancelar viaje" queda debajo del borde y la parte de arriba queda vacía | arreglado (#1219) |
+| R2-02 | Pasajero | Buscando conductor | El diálogo de cancelar avisa de una "tarifa de cancelación" que ya no existe, y no está traducido | arreglado (#1219) |
+| R2-03 | Pasajero | Buscando conductor | El primer paso del indicador sale cortado: "Buscando cond…" | arreglado (#1219) |
+| R2-04 | Pasajero | Hoja de cancelar | "Sin penalización (primera cancelación del día)" también sale cuando el motivo es otro | arreglado (#1219) |
+| R2-05 | Pasajero | Viaje cancelado por otro | La notificación del teléfono dice siempre "Tu conductor canceló el viaje" | arreglado (#1219) |
 | R2-06 | Pasajero | Viaje con chofer | Muestra "Viaje compartido · Dejar de compartir" aunque la persona no compartió nada | abierto |
-| R2-07 | Pasajero y conductor | Chat del viaje | En Android, el teclado tapa los mensajes, el campo de texto y el botón Enviar | en arreglo (#1219) |
+| R2-07 | Pasajero y conductor | Chat del viaje | En Android, el teclado tapa los mensajes, el campo de texto y el botón Enviar | arreglado (#1219) |
 | R2-08 | Pasajero | Viaje en curso | Con Wi-Fi pero sin internet no aparece ningún aviso de "sin conexión" | abierto |
 | R2-09 | Pasajero | Inicio y billetera | El mismo saldo vale $60.18 en el inicio y ≈ $60.51 en la billetera | abierto |
-| R2-10 | Pasajero | Recargar | El monto muestra "20" pero "Pagar con tarjeta" sigue deshabilitado | en arreglo (#1219) |
-| R2-11 | Pasajero | Ajustes → elegir servicio | El método de pago predeterminado no se usa: los viajes salen en efectivo | en arreglo (#1219) |
-| R2-12 | Pasajero | Inicio | Con la app en inglés, el inicio sigue casi todo en español | en arreglo (#1219) |
-| R2-13 | Pasajero | Ajustes | Tocar "Idioma preferido" cambia el idioma al instante, sin mostrar opciones | en arreglo (#1219) |
-| R2-14 | Pasajero | Calificar y chat | Lector de pantalla: estrellas sin número y remitente del chat genérico | en arreglo (#1219) |
+| R2-10 | Pasajero | Recargar | El monto muestra "20" pero "Pagar con tarjeta" sigue deshabilitado | arreglado (#1219) |
+| R2-11 | Pasajero | Ajustes → elegir servicio | El método de pago predeterminado no se usa: los viajes salen en efectivo | arreglado (#1219) |
+| R2-12 | Pasajero | Inicio | Con la app en inglés, el inicio sigue casi todo en español | arreglado (#1219) |
+| R2-13 | Pasajero | Ajustes | Tocar "Idioma preferido" cambia el idioma al instante, sin mostrar opciones | arreglado (#1219) |
+| R2-14 | Pasajero | Calificar y chat | Lector de pantalla: estrellas sin número y remitente del chat genérico | arreglado (#1219) |
 
 ## Fichas
 
