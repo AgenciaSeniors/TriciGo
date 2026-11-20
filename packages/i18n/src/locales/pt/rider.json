@@ -25,6 +25,8 @@
   },
 
   "home": {
+    "weather_surge_label": "Mau tempo",
+    "back": "Voltar",
     "detecting_address": "Detectando endereço...",
     "just_now": "Há pouco",
     "hours_ago": "Há {{hours}}h",
@@ -120,6 +122,25 @@
   },
 
   "ride": {
+    "where_to": "Para onde você vai?",
+    "passengers": "Passageiros",
+    "share_ride_toggle": "Compartilhar viagem",
+    "share_ride_active_one": "{{count}} assento livre · −{{pct}}%",
+    "share_ride_active_other": "{{count}} assentos livres · −{{pct}}%",
+    "share_ride_desc": "O motorista pode pegar pessoas nos assentos livres e você paga menos",
+    "share_ride_seats_q": "Quantos vão com você?",
+    "share_discount": "Compartilhar viagem",
+    "select_locations": "Selecione a origem e o destino",
+    "promo_code": "Código promocional",
+    "enter_code": "Digite um código",
+    "promo_error_invalid": "Código inválido",
+    "apply": "Aplicar",
+    "no_nearby_vehicles": "Nenhum motorista por perto",
+    "trip_minutes": "~{{minutes}} min de viagem",
+    "add_stop_counter": "ADICIONAR PARADA · {{current}}/{{max}}",
+    "cup_per_km": "{{amount}} CUP por km",
+    "invalid_location_title": "Localização inválida",
+    "invalid_location_body": "Selecione a origem e o destino de novo",
     "step_searching": "Buscando",
     "cancel_search_title": "Cancelar a busca?",
     "cancel_search_msg": "Ainda não há motorista atribuído, então cancelar agora não reduz sua avaliação.",
@@ -567,6 +588,14 @@
     "presets_title": "Locais populares"
   },
 
+  "service_desc": {
+    "triciclo_basico": "Econômico",
+    "moto_standard": "Rápido",
+    "moto_deportiva": "Exclusiva",
+    "auto_standard": "Confortável",
+    "auto_confort": "Premium",
+    "mensajeria": "Entregas"
+  },
   "service_type": {
     "moto_deportiva": "Moto Esportiva",
     "triciclo_basico": "Triciclo",

@@ -28,6 +28,8 @@ export default defineConfig({
       '../../supabase/functions/send-push/*.test.ts',
       // send-campaign's handler (00649): supabase-js and fetch are mocked, Deno is stubbed.
       '../../supabase/functions/send-campaign/*.test.ts',
+      // search-places-google's Google client (R3-04, R3-05): plain TypeScript, fetch is stubbed.
+      '../../supabase/functions/search-places-google/_shared/*.test.ts',
       // send-team-digest and team-digest-unsubscribe (00656): supabase-js, fetch and the rate
       // limiter are mocked, Deno is stubbed.
       '../../supabase/functions/send-team-digest/*.test.ts',

@@ -584,6 +584,7 @@
   "recurring_rides": "Viagens recorrentes",
 
   "copied": "Copiado",
+  "copy_ride_id": "Copiar ID da viagem",
   "pull_to_refresh": "Puxe para atualizar",
   "just_now": "Agora",
   "minutes_ago": "há {{count}} min",

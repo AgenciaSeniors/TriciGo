@@ -3,6 +3,7 @@ import { View, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from './Text';
 import { colors } from '@tricigo/theme';
+import { useTranslation } from '@tricigo/i18n';
 
 export interface ScreenHeaderProps {
   title: string;
@@ -23,13 +24,14 @@ export function ScreenHeader({
   className,
   light,
 }: ScreenHeaderProps) {
+  const { t } = useTranslation('common');
   return (
     <View className={`flex-row items-center mb-6 ${className ?? ''}`}>
       {onBack && (
         <Pressable
           onPress={onBack}
           className={`w-10 h-10 rounded-full items-center justify-center mr-3 ${light ? 'bg-white/20 active:bg-white/30' : 'bg-neutral-100 active:bg-neutral-200'}`}
-          accessibilityLabel="Back"
+          accessibilityLabel={t('back', { defaultValue: 'Volver' })}
           accessibilityRole="button"
         >
           <Ionicons name="arrow-back" size={20} color={light ? 'white' : colors.neutral[900]} />

@@ -94,6 +94,7 @@ export {
   scoreSearchResult,
   rankSearchResults,
   searchResultEmoji,
+  searchResultA11yLabel,
   shouldEnrichResult,
   historyMatchesQuery,
   isProviderStreetResult,

@@ -3966,6 +3966,37 @@ export async function searchPoisSupabase(
   }
 }
 
+// Prefixes that do not change which street it is ("12" and "Calle 12" are one
+// street). Compared after stripAccentsLower, so no accents here.
+const SAME_STREET_PREFIX = /^(calle|avenida|ave?\.?|calzada|callejon|paseo|carretera|autopista|boulevard|blvd|camino|sendero|pasaje)\s+/;
+
+/** Every name a street side goes by: "Padre Varela (Belascoaín)" → padre varela, belascoain. */
+function sameStreetNames(side: string): Set<string> {
+  const names = new Set<string>();
+  const alias = side.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+  for (const part of alias ? [alias[1], alias[2]] : [side]) {
+    const n = stripAccentsLower(part ?? '').trim().replace(SAME_STREET_PREFIX, '').trim();
+    if (n) names.add(n);
+  }
+  return names;
+}
+
+/**
+ * Whether a "X e/ Y" label names a street crossing itself. OSM tags one
+ * segment "12" and the next "Calle 12", so `street_intersections` has rows
+ * like "12 e/ Calle 12" that are not a corner at all (QA R3-09).
+ */
+export function isSelfIntersectionLabel(address: string): boolean {
+  const head = (address ?? '').split(',')[0] ?? '';
+  const corner = head.match(/^(.+?)\s+e\/\s+(.+)$/i);
+  if (!corner || !corner[1] || !corner[2]) return false;
+  const main = sameStreetNames(corner[1]);
+  return corner[2].split(/\s+y\s+/i).some((cross) => {
+    for (const n of sameStreetNames(cross)) if (main.has(n)) return true;
+    return false;
+  });
+}
+
 /**
  * Search street names in the street_intersections table.
  * Returns streets matching the query with their closest intersection, sorted by relevance + proximity.
@@ -4016,7 +4047,9 @@ export async function searchStreetsSupabase(
     const data = await res.json();
     if (!Array.isArray(data)) return [];
 
-    return data.map((r: Record<string, unknown>) => ({
+    return data
+      .filter((r: Record<string, unknown>) => !isSelfIntersectionLabel(String(r.address ?? '')))
+      .map((r: Record<string, unknown>) => ({
       address: [r.address, r.municipality, r.province].filter(Boolean).join(', '),
       latitude: r.latitude as number,
       longitude: r.longitude as number,

@@ -218,7 +218,7 @@ export default function RideDetailScreen() {
         {/* Ride ID with copy */}
         <View className="flex-row items-center mb-2">
           <Text variant="caption" color="tertiary">ID: {id?.substring(0, 8)}</Text>
-          <Pressable onPress={handleCopyRideId} hitSlop={8} className="ml-2" accessibilityRole="button" accessibilityLabel={t('common:copied')}>
+          <Pressable onPress={handleCopyRideId} hitSlop={8} className="ml-2" accessibilityRole="button" accessibilityLabel={tc('copy_ride_id', { defaultValue: 'Copiar ID del viaje' })}>
             <Ionicons name="copy-outline" size={16} color={colors.neutral[400]} />
           </Pressable>
         </View>

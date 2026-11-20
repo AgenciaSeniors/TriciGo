@@ -15,6 +15,7 @@ import type { PushRegistrationOutcome } from '@tricigo/utils';
 import { Platform, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import { clearAppBadge, ensureAndroidRidesChannel } from '@/lib/appNotifications';
 import { fleetUpdateRoute } from '@/utils/fleetPush';
 import { openSupportPanelLink } from '@/utils/supportPanel';
 
@@ -337,6 +338,10 @@ export async function registerPushTokenForUser(
   };
 
   try {
+    // Before the permission check: a rider who grants it mid-session needs the
+    // channel now, not after the next cold start (QA R3-07).
+    await ensureAndroidRidesChannel();
+
     const permissions = await Notifications.getPermissionsAsync();
     let state = classifyPushPermission(permissions);
 
@@ -472,7 +477,7 @@ export function useNotificationSetup(userId: string | null | undefined) {
     // Clear badge when app comes to foreground
     const appStateSubscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
-        Notifications.setBadgeCountAsync(0);
+        void clearAppBadge();
         // R-1: retry registration if the user just enabled notifications from
         // system Settings (the only recovery after an initial OS denial).
         // register() re-checks permission and is a silent no-op once we've
@@ -482,7 +487,7 @@ export function useNotificationSetup(userId: string | null | undefined) {
     });
 
     // Clear badge on initial mount too
-    Notifications.setBadgeCountAsync(0);
+    void clearAppBadge();
 
     return () => {
       cancelled = true;

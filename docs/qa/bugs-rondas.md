@@ -34,15 +34,15 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 | R2-12 | Pasajero | Inicio | Con la app en inglés, el inicio sigue casi todo en español | verificado (ronda 3) |
 | R2-13 | Pasajero | Ajustes | Tocar "Idioma preferido" cambia el idioma al instante, sin mostrar opciones | verificado (ronda 3) |
 | R2-14 | Pasajero | Calificar y chat | Lector de pantalla: estrellas sin número y remitente del chat genérico | verificado (ronda 3) |
-| R3-01 | Pasajero | Inicio → "Tu último viaje" | "Volver a [destino]" termina en "Ubicación inválida" y no deja pedir el viaje | abierto |
-| R3-02 | Pasajero | Elegir servicio | Con la app en inglés, el selector de servicio sigue casi todo en español | abierto |
-| R3-03 | Pasajero | Buscar destino y parada | El campo de búsqueda no toma el foco al abrirse: hay que tocarlo | abierto |
-| R3-04 | Pasajero | Buscar destino | Las direcciones de Google llegan en inglés ("Vedado, Havana, Cuba") | abierto |
-| R3-05 | Pasajero | Buscar destino | Elegir una zona de Google ("Vedado") ya no pide confirmar el punto en el mapa | abierto |
-| R3-06 | Pasajero y conductor | Notificaciones | Abrir la app o volver al inicio borra todas sus notificaciones del teléfono | abierto |
-| R3-07 | Pasajero | Notificaciones | Si el permiso se da durante la sesión, las notificaciones del viaje caen en el canal "Miscellaneous" | abierto |
-| R3-08 | Pasajero | Accesibilidad | "Back" en inglés, y "Copiado" en un botón que todavía no copió | abierto |
-| R3-09 | Pasajero | Buscar destino | "23 y 12" sugiere "12 e/ Calle 12" | abierto |
+| R3-01 | Pasajero | Inicio → "Tu último viaje" | "Volver a [destino]" termina en "Ubicación inválida" y no deja pedir el viaje | en arreglo (#PRNUM) |
+| R3-02 | Pasajero | Elegir servicio | Con la app en inglés, el selector de servicio sigue casi todo en español | en arreglo (#PRNUM) |
+| R3-03 | Pasajero | Buscar destino y parada | El campo de búsqueda no toma el foco al abrirse: hay que tocarlo | en arreglo (#PRNUM) |
+| R3-04 | Pasajero | Buscar destino | Las direcciones de Google llegan en inglés ("Vedado, Havana, Cuba") | en arreglo (#PRNUM) |
+| R3-05 | Pasajero | Buscar destino | Elegir una zona de Google ("Vedado") ya no pide confirmar el punto en el mapa | en arreglo (#PRNUM) |
+| R3-06 | Pasajero y conductor | Notificaciones | Abrir la app o volver al inicio borra todas sus notificaciones del teléfono | en arreglo (#PRNUM) |
+| R3-07 | Pasajero | Notificaciones | Si el permiso se da durante la sesión, las notificaciones del viaje caen en el canal "Miscellaneous" | en arreglo (#PRNUM) |
+| R3-08 | Pasajero | Accesibilidad | "Back" en inglés, y "Copiado" en un botón que todavía no copió | en arreglo (#PRNUM) |
+| R3-09 | Pasajero | Buscar destino | "23 y 12" sugiere "12 e/ Calle 12" | en arreglo (#PRNUM) |
 
 ## Fichas
 
@@ -244,6 +244,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Causa:** `rideService.getRideHistoryFiltered` (`packages/api/src/services/ride.service.ts:1474`) devuelve las filas de `rides` tal cual, y `pickup_location`/`dropoff_location` llegan como texto WKB, no como `{ latitude, longitude }`. La tarjeta guarda ese texto y lo pasa a `setDropoff`, y la validación de `requestEstimate` (`apps/client/src/hooks/useRide.ts:91`) ve `NaN`. Los demás servicios pasan las filas por `transformRideCoordinates` (`_ride-coordinates.ts`), que usa las columnas `dropoff_lat`/`dropoff_lng`. El respaldo de `useDestinationPredictions.ts:72` lee las mismas filas, aunque solo corre cuando falla la función del servidor.
 - **Esperado:** el destino del último viaje con sus coordenadas, y los precios en pantalla.
 - **Volver a probar:** con un viaje completado, abrir el inicio, tocar la tarjeta "TU ÚLTIMO VIAJE" y hacer `dump`: tienen que aparecer los precios y "Solicitar viaje …".
+- **Arreglo (#PRNUM):** `getRideHistoryFiltered` y `getRideHistory` pasan cada fila por `transformRideCoordinates`, así que el historial devuelve `{ latitude, longitude }`. Arregla también el respaldo de `useDestinationPredictions`. El aviso "Ubicación inválida" de `useRide` ahora está traducido.
 
 ### R3-02 · Con la app en inglés, el selector de servicio sigue en español
 
@@ -251,6 +252,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Qué pasa:** siguen en español los subtítulos de cada servicio ("Económico", "Rápido", "Cómodo", "Exclusiva"), "~N min de viaje" (`index.tsx:4141`), "Envío", "Pasajeros", "AGREGAR PARADA · 0/3" (`index.tsx:4331`, escrito sin `t()`) y "CUP por km" (`index.tsx:4358`). La tarjeta dice "Triciclo" y el botón "Tricycle".
 - **Esperado:** la pantalla entera en el idioma elegido, también en portugués.
 - **Volver a probar:** poner la app en English (con la app cerrada, `sqlite3 /data/data/app.tricigo.client/databases/RKStorage "UPDATE catalystLocalStorage SET value='en' WHERE key='tricigo_language';"`), elegir un destino y hacer `dump`. Después volver a `es`.
+- **Arreglo (#PRNUM):** la tarjeta usa `service_type.*` (el mismo nombre que el botón; en español, "Envío" pasa a "Mensajería"), y el subtítulo `service_desc.*`. Se agregaron `ride.trip_minutes`, `ride.add_stop_counter` y `ride.cup_per_km`, y 15 claves del selector que solo tenían `defaultValue` en español (compartir viaje, código promocional, pasajeros, "Selecciona recogida y destino", mal tiempo…), en es, en y pt. Los métodos de pago usan `payment.*` ("Cash", "Mixed"). "N asientos libres" ahora tiene singular.
 
 ### R3-03 · El buscador no toma el foco al abrirse
 
@@ -259,6 +261,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** el teclado abierto en el campo de búsqueda.
 - **A confirmar:** en un teléfono real, por si en el emulador es un tema de tiempos.
 - **Volver a probar:** abrir cada buscador y mirar `adb shell dumpsys input_method | grep mInputShown` sin tocar nada.
+- **Arreglo (#PRNUM):** `AddressSearchInput` tiene `autoFocus`, que llama a `focus()` 150 ms después de montarse (con el `autoFocus` de `TextInput`, Android a veces no abre el teclado). Lo usan el buscador del inicio (destino, recogida y parada) y el de agregar parada durante el viaje. La etiqueta del campo para el lector de pantalla ya no está fija en "Buscar dirección": es el texto del campo.
 
 ### R3-04 · Las direcciones de Google llegan en inglés
 
@@ -267,6 +270,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Esperado:** direcciones y nombres en español.
 - **Ojo:** `google_places_cache` guarda cada respuesta 30 días por consulta y zona. Después del arreglo, las consultas ya guardadas siguen en inglés hasta que venzan o se borren.
 - **Volver a probar:** buscar un barrio con una consulta que no esté en `google_places_cache` y leer la dirección.
+- **Arreglo (#PRNUM):** la llamada de detalles del lugar pide `languageCode=es` y `regionCode=CU`. La clave del caché pasó a `v2`, así que las respuestas guardadas en inglés dejan de usarse sin borrar nada. **Hace falta desplegar `search-places-google`.**
 
 ### R3-05 · Elegir "Vedado" ya no pide confirmar el punto
 
@@ -275,6 +279,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Causa:** la función guarda solo el primer tipo que da Google (`matchedCategory: d.types[0]`, `google.ts:268`). Para Vedado, Google daba `political` el 2026-11-09 a las 00:24 y da `geocode` desde las 00:43 (`google_places_cache`). `isZoneLevelResult` (`packages/utils/src/addressSearch.ts:265`) dice que no es zona cuando la categoría no está en `ZONE_LEVEL_CATEGORIES`, y no prueba el nombre del barrio.
 - **Esperado:** cualquier barrio, municipio o ciudad pide confirmar el punto.
 - **Volver a probar:** buscar "Vedado" y elegir el resultado de Google: tiene que abrir el mapa para confirmar el punto.
+- **Arreglo (#PRNUM):** la función guarda el tipo de zona más específico de todos los que da Google (`pickMatchedCategory`), no solo el primero. Para Vedado queda `sublocality` aunque Google ponga `geocode` primero. Mismo despliegue que R3-04.
 
 ### R3-06 · Abrir la app o volver al inicio borra todas sus notificaciones
 
@@ -283,6 +288,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Causa:** las dos apps llaman a `Notifications.setBadgeCountAsync(0)` al volver al frente (`apps/client/src/hooks/useNotifications.ts:475` y `:485`, `apps/driver/src/hooks/useNotifications.ts:433` y `:443`). En Android, expo-notifications 55.0.18 hace `NotificationManager.cancelAll()` cuando el número es 0 (`BadgeHelper.kt`). Además, el inicio del pasajero pide el permiso de ubicación cada vez que se monta (`index.tsx:2104`), aunque ya esté dado. Android abre y cierra su pantalla de permisos en medio segundo, y la app lo cuenta como salir y volver.
 - **Esperado:** a decidir. Limpiar el número del ícono no debería borrar notificaciones que la persona no vio. El inicio podría mirar el permiso con `getForegroundPermissionsAsync` antes de pedirlo.
 - **Volver a probar:** con el permiso de notificaciones dado, mandar la app a segundo plano, recibir una notificación, abrir la app y mirar `numRemovedByApp` en `adb shell dumpsys notification --noredact | grep -A12 "key='app.tricigo.client'"`.
+- **Arreglo (#PRNUM):** en Android ya no se llama a `setBadgeCountAsync(0)` (`clearAppBadge`, en las dos apps): ahí el número del ícono sale de las notificaciones mismas. En iOS 16+ se sigue limpiando, porque allá solo borra el número. El inicio mira el permiso de ubicación antes de pedirlo (`ensureForegroundLocationPermission`). Cuándo borrar una oferta vieja del conductor queda para otra decisión.
 
 ### R3-07 · Las notificaciones del viaje caen en "Miscellaneous"
 
@@ -291,6 +297,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Causa:** el canal `rides` se crea solo en `registerForPushNotifications` (`apps/client/src/services/push.service.ts:60`), que `_layout.tsx:147` llama al arrancar y que corta antes si todavía no hay permiso. `registerPushTokenForUser`, que es lo que pide el permiso desde 2026-09-10, no crea el canal. Se crea recién en el próximo arranque en frío.
 - **Esperado:** el canal creado apenas hay permiso, o siempre al arrancar (crear un canal no necesita permiso).
 - **Volver a probar:** con una instalación nueva, dar el permiso desde la app, provocar una notificación del viaje y buscar `Channel 'rides'` en logcat.
+- **Arreglo (#PRNUM):** el canal `rides` se crea en cada arranque, antes del chequeo de permiso y de `Device.isDevice`, y también al registrar el token después de dar el permiso. El nombre que muestra Android en Ajustes pasó de "Ride updates" a "Viajes".
 
 ### R3-08 · "Back" en inglés y "Copiado" antes de copiar
 
@@ -298,6 +305,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Qué pasa:** el botón de volver se lee "Back" en el chat y en el detalle del viaje (`packages/ui/src/ScreenHeader.tsx:32` lo tiene fijo, y `ProfileScreenHeader.tsx:57` lo usa por defecto). En el detalle del viaje, el botón de copiar el ID se lee "Copiado" antes de tocarlo (`apps/client/app/ride/[id].tsx:221` usa `common:copied` como etiqueta).
 - **Esperado:** "Volver" traducido, y "Copiar ID del viaje" en el botón.
 - **Volver a probar:** `dump` en el chat y en el detalle de un viaje.
+- **Arreglo (#PRNUM):** `ScreenHeader` y `ProfileScreenHeader` leen `common:back` ("Volver"). El botón de copiar dice "Copiar ID del viaje" (`common:copy_ride_id`).
 
 ### R3-09 · "23 y 12" sugiere "12 e/ Calle 12"
 
@@ -305,6 +313,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Qué pasa:** el primer resultado es la esquina correcta ("Calle 23 y Calle 12, Plaza de la Revolución"). El cuarto es "12 · 12 e/ Calle 12": una calle "entre" ella misma. El primero, además, se lee dos veces con el lector de pantalla, porque el nombre y la dirección son iguales.
 - **Esperado:** sin el resultado que se nombra a sí mismo.
 - **Volver a probar:** buscar "23 y 12" y hacer `dump`.
+- **Arreglo (#PRNUM):** `searchStreetsSupabase` descarta las filas en que una calle se cruza consigo misma (`isSelfIntersectionLabel`: compara los nombres sin "Calle", "Avenida" y otros prefijos, y con el alias entre paréntesis). Los datos de `street_intersections` no se tocaron. El lector de pantalla lee una sola vez un resultado cuyo nombre y dirección son iguales (`searchResultA11yLabel`).
 
 ## Notas de la ronda 3 (2026-11-20)
 

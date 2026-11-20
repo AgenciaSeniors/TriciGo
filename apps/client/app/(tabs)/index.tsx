@@ -14,6 +14,7 @@ import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
 import Toast from 'react-native-toast-message';
 import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, findNearestPreset, estimateVehicleEtaMinutes, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, INCOMPATIBILITY_REASON_LABELS, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta, formatRating, SEARCH_TYPICAL_WAIT_S, searchWaitView, discountBaseCup, riderExpectedFareCup, riderExpectedFareTrc, isSignupPromoCode, signupPromoAction, shouldOfferMotoFallback, shouldSpendPushPrompt, motoDeportivaCard as buildMotoDeportivaCard } from '@tricigo/utils';
 import * as Location from 'expo-location';
+import { ensureForegroundLocationPermission } from '@/lib/locationPermission';
 import * as Notifications from 'expo-notifications';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost, announcementService, type HomeAnnouncement, exchangeRateService, promotionService, type ActivePromotion, partnerPlaceService, motoDeportivaService } from '@tricigo/api';
@@ -2101,7 +2102,7 @@ function IdleView() {
 
     (async () => {
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
+        const status = await ensureForegroundLocationPermission();
         if (status !== 'granted') {
           setLocationDenied(true);
           return;
@@ -4011,6 +4012,7 @@ function SelectingView({ openPicker }: {
           {/* AddressSearchInput — always in search mode, auto-expanded with suggestions */}
           <AddressSearchInput
             autoExpand
+            autoFocus
             near={userCenterLatLng}
             placeholder={searchingField === 'pickup'
               ? t('ride.enter_pickup', { defaultValue: 'Punto de recogida' })
@@ -4104,9 +4106,9 @@ function SelectingView({ openPicker }: {
                 <Pressable key={slug} disabled={motoLocked} accessibilityState={{ disabled: motoLocked }} onPress={() => { triggerHaptic('light'); setServiceType(slug); }} style={{ opacity: motoLocked ? 0.55 : 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, borderRadius: 12, marginBottom: 8, borderWidth: isSelected ? 2 : 1, borderColor: isSelected ? colors.brand.orange : (mode === 'dark' ? tokens.line : colors.neutral[200]), backgroundColor: isSelected ? (mode === 'dark' ? tokens.accent.orangeGlow : '#FFF5F0') : (mode === 'dark' ? tokens.bg.elev2 : '#fff') }}>
                   <Image source={VEHICLE_ICONS[slug]} style={{ width: 36, height: 36, marginRight: 12 }} resizeMode="contain" />
                   <View style={{ flex: 1 }}>
-                    <Text variant="body" style={{ fontWeight: '600' }}>{meta?.label ?? slug}</Text>
+                    <Text variant="body" style={{ fontWeight: '600' }}>{t(`service_type.${slug}` as const, { defaultValue: meta?.label ?? slug })}</Text>
                     <Text variant="caption" color="tertiary">
-                      {meta?.desc}{eta ? <Text style={{ color: MAP_COLORS.pickup }}> · {eta} min</Text> : null}
+                      {t(`service_desc.${slug}` as const, { defaultValue: meta?.desc ?? '' })}{eta ? <Text style={{ color: MAP_COLORS.pickup }}> · {eta} min</Text> : null}
                     </Text>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
@@ -4138,7 +4140,7 @@ function SelectingView({ openPicker }: {
                       <>
                         <Text variant="body" style={{ fontWeight: '700', color: isSelected ? colors.brand.orange : tokens.ink.primary }}>{formatFare(est.estimated_fare_cup, est.estimated_fare_trc)}</Text>
                         {est.estimated_duration_s ? (
-                          <Text variant="caption" color="tertiary">~{Math.ceil(est.estimated_duration_s / 60)} min de viaje</Text>
+                          <Text variant="caption" color="tertiary">{t('ride.trip_minutes', { minutes: Math.ceil(est.estimated_duration_s / 60), defaultValue: '~{{minutes}} min de viaje' })}</Text>
                         ) : null}
                         {slug === 'mensajeria' ? (
                           <Text variant="caption" color="tertiary">{t('delivery.price_by_vehicle', { defaultValue: 'Según vehículo' })}</Text>
@@ -4328,7 +4330,7 @@ function SelectingView({ openPicker }: {
                     <View style={{ position: 'absolute', width: 1.8, height: 14, backgroundColor: tokens.accent.orange, borderRadius: 2 }} />
                   </View>
                   <Text style={{ fontFamily: 'JetBrainsMono_500Medium', fontSize: 11, letterSpacing: 2, color: tokens.accent.orange }}>
-                    {`AGREGAR PARADA · ${draft.waypoints.filter(wp => wp.address).length}/3`}
+                    {t('ride.add_stop_counter', { current: draft.waypoints.filter(wp => wp.address).length, max: 3, defaultValue: 'AGREGAR PARADA · {{current}}/{{max}}' })}
                   </Text>
                 </Pressable>
               )}
@@ -4355,7 +4357,7 @@ function SelectingView({ openPicker }: {
                 </View>
                 {selectedEstimate.estimated_distance_m > 0 && (
                   <Text variant="caption" color="tertiary" style={{ marginTop: 4 }}>
-                    {Math.round(selectedEstimate.estimated_fare_cup / (selectedEstimate.estimated_distance_m / 1000))} CUP por km
+                    {t('ride.cup_per_km', { amount: Math.round(selectedEstimate.estimated_fare_cup / (selectedEstimate.estimated_distance_m / 1000)), defaultValue: '{{amount}} CUP por km' })}
                   </Text>
                 )}
                 {shareDiscountCup > 0 && (
@@ -4379,7 +4381,7 @@ function SelectingView({ openPicker }: {
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
               {(['cash', 'tricicoin', 'mixed'] as const).map((method) => (
                 <Pressable key={method} onPress={() => handlePaymentMethodChange(method)} style={{ flex: 1, paddingVertical: 14, borderRadius: 10, borderWidth: draft.paymentMethod === method ? 2 : 1, borderColor: draft.paymentMethod === method ? colors.brand.orange : (mode === 'dark' ? tokens.line : colors.neutral[200]), backgroundColor: draft.paymentMethod === method ? (mode === 'dark' ? tokens.accent.orangeGlow : '#FFF5F0') : (mode === 'dark' ? tokens.bg.elev2 : '#fff'), alignItems: 'center', justifyContent: 'center' }}>
-                  <Text variant="caption" style={{ fontWeight: draft.paymentMethod === method ? '700' : '400', color: draft.paymentMethod === method ? colors.brand.orange : (mode === 'dark' ? tokens.ink.secondary : colors.neutral[500]) }}>{method === 'cash' ? 'Efectivo' : method === 'tricicoin' ? 'TriciCoin' : 'Mixto'}</Text>
+                  <Text variant="caption" style={{ fontWeight: draft.paymentMethod === method ? '700' : '400', color: draft.paymentMethod === method ? colors.brand.orange : (mode === 'dark' ? tokens.ink.secondary : colors.neutral[500]) }}>{t(`payment.${method}` as const, { defaultValue: method === 'cash' ? 'Efectivo' : method === 'tricicoin' ? 'TriciCoin' : 'Mixto' })}</Text>
                 </Pressable>
               ))}
             </View>
@@ -4427,7 +4429,7 @@ function SelectingView({ openPicker }: {
                     />
                   </View>
                   {/* Not while pricing: validatePromo drops a result whose estimate is in flight. */}
-                  <Button title={t('common.apply', { defaultValue: 'Aplicar' })} size="sm" onPress={() => validatePromo()} loading={validatingPromo} disabled={!promoCode.trim() || isFareEstimating || signupPromoBlocked} />
+                  <Button title={t('ride.apply', { defaultValue: 'Aplicar' })} size="sm" onPress={() => validatePromo()} loading={validatingPromo} disabled={!promoCode.trim() || isFareEstimating || signupPromoBlocked} />
                 </View>
                 {signupPromoBlocked && (
                   <Text variant="caption" color="tertiary" style={{ marginBottom: 8 }}>
@@ -4471,7 +4473,7 @@ function SelectingView({ openPicker }: {
                     </Text>
                     <Text variant="caption" color="tertiary">
                       {draft.shareRide && shareFreeSeats > 0
-                        ? t('ride.share_ride_active', { defaultValue: '{{seats}} asientos libres · −{{pct}}%', seats: shareFreeSeats, pct: shareFreeSeats * SHARE_PCT })
+                        ? t('ride.share_ride_active', { defaultValue: '{{count}} asientos libres · −{{pct}}%', count: shareFreeSeats, pct: shareFreeSeats * SHARE_PCT })
                         : t('ride.share_ride_desc', { defaultValue: 'El chofer puede recoger gente en los asientos libres y pagas menos' })}
                     </Text>
                   </View>
@@ -4771,7 +4773,7 @@ function ReviewingView() {
                     resizeMode="contain"
                   />
                   <Text variant="caption" className="text-neutral-600 dark:text-neutral-300 font-medium">
-                    {SERVICE_META[slug]?.label ?? slug}
+                    {t(`service_type.${slug}` as const, { defaultValue: SERVICE_META[slug]?.label ?? slug })}
                   </Text>
                   {est && (
                     <Text variant="caption" color="accent" className="ml-2 font-semibold">
@@ -5047,7 +5049,7 @@ function ReviewingView() {
                 </Text>
                 <Text variant="caption" color="secondary">
                   {draft.shareRide && shareFreeSeats > 0
-                    ? t('ride.share_ride_active', { defaultValue: '{{seats}} asientos libres · −{{pct}}%', seats: shareFreeSeats, pct: shareFreeSeats * 7 })
+                    ? t('ride.share_ride_active', { defaultValue: '{{count}} asientos libres · −{{pct}}%', count: shareFreeSeats, pct: shareFreeSeats * 7 })
                     : t('ride.share_ride_desc', { defaultValue: 'El chofer puede recoger gente en los asientos libres y pagas menos' })}
                 </Text>
               </View>
