@@ -1358,14 +1358,21 @@ function AddressSearchInputInner({
                   onPress={() => { void triggerSelection(); handleTextChange(c.term); }}
                   accessibilityRole="button"
                   accessibilityLabel={t(`ride.cat_${c.key}`)}
-                  style={({ pressed }) => ({ width: '25%', alignItems: 'center', paddingVertical: 10, opacity: pressed ? 0.6 : 1 })}
+                  // The width lives in a plain style object: inside a style
+                  // function it was dropped and the grid fell to 6 + 2 items
+                  // with the labels touching (QA R4-04).
+                  style={{ width: '25%', alignItems: 'center', paddingVertical: 10 }}
                 >
-                  <View style={{ width: 48, height: 48, borderRadius: 16, backgroundColor: `${c.tint}1A`, alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
-                    <Ionicons name={c.icon as never} size={22} color={c.tint} />
-                  </View>
-                  <Text variant="caption" color="secondary" style={{ fontSize: 11 }} numberOfLines={1}>
-                    {t(`ride.cat_${c.key}`)}
-                  </Text>
+                  {({ pressed }) => (
+                    <View style={{ alignItems: 'center', opacity: pressed ? 0.6 : 1 }}>
+                      <View style={{ width: 48, height: 48, borderRadius: 16, backgroundColor: `${c.tint}1A`, alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
+                        <Ionicons name={c.icon as never} size={22} color={c.tint} />
+                      </View>
+                      <Text variant="caption" color="secondary" style={{ fontSize: 11 }} numberOfLines={1}>
+                        {t(`ride.cat_${c.key}`)}
+                      </Text>
+                    </View>
+                  )}
                 </Pressable>
               ))}
             </View>

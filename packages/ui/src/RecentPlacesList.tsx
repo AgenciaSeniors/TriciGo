@@ -44,36 +44,43 @@ export function RecentPlacesList({
   return (
     <View>
       {places.map((p, idx) => (
+        // The row layout lives in plain style objects: inside a style function
+        // it was dropped and the dot, the texts and the arrow stacked (QA R4-05).
         <Pressable
           key={p.id}
           onPress={() => onSelect(p)}
-          style={({ pressed }) => [
+          accessibilityRole="button"
+          accessibilityLabel={`${p.name}, ${p.when}`}
+          style={[
             styles.item,
             {
               borderBottomColor: tokens.line,
               borderBottomWidth: idx === places.length - 1 ? 0 : 1,
-              opacity: pressed ? 0.6 : 1,
             },
           ]}
         >
-          <View
-            style={[
-              styles.dot,
-              { borderColor: tokens.accent.orange },
-            ]}
-          />
-          <View style={styles.info}>
-            <RNText
-              style={[styles.name, { color: tokens.ink.primary }]}
-              numberOfLines={1}
-            >
-              {p.name}
-            </RNText>
-            <RNText style={[styles.when, { color: tokens.ink.subtle }]}>
-              {p.when}
-            </RNText>
-          </View>
-          <RNText style={[styles.arrow, { color: tokens.ink.subtle }]}>›</RNText>
+          {({ pressed }) => (
+            <View style={[styles.row, { opacity: pressed ? 0.6 : 1 }]}>
+              <View
+                style={[
+                  styles.dot,
+                  { borderColor: tokens.accent.orange },
+                ]}
+              />
+              <View style={styles.info}>
+                <RNText
+                  style={[styles.name, { color: tokens.ink.primary }]}
+                  numberOfLines={1}
+                >
+                  {p.name}
+                </RNText>
+                <RNText style={[styles.when, { color: tokens.ink.subtle }]}>
+                  {p.when}
+                </RNText>
+              </View>
+              <RNText style={[styles.arrow, { color: tokens.ink.subtle }]}>›</RNText>
+            </View>
+          )}
         </Pressable>
       ))}
     </View>
@@ -88,11 +95,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   item: {
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+  },
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 4,
   },
   dot: {
     width: 10,

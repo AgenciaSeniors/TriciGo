@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, Pressable, ActivityIndicator, Platform, Switch, Image, Animated, ScrollView, StyleSheet, TextInput, Alert, Linking, AppState } from 'react-native';
+import { View, Pressable, ActivityIndicator, Platform, Switch, Image, Animated, ScrollView, StyleSheet, TextInput, Alert, Linking, AppState, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect } from 'expo-router';
@@ -15,6 +15,7 @@ import Toast from 'react-native-toast-message';
 import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, findNearestPreset, estimateVehicleEtaMinutes, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, INCOMPATIBILITY_REASON_LABELS, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta, formatRating, SEARCH_TYPICAL_WAIT_S, searchWaitView, discountBaseCup, riderExpectedFareCup, riderExpectedFareTrc, isSignupPromoCode, signupPromoAction, shouldOfferMotoFallback, shouldSpendPushPrompt, motoDeportivaCard as buildMotoDeportivaCard } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { ensureForegroundLocationPermission } from '@/lib/locationPermission';
+import { pickerInitialAddress } from '@/lib/pickerAddress';
 import * as Notifications from 'expo-notifications';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost, announcementService, type HomeAnnouncement, exchangeRateService, promotionService, type ActivePromotion, partnerPlaceService, motoDeportivaService } from '@tricigo/api';
@@ -1936,7 +1937,8 @@ function NativeHomeScreen() {
             // coordinate and we know no address for it: passing the previous
             // label there would let the user confirm the old label pinned to
             // the new point, which is the mismatch 00537 exists to prevent.
-            initialAddress={picker.keepAddress ? draftEndpoint?.address ?? null : null}
+            // A zone keeps nothing: confirming uses the exact address of the pin (QA R4-02).
+            initialAddress={pickerInitialAddress(picker, draftEndpoint?.address)}
             seeded={!!picker.seed || picker.keepAddress}
             confirmPrompt={picker.confirm}
             confirmHint={picker.zoneHint ? 'zone' : null}
@@ -2416,6 +2418,9 @@ function IdleView() {
 
   return (
     <View style={{ flex: 1, backgroundColor: tokens.bg.paper }}>
+      {/* QA R4-03: nothing above this screen sets the status bar, so right after
+          launch it kept the splash's white icons on the cream background. */}
+      <StatusBar barStyle={mode === 'dark' ? 'light-content' : 'dark-content'} />
       <ScrollView
         contentContainerStyle={{
           paddingTop: insets.top + 8,
@@ -3773,6 +3778,7 @@ function SelectingView({ openPicker }: {
 
   return (
     <View style={{ flex: 1 }}>
+      <StatusBar barStyle={mode === 'dark' ? 'light-content' : 'dark-content'} />
       {/* Opens only on demand here ("Avísame" with notifications off); the idle screen owns the automatic prompt. */}
       <NotificationPermissionSheet autoPrompt={false} />
       {/* Fullscreen map with route */}

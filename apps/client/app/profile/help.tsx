@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Pressable, FlatList, RefreshControl, Linking } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
@@ -21,6 +21,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useSupportPhone } from '@/hooks/useSupportPhone';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { SupportTicket, TicketCategory } from '@tricigo/types';
+import { helpTicketPreset } from '@/lib/helpTicketPreset';
 
 // Same e-mail support.tsx links to. The WhatsApp numbers: the operator on shift
 // (useSupportPhone, 00683) first, then platform_config's list (useSupportPhones, 00682).
@@ -118,6 +119,20 @@ export default function HelpScreen() {
     await fetchTickets();
     setRefreshing(false);
   }, [fetchTickets]);
+
+  // The Safety Center links here with ?newTicket=safety: open the ticket form
+  // with the subject written, instead of the FAQ that sent the rider back (QA R4-06).
+  const { newTicket } = useLocalSearchParams<{ newTicket?: string }>();
+  const presetOpenedRef = useRef(false);
+  useEffect(() => {
+    const preset = helpTicketPreset(newTicket);
+    if (!preset || presetOpenedRef.current) return;
+    presetOpenedRef.current = true;
+    setCategory(preset.category);
+    setSubject(t(preset.subjectKey, { defaultValue: 'Problema de seguridad' }));
+    setDescription('');
+    setSheetVisible(true);
+  }, [newTicket, t]);
 
   const handleCreateTicket = () => {
     triggerHaptic('light');

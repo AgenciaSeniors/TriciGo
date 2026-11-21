@@ -232,7 +232,7 @@ export default function SafetyCenterScreen() {
         <View style={{ backgroundColor: tokens.bg.elev1, borderRadius: 16, padding: 16, marginBottom: 12, ...CARD_SHADOW }}>
           <Pressable
             className="flex-row items-center"
-            onPress={() => router.push('/profile/help')}
+            onPress={() => router.push('/profile/help?newTicket=safety')}
           >
             <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#F59E0B1A', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
               <Ionicons name="flag-outline" size={20} color="#F59E0B" />
