@@ -36,20 +36,20 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 | R2-14 | Pasajero | Calificar y chat | Lector de pantalla: estrellas sin número y remitente del chat genérico | verificado (ronda 3) |
 | R3-01 | Pasajero | Inicio → "Tu último viaje" | "Volver a [destino]" termina en "Ubicación inválida" y no deja pedir el viaje | verificado (ronda 4) |
 | R3-02 | Pasajero | Elegir servicio | Con la app en inglés, el selector de servicio sigue casi todo en español | verificado (ronda 4) |
-| R3-03 | Pasajero | Buscar destino y parada | El campo de búsqueda no toma el foco al abrirse: hay que tocarlo | en arreglo (fix/qa-round4) |
+| R3-03 | Pasajero | Buscar destino y parada | El campo de búsqueda no toma el foco al abrirse: hay que tocarlo | arreglado (#1234) |
 | R3-04 | Pasajero | Buscar destino | Las direcciones de Google llegan en inglés ("Vedado, Havana, Cuba") | verificado (ronda 4) |
 | R3-05 | Pasajero | Buscar destino | Elegir una zona de Google ("Vedado") ya no pide confirmar el punto en el mapa | verificado (ronda 4) |
 | R3-06 | Pasajero y conductor | Notificaciones | Abrir la app o volver al inicio borra todas sus notificaciones del teléfono | verificado (ronda 4) |
 | R3-07 | Pasajero | Notificaciones | Si el permiso se da durante la sesión, las notificaciones del viaje caen en el canal "Miscellaneous" | verificado en parte (ronda 4) |
 | R3-08 | Pasajero | Accesibilidad | "Back" en inglés, y "Copiado" en un botón que todavía no copió | verificado (ronda 4) |
 | R3-09 | Pasajero | Buscar destino | "23 y 12" sugiere "12 e/ Calle 12" | verificado (ronda 4) |
-| R4-01 | Pasajero | Buscar destino | Lugares con "Havana" como municipio ("Reparto Bahia · Havana, La Habana"): el sync semanal pisa el municipio que corrigió 00580 | en arreglo (fix/qa-round4) |
-| R4-02 | Pasajero | Confirmar el pin de una zona | Confirmar sin mover el pin deja el barrio ("Cayo Hueso, La Habana") como dirección, aunque la pantalla mostraba la dirección exacta | en arreglo (fix/qa-round4) |
-| R4-03 | Pasajero | Pantallas claras | La hora y la batería de la barra de estado salen en blanco sobre el fondo crema (a confirmar fuera del dev client) | en arreglo (fix/qa-round4) |
-| R4-04 | Pasajero | Buscar destino y parada | "BUSCAR CERCA" sale en filas de 6 y 2, con las etiquetas pegadas ("HospitalesFarmaciasRestaurantes") | en arreglo (fix/qa-round4) |
-| R4-05 | Pasajero | Inicio → "Recientes" | La fila sale apilada: el punto, el nombre, "Hace 5h" y la flecha uno debajo del otro | en arreglo (fix/qa-round4) |
-| R4-06 | Pasajero | Centro de Seguridad | "Reportar Problema de Seguridad" lleva a la Ayuda, y la Ayuda dice que se reporta desde el Centro de Seguridad | en arreglo (fix/qa-round4) |
-| R4-07 | Pasajero | Elegir servicio | El subtítulo de Mensajería es "Delivery" en español, y repite el nombre en inglés y portugués | en arreglo (fix/qa-round4) |
+| R4-01 | Pasajero | Buscar destino | Lugares con "Havana" como municipio ("Reparto Bahia · Havana, La Habana"): el sync semanal pisa el municipio que corrigió 00580 | arreglado (#1234, 00693 aplicada en prod) |
+| R4-02 | Pasajero | Confirmar el pin de una zona | Confirmar sin mover el pin deja el barrio ("Cayo Hueso, La Habana") como dirección, aunque la pantalla mostraba la dirección exacta | verificado (con #1234) |
+| R4-03 | Pasajero | Pantallas claras | La hora y la batería de la barra de estado salen en blanco sobre el fondo crema (a confirmar fuera del dev client) | verificado (con #1234) |
+| R4-04 | Pasajero | Buscar destino y parada | "BUSCAR CERCA" sale en filas de 6 y 2, con las etiquetas pegadas ("HospitalesFarmaciasRestaurantes") | verificado (con #1234) |
+| R4-05 | Pasajero | Inicio → "Recientes" | La fila sale apilada: el punto, el nombre, "Hace 5h" y la flecha uno debajo del otro | verificado (con #1234) |
+| R4-06 | Pasajero | Centro de Seguridad | "Reportar Problema de Seguridad" lleva a la Ayuda, y la Ayuda dice que se reporta desde el Centro de Seguridad | arreglado (#1234) |
+| R4-07 | Pasajero | Elegir servicio | El subtítulo de Mensajería es "Delivery" en español, y repite el nombre en inglés y portugués | arreglado (#1234) |
 
 ## Fichas
 
@@ -272,7 +272,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Volver a probar:** abrir cada buscador y mirar `adb shell dumpsys input_method | grep mInputShown` sin tocar nada.
 - **Arreglo (#1224):** `AddressSearchInput` tiene `autoFocus`, que llama a `focus()` 150 ms después de montarse (con el `autoFocus` de `TextInput`, Android a veces no abre el teclado). Lo usan el buscador del inicio (destino, recogida y parada) y el de agregar parada durante el viaje. La etiqueta del campo para el lector de pantalla ya no está fija en "Buscar dirección": es el texto del campo.
 - **Vuelve a pasar (ronda 4, 2026-11-20), solo en el buscador de parada.** El de destino abre el teclado unos 4 s después (el emulador estaba cargado). El de "AGREGAR PARADA", en elegir servicio, queda con el foco pero sin teclado: `mInputShown=false` 30 s después, en dos intentos. logcat muestra `ImeTracker … onRequestShow at ORIGIN_CLIENT_SHOW_SOFT_INPUT` y enseguida `onFailed at PHASE_CLIENT_VIEW_SERVED`: el `focus()` de los 150 ms llega antes de que Android conecte el campo con el teclado. En el de destino, y en "Agregar parada" durante un viaje en curso, el mismo pedido termina en `onShown`. Para verlo: `adb logcat -d | grep ImeTracker` después de abrir cada buscador.
-- **Arreglo (fix/qa-round4):** `scheduleAutoFocus` (`apps/client/src/lib/autoFocusInput.ts`) vuelve a intentar a los 600 ms y a los 1,4 s, con `blur()` y `focus()`, mientras el campo tenga el foco y el teclado no haya abierto. Un segundo `focus()` solo no sirve: React Native no enfoca de nuevo el campo que cree enfocado. Si la persona tocó otra cosa, no le saca el foco.
+- **Arreglo (#1234):** `scheduleAutoFocus` (`apps/client/src/lib/autoFocusInput.ts`) vuelve a intentar a los 600 ms y a los 1,4 s, con `blur()` y `focus()`, mientras el campo tenga el foco y el teclado no haya abierto. Un segundo `focus()` solo no sirve: React Native no enfoca de nuevo el campo que cree enfocado. Si la persona tocó otra cosa, no le saca el foco.
 
 ### R3-04 · Las direcciones de Google llegan en inglés
 
@@ -345,7 +345,8 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
   SELECT count(*) FILTER (WHERE m6 IS NOT NULL AND municipality IS DISTINCT FROM m6) AS drift FROM a;
   ```
   Tiene que dar 0 después del arreglo y seguir en 0 después del sync semanal siguiente. En la app, buscar "cayo hueso" y mirar la fila de "Cayo Cruz".
-- **Arreglo (fix/qa-round4):** migración `00693`. El trigger solo sale temprano si no cambió ninguno de los tres campos (ubicación, municipio y provincia), así que una escritura del sync vuelve a tomar los valores del polígono. Cambia solo el cuerpo de la función, sin lock sobre `cuba_pois`. Además corrige las 13.530 filas. Ensayo (`supabase/tests/00693`): sin la migración fallan 4 chequeos y con ella aplicada dos veces da PASS. **No está aplicada en prod.**
+- **Arreglo (#1234):** migración `00693`. El trigger solo sale temprano si no cambió ninguno de los tres campos (ubicación, municipio y provincia), así que una escritura del sync vuelve a tomar los valores del polígono. Cambia solo el cuerpo de la función, sin lock sobre `cuba_pois`. Además corrige las 13.530 filas. Ensayo (`supabase/tests/00693`): sin la migración fallan 4 chequeos y con ella aplicada dos veces da PASS. **No está aplicada en prod.**
+- **Aplicada en prod (2026-11-21):** la función por MCP (`00693_poi_admin_area_survives_sync_part1_function`, md5 `5000135d…`, sin retornos de carro) y el backfill en 8 tandas por rango de id: 14.071 filas, de 0,1 a 12,6 s cada una. Después: 0 filas con un municipio o una provincia distintos de su polígono, 5 lugares activos con "Havana" (caen fuera de todo polígono) y 210 municipios distintos entre los activos. Una escritura como la del sync sobre "Reparto Bahia", en un bloque que se deshizo, dejó "Habana del Este · La Habana". **Falta:** volver a correr la consulta de la ficha después del próximo sync semanal.
 
 ### R4-02 · Confirmar el pin de una zona deja el barrio como dirección
 
@@ -354,7 +355,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Causa:** `index.tsx:4048` abre el mapa con `keepAddress: true` también para las zonas, y `ConfirmLocationScreen.tsx:295` conserva el texto elegido si el pin se movió menos de 20 m. Para una calle eso está bien (el texto elegido es más rico que la geocodificación inversa); para una zona es al revés.
 - **Esperado:** con una zona, al confirmar se usa la dirección exacta del pin.
 - **Volver a probar:** los pasos de arriba y leer el destino con `dump` en elegir servicio.
-- **Arreglo (fix/qa-round4):** con una zona, el mapa no recibe el texto elegido (`pickerInitialAddress`), así que "Confirmar" usa la dirección exacta del pin. Verificado en el emulador: el destino quedó "Casa Rooms Victoria, Zanja e/ Soledad y Castillejo, Centro Habana, La Habana".
+- **Arreglo (#1234):** con una zona, el mapa no recibe el texto elegido (`pickerInitialAddress`), así que "Confirmar" usa la dirección exacta del pin. Verificado en el emulador: el destino quedó "Casa Rooms Victoria, Zanja e/ Soledad y Castillejo, Centro Habana, La Habana".
 
 ### R4-03 · La barra de estado sale en blanco sobre fondo claro
 
@@ -363,7 +364,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Causa probable:** el inicio no usa `Screen` (que pone `dark-content` en tema claro) ni monta otro `StatusBar`, así que hereda lo que haya antes: la pantalla de arranque oscura (`#0F0F23`) o el lanzador del dev client.
 - **A confirmar:** en un teléfono con la app de la tienda, recién abierta. Si allí se ve bien, es del montaje y se descarta.
 - **Volver a probar:** abrir la app en frío en tema claro, `dumpsys window | grep mLastAppearance`, y una captura de la parte de arriba del inicio.
-- **Arreglo (fix/qa-round4):** el inicio y la selección de servicio montan un `StatusBar` según el tema. Verificado en el emulador: al abrir la app en frío, `LIGHT_STATUS_BARS LIGHT_NAVIGATION_BARS` y la hora se ve.
+- **Arreglo (#1234):** el inicio y la selección de servicio montan un `StatusBar` según el tema. Verificado en el emulador: al abrir la app en frío, `LIGHT_STATUS_BARS LIGHT_NAVIGATION_BARS` y la hora se ve.
 
 ### R4-04 · "BUSCAR CERCA" en filas de 6 y 2, con las etiquetas pegadas
 
@@ -372,7 +373,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Causa probable:** el `width: '25%'` está dentro de una función-estilo de `Pressable` (`apps/client/src/components/AddressSearchInput.tsx:1359`), el caso de CLAUDE.md § "Una función-estilo de `Pressable` PUEDE descartar su bloque de layout". Confirmarlo con el A/B de esa sección antes de cambiarlo.
 - **Esperado:** dos filas de 4, con aire entre etiquetas.
 - **Volver a probar:** abrir "¿A dónde vas?" y `dump`: los centros de la primera fila tienen que quedar en 4 columnas iguales.
-- **Arreglo (fix/qa-round4):** el ancho pasó a un estilo plano, y la opacidad al tocar va en un hijo. Verificado en el emulador: 4 + 4, con los centros en x = 114, 278, 442 y 606. Antes, en el mismo emulador, salían 6 + 2.
+- **Arreglo (#1234):** el ancho pasó a un estilo plano, y la opacidad al tocar va en un hijo. Verificado en el emulador: 4 + 4, con los centros en x = 114, 278, 442 y 606. Antes, en el mismo emulador, salían 6 + 2.
 
 ### R4-05 · La fila de "Recientes" del inicio sale apilada
 
@@ -381,7 +382,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Causa probable:** `flexDirection: 'row'` está dentro de la función-estilo del `Pressable` (`packages/ui/src/RecentPlacesList.tsx:50`), el mismo caso que R4-04 y que el perfil del conductor de 2026-07-31.
 - **Esperado:** punto, texto y flecha en una sola fila, y la flecha fuera de la etiqueta de accesibilidad.
 - **Volver a probar:** `dump` del inicio: la flecha tiene que quedar a la derecha (x cerca de 680) y a la altura del nombre.
-- **Arreglo (fix/qa-round4):** la fila pasó a un estilo plano, y la etiqueta para el lector de pantalla es "nombre, hace cuánto", sin la flecha. Verificado en el emulador: la flecha queda en x = 666, a la altura de la fila.
+- **Arreglo (#1234):** la fila pasó a un estilo plano, y la etiqueta para el lector de pantalla es "nombre, hace cuánto", sin la flecha. Verificado en el emulador: la flecha queda en x = 666, a la altura de la fila.
 
 ### R4-06 · "Reportar Problema de Seguridad" lleva a la Ayuda
 
@@ -390,7 +391,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Causa:** `apps/client/app/profile/safety.tsx:235` hace `router.push('/profile/help')`.
 - **Esperado:** a decidir. Un formulario para elegir el viaje y contar qué pasó, o un ticket de soporte con el tema de seguridad ya elegido. Como mínimo, que la respuesta de la Ayuda no mande de vuelta al mismo lugar.
 - **Volver a probar:** los pasos de arriba.
-- **Arreglo (fix/qa-round4):** el Centro de Seguridad abre la Ayuda con `?newTicket=safety`, que abre el formulario de ticket con el asunto "Problema de seguridad" ya escrito (`helpTicketPreset`). La respuesta de la pregunta frecuente ahora dice que durante un viaje se usa Seguridad o SOS y, si el viaje ya terminó, un ticket desde esa pantalla. No hay categoría de seguridad en los tickets: sumarla necesita migración y cambios en el panel.
+- **Arreglo (#1234):** el Centro de Seguridad abre la Ayuda con `?newTicket=safety`, que abre el formulario de ticket con el asunto "Problema de seguridad" ya escrito (`helpTicketPreset`). La respuesta de la pregunta frecuente ahora dice que durante un viaje se usa Seguridad o SOS y, si el viaje ya terminó, un ticket desde esa pantalla. No hay categoría de seguridad en los tickets: sumarla necesita migración y cambios en el panel.
 
 ### R4-07 · El subtítulo de Mensajería es "Delivery"
 
@@ -399,7 +400,7 @@ Cada ronda empieza volviendo a probar los que están en "arreglado". Si vuelve a
 - **Causa:** `service_desc.mensajeria` en `rider.json` (#1224 copió el texto que había).
 - **Esperado:** un subtítulo que diga algo y no repita el nombre ("Envía paquetes", por ejemplo), en los tres idiomas.
 - **Volver a probar:** `dump` de elegir servicio en cada idioma.
-- **Arreglo (fix/qa-round4):** el subtítulo es "Paquetes", "Packages" y "Pacotes".
+- **Arreglo (#1234):** el subtítulo es "Paquetes", "Packages" y "Pacotes".
 
 ## Notas de la ronda 3 (2026-11-20)
 
