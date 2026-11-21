@@ -15,7 +15,8 @@
 -keep class com.facebook.jni.** { *; }
 
 # ── React Native new-architecture / Fabric / TurboModules ─────────
-# newArchEnabled=true means codegen'd classes must stick around.
+# newArchEnabled is false today, but the bridge and TurboModule glue is
+# still resolved reflectively at boot, so these keeps are load-bearing either way.
 -keep class com.facebook.react.bridge.** { *; }
 -keep class com.facebook.react.turbomodule.** { *; }
 -keep @com.facebook.proguard.annotations.DoNotStrip class *
